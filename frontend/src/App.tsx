@@ -1,24 +1,105 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Sparkles } from 'lucide-react';
 
-// API Configuration
 const API_BASE_URL = 'http://localhost:8000/api';
 
-type Tab = 'copy' | 'image' | 'storyboard' | 'audio';
+type Tab = 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
+type ToastType = 'success' | 'info' | 'error';
+
+interface CopyOutput {
+  platform: string;
+  tone: string;
+  title: string;
+  paragraphs: string[];
+  tags: string[];
+  call_to_action: string;
+}
+
+interface ImageOutput {
+  prompt: string;
+  style: string;
+  aspectRatio?: string;
+  aspect_ratio?: string;
+  image_url: string;
+  revised_prompt: string;
+}
+
+interface StoryScene {
+  scene_number: number;
+  visual_description: string;
+  audio_narration: string;
+  duration_seconds: number;
+}
+
+interface StoryboardOutput {
+  video_topic: string;
+  total_duration_seconds: number;
+  target_audience: string;
+  scenes: StoryScene[];
+}
+
+interface AudioOutput {
+  text: string;
+  voice_id: string;
+  speed: number;
+  audio_url: string;
+  text_length: number;
+  estimated_audio_duration_seconds: number;
+}
+
+type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutput & AudioOutput>;
+
+interface AiConfig {
+  id: number;
+  provider: string;
+  provider_display: string;
+  api_key: string;
+  base_url: string;
+  model_name: string;
+  is_active: boolean;
+}
+
+interface CommunityItem {
+  id: number;
+  username: string;
+  creation_type: 'copy' | 'image' | 'storyboard' | 'audio';
+  creation_type_display: string;
+  title: string;
+  content: CreationContent;
+  image_url?: string;
+  audio_url?: string;
+  likes: number;
+  created_at: string;
+  similarity_score?: number;
+}
 
 export default function App() {
+  // Theme state: Dark Chalkboard vs Light Paper Editorial
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('mh_darkMode') === 'true';
+  });
+
+  const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
+  const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
+  const [loginForm, setLoginForm] = useState({ username: 'ROOT', password: '123' });
+  const [authError, setAuthError] = useState('');
+  
   const [activeTab, setActiveTab] = useState<Tab>('copy');
   const [loading, setLoading] = useState(false);
   const [apiLive, setApiLive] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: ToastType } | null>(null);
 
-  // 1. Copywriting States
+  // Agent execution logs
+  const [agentLogs, setAgentLogs] = useState<string[]>([]);
+  
+  // AIGC Inputs & Outputs
   const [copyInput, setCopyInput] = useState({
     brandName: 'Marketing-Hub',
     description: 'AI 营销场景全能助手，秒级生成爆款图文',
     tone: '爆款活泼',
     platform: 'Xiaohongshu',
   });
-  const [copyOutput, setCopyOutput] = useState<any>({
+  const [copyOutput, setCopyOutput] = useState<CopyOutput>({
     platform: 'Xiaohongshu',
     tone: '爆款活泼',
     title: '🔥 救命！这个 Marketing-Hub 真的绝了！后悔没早点发现！',
@@ -31,94 +112,293 @@ export default function App() {
     call_to_action: '👉 立即点击体验 Marketing-Hub，解锁你的创意生产力！'
   });
 
-  // 2. Image States
   const [imageInput, setImageInput] = useState({
-    prompt: '新粗野主义风格的创作者电脑桌面，高饱和度黄色点缀，极简线条，三维潮玩公仔，阳光穿透玻璃杯',
+    prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, raw visual balance',
     aspectRatio: '1:1',
-    style: 'neo-brutalism',
+    style: 'minimalist',
   });
-  const [imageOutput, setImageOutput] = useState<any>({
-    prompt: '新粗野主义风格的创作者电脑桌面，高饱和度黄色点缀，极简线条，三维潮玩公仔，阳光穿透玻璃杯',
-    style: 'neo-brutalism',
+  const [imageOutput, setImageOutput] = useState<ImageOutput>({
+    prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, raw visual balance',
+    style: 'minimalist',
     aspectRatio: '1:1',
-    image_url: 'https://images.unsplash.com/photo-1600132806370-bf17e65e942f?auto=format&fit=crop&w=800&q=80',
-    revised_prompt: '新粗野主义风格的创作者电脑桌面，高饱和度黄色点缀，极简线条, styled in neo-brutalism aesthetic, high contrast bold outlines, hyper-detailed render, 1:1 aspect ratio'
+    image_url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
+    revised_prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, styled in minimalist editorial aesthetic, low contrast natural lighting, matte visual details, 1:1 aspect ratio'
   });
 
-  // 3. Storyboard States
   const [storyboardInput, setStoryboardInput] = useState({
-    topic: '极速灵感的一天',
+    topic: '创意手账设计的日常',
     duration: 30,
-    audience: '年轻自媒体博主',
+    audience: '美学文字创作者',
   });
-  const [storyboardOutput, setStoryboardOutput] = useState<any>({
-    video_topic: '极速灵感的一天',
+  const [storyboardOutput, setStoryboardOutput] = useState<StoryboardOutput>({
+    video_topic: '创意手账设计的日常',
     total_duration_seconds: 30,
-    target_audience: '年轻自媒体博主',
+    target_audience: '美学文字创作者',
     scenes: [
       {
         scene_number: 1,
-        visual_description: '镜头大特写：一杯黑咖啡缓缓倒入燕麦奶，拉出完美的黑白渐变大理石纹路。',
-        audio_narration: '（配音伴随轻柔的爵士白噪音）“清晨的第一缕阳光，和一杯让你创意大开的香浓拿铁。”',
+        visual_description: '特写微距：一叠剪裁粗糙的燕麦卡纸自然地叠放在木质书桌上，旁侧放置着一支经典复古钢笔。',
+        audio_narration: '（轻柔的书页翻动声）“创作者的日常，从来不是完美的网格，而是灵感的随性交错。”',
         duration_seconds: 10
       },
       {
         scene_number: 2,
-        visual_description: '中景镜头：主角坐在一张高饱和黄色（新粗野主义风格）的工作台前，神色专注地敲击机械键盘。',
-        audio_narration: '（键盘敲击声淡入）“每一个闪光的文案，每一张惊艳的社媒图，都不应该耗费你整晚的精力。”',
+        visual_description: '中景镜头：阳光斜洒在一本点阵草稿本上，明黄色的便签上零散写着几句感悟。画面带有极淡的纸质偏角。',
+        audio_narration: '（铅笔沙沙声淡入）“摒弃所有多余的喧嚣与泛滥的色彩，我们只保留纸张的原生温度，与文字的质感。”',
         duration_seconds: 10
       },
       {
         scene_number: 3,
-        visual_description: '全景拉远：主角放松地靠在椅背上，面带笑容朝窗外看去，阳光洒满整个创意空间。',
-        audio_narration: '（轻笑，轻松的白噪音）“让灵感自由呼吸，让创作变得轻松、爽快而又独具个性。”',
+        visual_description: '全景拉远：数张记录着文案与配音的排立得纸页堆叠在桌面中央，呈现一站式智能编排的成果。',
+        audio_narration: '（盖章按压声收尾）“Marketing-Hub 纸页工坊。给文字以温度，给灵感以实感。”',
         duration_seconds: 10
       }
     ]
   });
 
-  // 4. Audio States
   const [audioInput, setAudioInput] = useState({
-    text: '欢迎使用 Marketing Hub AI 一站式营销场景配音助手，为您极速合成物理机械感配音！',
+    text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
     voiceId: 'female_warm',
     speed: 1.0,
   });
-  const [audioOutput, setAudioOutput] = useState<any>({
-    text: '欢迎使用 Marketing Hub AI 一站式营销场景配音助手，为您极速合成物理机械感配音！',
+  const [audioOutput, setAudioOutput] = useState<AudioOutput>({
+    text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
     voice_id: 'female_warm',
     speed: 1.0,
     audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    text_length: 36,
-    estimated_audio_duration_seconds: 9
+    text_length: 35,
+    estimated_audio_duration_seconds: 8.8
   });
 
-  // Ping API to check live status
+  // API configurations list
+  const [aiConfigs, setAiConfigs] = useState<AiConfig[]>([]);
+  const [activeConfigForm, setActiveConfigForm] = useState({
+    provider: 'mock',
+    api_key: '',
+    base_url: '',
+    model_name: ''
+  });
+  const [showKey, setShowKey] = useState(false);
+
+  // Community creations list
+  const [communityItems, setCommunityItems] = useState<CommunityItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [ragLogs, setRagLogs] = useState<string[]>([]);
+  const [isRagActive, setIsRagActive] = useState(false);
+
+  // Sync theme
   useEffect(() => {
-    fetch(`${API_BASE_URL}/generate/copy/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-      .then((res) => {
-        if (res.status === 200) {
-          setApiLive(true);
-        }
-      })
-      .catch(() => {
-        setApiLive(false);
-      });
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('mh_darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('mh_darkMode', 'false');
+    }
+  }, [darkMode]);
+
+  const triggerToast = useCallback((text: string, type: ToastType = 'success') => {
+    setFeedbackMsg({ text, type });
+    setTimeout(() => setFeedbackMsg(null), 3000);
   }, []);
 
-  const triggerFeedback = (msg: string) => {
-    setFeedbackMsg(msg);
-    setTimeout(() => setFeedbackMsg(''), 2000);
+  const handleCopyClipboard = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      triggerToast('已复制到剪贴板', 'success');
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      triggerToast('已复制到剪贴板', 'success');
+    }
+  }, [triggerToast]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        localStorage.setItem('mh_token', data.token);
+        localStorage.setItem('mh_username', data.username);
+        setToken(data.token);
+        setUsername(data.username);
+        triggerToast(`欢迎回来, ${data.username}!`, 'success');
+      } else {
+        setAuthError(data.error || '登录失败');
+      }
+    } catch {
+      setAuthError('连接服务器失败，请确保后端服务已启动。');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Generation Handlers
-  const handleGenerateCopy = async () => {
+  const handleLogout = () => {
+    localStorage.removeItem('mh_token');
+    localStorage.removeItem('mh_username');
+    setToken(null);
+    setUsername(null);
+    triggerToast('已成功退出登录', 'info');
+  };
+
+  const fetchConfigs = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/ai/config/`);
+      if (res.ok) {
+        const data: AiConfig[] = await res.json();
+        setAiConfigs(data);
+        const active = data.find((c) => c.is_active);
+        if (active) {
+          setActiveConfigForm({
+            provider: active.provider,
+            api_key: active.api_key,
+            base_url: active.base_url,
+            model_name: active.model_name
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch configs', err);
+    }
+  }, []);
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/generate/copy/`, {
+      const res = await fetch(`${API_BASE_URL}/ai/config/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activeConfigForm),
+      });
+      if (res.ok) {
+        triggerToast('AI 接口配置保存并激活成功', 'success');
+        fetchConfigs();
+      } else {
+        triggerToast('配置保存失败', 'error');
+      }
+    } catch {
+      triggerToast('配置保存失败，连接异常', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCommunity = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/community/creations/`);
+      if (res.ok) {
+        const data: CommunityItem[] = await res.json();
+        setCommunityItems(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch community items', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchConfigs();
+      fetchCommunity();
+      fetch(`${API_BASE_URL}/ai/config/`)
+        .then((res) => {
+          if (res.ok) setApiLive(true);
+        })
+        .catch(() => setApiLive(false));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchConfigs, fetchCommunity]);
+
+  const handleLike = async (id: number) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/community/creations/${id}/like/`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommunityItems(prev => prev.map(item => item.id === id ? { ...item, likes: data.likes } : item));
+        triggerToast('点赞成功！', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to like', err);
+    }
+  };
+
+  const handleShareToCommunity = async (
+    type: CommunityItem['creation_type'],
+    title: string,
+    content: CreationContent,
+    image_url = '',
+    audio_url = ''
+  ) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/community/creations/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username || 'ROOT',
+          creation_type: type,
+          title,
+          content,
+          image_url,
+          audio_url
+        })
+      });
+      if (res.ok) {
+        triggerToast('已成功分享到手绘工坊社区！', 'success');
+        fetchCommunity();
+      } else {
+        triggerToast('作品分享失败', 'error');
+      }
+    } catch {
+      triggerToast('分享失败，无法连接服务器', 'error');
+    }
+  };
+
+  const handleRAGSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) {
+      setIsRagActive(false);
+      fetchCommunity();
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/community/search/?q=${encodeURIComponent(searchQuery)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCommunityItems(data.results);
+        setRagLogs(data.rag_logs);
+        setIsRagActive(true);
+        triggerToast('RAG 语义检索索引更新完毕', 'success');
+      }
+    } catch {
+      triggerToast('RAG 检索请求错误', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Agent API triggers
+  const handleGenerateCopy = async () => {
+    setLoading(true);
+    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Copywriting Agent Workflow...']);
+    try {
+      const res = await fetch(`${API_BASE_URL}/generate/copy/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,34 +408,16 @@ export default function App() {
           platform: copyInput.platform,
         }),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setCopyOutput(data);
-        setApiLive(true);
-        triggerFeedback('✨ 文案生成成功 (Live API)');
+      if (res.ok) {
+        const data = await res.json();
+        setCopyOutput(data.result);
+        setAgentLogs(data.logs);
+        triggerToast('文案排版编排完毕', 'success');
       } else {
         throw new Error('API Error');
       }
-    } catch (err) {
-      // Sandbox fallback
-      triggerFeedback('🔄 API离线，已激活沙箱模拟生成');
-      // Simulate sandbox delay
-      await new Promise((r) => setTimeout(r, 600));
-      const simulated = {
-        platform: copyInput.platform,
-        tone: copyInput.tone,
-        title: copyInput.platform === 'Xiaohongshu' 
-          ? `🔥 吹爆这个【${copyInput.brandName}】！简直好用到哭！`
-          : `💡 探索【${copyInput.brandName}】：全维度重塑你的营销灵感`,
-        paragraphs: [
-          `救命啊，这绝对是今年最大的黑马！核心点在于：${copyInput.description}。`,
-          `在“${copyInput.tone}”的调性加持下，它的体验感直接拉满，简直太懂创作者了。`,
-          `建议大家都去试一下，保证用了就再也回不去了！`
-        ],
-        tags: [copyInput.brandName, '效率神器', '新青年生活方式', '自媒体必备'],
-        call_to_action: `👉 立即开始使用 ${copyInput.brandName}，解锁前沿灵感！`
-      };
-      setCopyOutput(simulated);
+    } catch {
+      triggerToast('文案生成服务响应异常', 'error');
     } finally {
       setLoading(false);
     }
@@ -163,42 +425,27 @@ export default function App() {
 
   const handleGenerateImage = async () => {
     setLoading(true);
+    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Sketch Image Agent Workflow...']);
     try {
-      const response = await fetch(`${API_BASE_URL}/generate/image/`, {
+      const res = await fetch(`${API_BASE_URL}/generate/image/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: imageInput.prompt,
-          aspect_ratio: imageInput.aspectRatio,
           style: imageInput.style,
+          aspect_ratio: imageInput.aspectRatio,
         }),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setImageOutput(data);
-        setApiLive(true);
-        triggerFeedback('🎨 图片生成成功 (Live API)');
+      if (res.ok) {
+        const data = await res.json();
+        setImageOutput(data.result);
+        setAgentLogs(data.logs);
+        triggerToast('视觉图片生成成功', 'success');
       } else {
         throw new Error('API Error');
       }
-    } catch (err) {
-      triggerFeedback('🔄 API离线，已激活沙箱模拟生成');
-      await new Promise((r) => setTimeout(r, 1000));
-      
-      const unsplashPool = [
-        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80',
-        'https://images.unsplash.com/photo-1600132806370-bf17e65e942f?auto=format&fit=crop&w=800&q=80',
-      ];
-      const randomImage = unsplashPool[Math.floor(Math.random() * unsplashPool.length)];
-      
-      setImageOutput({
-        prompt: imageInput.prompt,
-        style: imageInput.style,
-        aspect_ratio: imageInput.aspectRatio,
-        image_url: randomImage,
-        revised_prompt: `${imageInput.prompt}, high resolution rendering, custom style: ${imageInput.style}, hard offset flat shadows`
-      });
+    } catch {
+      triggerToast('图片生成服务异常', 'error');
     } finally {
       setLoading(false);
     }
@@ -206,8 +453,9 @@ export default function App() {
 
   const handleGenerateStoryboard = async () => {
     setLoading(true);
+    setAgentLogs(['[0.00s] [INFO] Initializing Storyboard Editorial Director Workflow...']);
     try {
-      const response = await fetch(`${API_BASE_URL}/generate/storyboard/`, {
+      const res = await fetch(`${API_BASE_URL}/generate/storyboard/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -216,46 +464,16 @@ export default function App() {
           target_audience: storyboardInput.audience,
         }),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setStoryboardOutput(data);
-        setApiLive(true);
-        triggerFeedback('🎬 脚本生成成功 (Live API)');
+      if (res.ok) {
+        const data = await res.json();
+        setStoryboardOutput(data.result);
+        setAgentLogs(data.logs);
+        triggerToast('分镜脚本编排完毕', 'success');
       } else {
         throw new Error('API Error');
       }
-    } catch (err) {
-      triggerFeedback('🔄 API离线，已激活沙箱模拟生成');
-      await new Promise((r) => setTimeout(r, 1200));
-      
-      setStoryboardOutput({
-        video_topic: storyboardInput.topic,
-        total_duration_seconds: storyboardInput.duration,
-        target_audience: storyboardInput.audience,
-        scenes: [
-          {
-            scene_number: 1,
-            visual_description: `【开场引流】微距特写，极具质感的金属键盘在慢动作下被按下。画面中央弹出黑色大字："${storyboardInput.topic}"`,
-            audio_narration: `“你想过如何打动你的目标受众【${storyboardInput.audience}】吗？听我用10秒钟扒个绝招。”`,
-            duration_seconds: storyboardInput.duration // 3
-          },
-          {
-            scene_number: 2,
-            visual_description: `【高潮论证】画面切分为左右分屏，左侧显示高饱和纯色背景的创意图，右侧波形图在闪烁跳跃，彰显纯物理实体风格的效率升级。`,
-            audio_narration: `“不需要复杂的调整，通过极简新粗野主义面板，把你的灵感瞬间输出实体。”`,
-            duration_seconds: storyboardInput.duration // 3
-          },
-          {
-            scene_number: 3,
-            visual_description: `【引导转化】镜头以 45 度角斜向滑入一个明黄色的“免费试用”按钮卡片。下方显示一行高对比度硬阴影文字。`,
-            audio_narration: `“这就是灵感与生产力碰撞的时刻。你，准备好了吗？”`,
-            duration_seconds: storyboardInput.duration // 3
-          }
-        ].map((s, _, arr) => ({
-          ...s,
-          duration_seconds: Math.floor(storyboardInput.duration / arr.length)
-        }))
-      });
+    } catch {
+      triggerToast('视频脚本编排异常', 'error');
     } finally {
       setLoading(false);
     }
@@ -263,8 +481,9 @@ export default function App() {
 
   const handleGenerateAudio = async () => {
     setLoading(true);
+    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Audio Synthesis Pipeline...']);
     try {
-      const response = await fetch(`${API_BASE_URL}/generate/audio/`, {
+      const res = await fetch(`${API_BASE_URL}/generate/audio/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,326 +492,438 @@ export default function App() {
           speed: audioInput.speed,
         }),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setAudioOutput(data);
-        setApiLive(true);
-        triggerFeedback('🔊 语音合成成功 (Live API)');
+      if (res.ok) {
+        const data = await res.json();
+        setAudioOutput(data.result);
+        setAgentLogs(data.logs);
+        triggerToast('配音语音合成成功', 'success');
       } else {
         throw new Error('API Error');
       }
-    } catch (err) {
-      triggerFeedback('🔄 API离线，已激活沙箱模拟生成');
-      await new Promise((r) => setTimeout(r, 800));
-      
-      const audioUrls: Record<string, string> = {
-        female_warm: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-        male_energetic: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-        child_cheerful: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3'
-      };
-
-      setAudioOutput({
-        text: audioInput.text,
-        voice_id: audioInput.voiceId,
-        speed: audioInput.speed,
-        audio_url: audioUrls[audioInput.voiceId] || audioUrls.female_warm,
-        text_length: audioInput.text.length,
-        estimated_audio_duration_seconds: Math.round(audioInput.text.length * 0.25 / audioInput.speed)
-      });
+    } catch {
+      triggerToast('配音生成请求异常', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopyClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    triggerFeedback('📋 已复制到剪贴板！');
-  };
+  // Auth Guard Portal
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-[var(--editorial-bg)] flex flex-col justify-center items-center p-4 relative overflow-hidden editorial-grid transition-colors duration-250">
+        
+        {/* Asymmetrical hand-cut sheet container */}
+        <div className="w-full max-w-md bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial p-8 paper-sheet-1 relative">
+          
+          <div className="flex flex-col items-center mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-[var(--editorial-text)] serif-header mb-1">
+              Marketing-Hub
+            </h1>
+            <p className="text-[var(--editorial-text-gray)] text-[10px] uppercase tracking-widest font-mono font-bold">
+              // ANALOG EDITORIAL WORKSPACE
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            {authError && (
+              <div className="border border-[var(--editorial-stroke)] text-rose-600 bg-rose-50 dark:bg-rose-950/20 p-3 text-xs font-mono font-semibold">
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// USERNAME</label>
+              <input
+                type="text"
+                required
+                value={loginForm.username}
+                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
+                placeholder="输入管理员账号"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// PASSWORD</label>
+              <input
+                type="password"
+                required
+                value={loginForm.password}
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
+                placeholder="输入密码"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+              ) : null}
+              {loading ? '正在载入稿件...' : '翻开设计手账'}
+            </button>
+          </form>
+
+          {/* Quick preset credentials helper */}
+          <div className="mt-6 pt-5 border-t border-dashed border-[var(--editorial-stroke)] text-center font-mono">
+            <span className="text-[10px] text-[var(--editorial-text-gray)] font-semibold block">演示凭证预置: ROOT / 123</span>
+            <button 
+              onClick={() => {
+                setLoginForm({ username: 'ROOT', password: '123' });
+                triggerToast('预设凭据已载入', 'info');
+              }}
+              className="mt-2 text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline"
+            >
+              [ 自动填充演示凭据 ]
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F4F4F0] p-4 md:p-8 flex flex-col font-sans select-none antialiased text-black relative">
+    <div className="min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] flex flex-col md:flex-row relative overflow-hidden transition-colors duration-250 font-sans">
       
-      {/* Dynamic Feedback Toast */}
+      {/* Dynamic toast alerts */}
       {feedbackMsg && (
-        <div className="fixed top-6 right-6 z-50 bg-[#39FF14] border-3 border-black p-4 font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center gap-2 animate-bounce">
-          <span>⚡</span>
-          <span>{feedbackMsg}</span>
+        <div className={`fixed top-6 right-6 z-50 px-5 py-4 border-1.5 border-[var(--editorial-stroke)] shadow-editorial bg-[var(--editorial-paper)] animate-in slide-in-from-top duration-200 font-mono text-xs font-semibold toast-${feedbackMsg.type}`}>
+          <span>{feedbackMsg.text}</span>
         </div>
       )}
 
-      {/* Header Banner */}
-      <header className="w-full bg-[#FFDE4D] border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight uppercase">
-            Marketing-Hub
-          </h1>
-          <p className="mt-1 text-sm md:text-base font-bold tracking-tight bg-white border border-black inline-block px-2 py-0.5">
-            // MVP CREATOR WORKSPACE V1.0.0
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Live Status Indicator */}
-          <div className="border-2 border-black bg-white px-3 py-1.5 font-bold text-xs md:text-sm flex items-center gap-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-            <span className={`h-3.5 w-3.5 rounded-full border border-black inline-block ${apiLive ? 'bg-[#39FF14] animate-pulse' : 'bg-[#FF6B6B]'}`}></span>
-            <span>API SERVER: {apiLive ? 'LIVE' : 'SANDBOX'}</span>
-          </div>
-          <a
-            href="https://github.com"
-            target="_blank"
-            className="border-2 border-black bg-[#4D96FF] px-4 py-1.5 font-extrabold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer"
-          >
-            GITHUB
-          </a>
-        </div>
-      </header>
-
-      {/* Core Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start flex-grow">
-        
-        {/* Left-side Navigation (Tabs) */}
-        <nav className="col-span-1 lg:col-span-3 flex flex-col gap-3">
-          <div className="bg-black text-white p-3 border-2 border-black font-extrabold text-xs tracking-wider uppercase">
-            🎛️ Tool Modules
-          </div>
-
-          <button
-            onClick={() => setActiveTab('copy')}
-            className={`w-full text-left p-4 font-bold border-3 border-black flex items-center justify-between transition-all duration-100 cursor-pointer ${
-              activeTab === 'copy'
-                ? 'bg-[#FFDE4D] translate-x-1 shadow-none'
-                : 'bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <span className="flex items-center gap-3 text-base md:text-lg">
-              <span>✍️</span> 营销文案生成
-            </span>
-            {activeTab === 'copy' && <span className="bg-black text-white px-2 py-0.5 text-xs font-black">ACTIVE</span>}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('image')}
-            className={`w-full text-left p-4 font-bold border-3 border-black flex items-center justify-between transition-all duration-100 cursor-pointer ${
-              activeTab === 'image'
-                ? 'bg-[#39FF14] translate-x-1 shadow-none'
-                : 'bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <span className="flex items-center gap-3 text-base md:text-lg">
-              <span>🎨</span> 社媒图片生成
-            </span>
-            {activeTab === 'image' && <span className="bg-black text-white px-2 py-0.5 text-xs font-black">ACTIVE</span>}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('storyboard')}
-            className={`w-full text-left p-4 font-bold border-3 border-black flex items-center justify-between transition-all duration-100 cursor-pointer ${
-              activeTab === 'storyboard'
-                ? 'bg-[#B983FF] translate-x-1 shadow-none'
-                : 'bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <span className="flex items-center gap-3 text-base md:text-lg">
-              <span>🎬</span> 分镜头脚本生成
-            </span>
-            {activeTab === 'storyboard' && <span className="bg-black text-white px-2 py-0.5 text-xs font-black">ACTIVE</span>}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('audio')}
-            className={`w-full text-left p-4 font-bold border-3 border-black flex items-center justify-between transition-all duration-100 cursor-pointer ${
-              activeTab === 'audio'
-                ? 'bg-[#FF6B6B] translate-x-1 shadow-none'
-                : 'bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
-            }`}
-          >
-            <span className="flex items-center gap-3 text-base md:text-lg">
-              <span>🔊</span> AI 语音配音生成
-            </span>
-            {activeTab === 'audio' && <span className="bg-black text-white px-2 py-0.5 text-xs font-black">ACTIVE</span>}
-          </button>
-
-          {/* Neo card design brief */}
-          <div className="bg-white border-3 border-black p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mt-4">
-            <h4 className="font-extrabold text-sm border-b-2 border-black pb-2 mb-2 uppercase">💡 Visual Philosophy</h4>
-            <p className="text-xs font-medium text-gray-700 leading-relaxed">
-              This environment relies on **Neo-brutalism** geometry: sharp, high-contrast black contours, zero-blur heavy drop-shadows, and physical offset push effects to provide the ultimate responsive experience.
+      {/* 1. SINGLE-LEVEL LEFT GUTTER (无边框侧边栏) */}
+      <aside className="w-full md:w-60 flex flex-col justify-between shrink-0 p-6 z-10 md:my-6 md:ml-6 md:mr-2">
+        <div className="flex flex-col gap-10">
+          
+          {/* Elegant serif logo */}
+          <div className="flex flex-col gap-1 select-none">
+            {/* APP LOGO PLACEHOLDER: 
+                Swap this block out for your standard logo file if desired.
+                Example:
+                <img src="/logo.png" className="h-6 w-auto" alt="Logo" />
+            */}
+            <h1 className="serif-header text-xl font-bold tracking-tight text-[var(--editorial-text)]">
+              Marketing-Hub
+            </h1>
+            <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono leading-none">
+              // EDITORIAL WORKSPACE
             </p>
           </div>
-        </nav>
 
-        {/* Right-side Interactive Panel (Forms & Live Output) */}
-        <main className="col-span-1 lg:col-span-9 grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Links list with brackets menu indicators */}
+          <nav className="flex flex-col gap-3 font-mono">
+            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mb-1">
+              // AIGC 编排
+            </div>
+
+            {[
+              { id: 'copy', label: '智能文案' },
+              { id: 'image', label: '社媒图片' },
+              { id: 'storyboard', label: '分镜脚本' },
+              { id: 'audio', label: '语音合成' }
+            ].map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as Tab)}
+                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
+                    isActive 
+                      ? 'text-[var(--editorial-text)]' 
+                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+                  }`}
+                >
+                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
+                </button>
+              );
+            })}
+
+            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mt-6 mb-1">
+              // 馆藏空间
+            </div>
+
+            {[
+              { id: 'community', label: '手绘社区' },
+              { id: 'config', label: '接口密钥' }
+            ].map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as Tab)}
+                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
+                    isActive 
+                      ? 'text-[var(--editorial-text)]' 
+                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+                  }`}
+                >
+                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom Switcher & User deck */}
+        <div className="pt-6 border-t border-dashed border-[var(--editorial-stroke)]/40 space-y-4 font-mono">
           
-          {/* ==================== 1. COPY TAB ==================== */}
+          {/* Light/Dark Toggle */}
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="font-bold text-[var(--editorial-text-gray)]">黑板暗色模式</span>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="h-5 w-10 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] relative transition-all active:scale-95 cursor-pointer"
+            >
+              <div className={`h-3 w-3 bg-[var(--editorial-stroke)] absolute top-0.5 transition-all ${
+                darkMode ? 'right-0.5' : 'left-0.5'
+              }`}></div>
+            </button>
+          </div>
+
+          <div className="text-xs font-bold flex flex-col gap-1">
+            <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
+            <span className="text-[8px] bg-[var(--editorial-unselected)] text-[var(--editorial-text-gray)] px-1 py-0.5 inline-block w-fit uppercase font-mono">Super Admin</span>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full text-left py-1.5 text-[10px] text-rose-500 font-bold transition-all hover:underline cursor-pointer"
+          >
+            <span>合上设计草稿本</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* 2. OVERLAPPING PAPER MAIN WORKSPACE (纸张叠落画板) */}
+      <main className="flex-grow flex flex-col p-4 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full md:my-6 md:mr-6 z-10 transition-colors duration-250">
+        
+        {/* Workspace Title Bar */}
+        <header className="flex justify-between items-center mb-8 pb-3 border-b border-[var(--editorial-stroke)]">
+          <div>
+            <h2 className="text-lg md:text-xl font-bold text-[var(--editorial-text)] serif-header">
+              {activeTab === 'copy' && '智能营销文案排版'}
+              {activeTab === 'image' && '社媒手绘图片视觉'}
+              {activeTab === 'storyboard' && '场景分镜脚本大纲'}
+              {activeTab === 'audio' && '流式配音语音合成'}
+              {activeTab === 'community' && '手绘创作作品 Gallery Feed'}
+              {activeTab === 'config' && 'AI API 统一网关与密钥配置'}
+            </h2>
+            <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono">
+              {activeTab === 'community' ? '// Shared typed manuscripts feed' : '// Editorial pipeline controller'}
+            </p>
+          </div>
+          
+          <div className="flex items-center gap-2 text-[9px] font-bold font-mono">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+            <span>GATE: {apiLive ? 'LIVE' : 'SANDBOX'}</span>
+          </div>
+        </header>
+
+        {/* Workspace Panels Overlapping Paper Sheet Grid */}
+        <div className="flex-grow flex flex-col justify-between z-0">
+          
+          {/* ==================== 1. COPY PANEL ==================== */}
           {activeTab === 'copy' && (
-            <>
-              {/* Form Input Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-5">
-                <div className="border-b-4 border-black pb-3">
-                  <h2 className="text-2xl font-extrabold uppercase">✍️ Copywriter Form</h2>
-                  <p className="text-xs text-gray-500 font-bold tracking-wide mt-1 uppercase">// Setup brand & copy tone</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Left Input Slate (Asymmetrical Hand-Cut paper 1) */}
+              <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
+                
+                {/* Exquisite Bookplate Section Indicator at top center */}
+                <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
+                  <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
                 </div>
+                
+                <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// PARAMETERS SLATE</h3>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-extrabold text-sm uppercase">🏢 Brand / Product Name</label>
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">品牌/产品名称</label>
                   <input
                     type="text"
                     value={copyInput.brandName}
                     onChange={(e) => setCopyInput({ ...copyInput, brandName: e.target.value })}
-                    className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#FFDE4D] transition-colors"
-                    placeholder="Enter brand name"
+                    className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none focus:border-b-2 font-mono font-semibold"
+                    placeholder="请输入名称..."
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-extrabold text-sm uppercase">📝 Features / Description</label>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">核心卖点 & 功能描述</label>
                   <textarea
                     rows={3}
                     value={copyInput.description}
                     onChange={(e) => setCopyInput({ ...copyInput, description: e.target.value })}
-                    className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#FFDE4D] transition-colors resize-none"
-                    placeholder="Enter core features or values"
+                    className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] p-3 text-xs focus:outline-none focus:border-slate-650 resize-none font-semibold font-mono leading-relaxed"
+                    placeholder="请详细描述产品的特征和定位..."
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">🎭 Tone Choice</label>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">情绪语调风格</label>
                     <select
                       value={copyInput.tone}
                       onChange={(e) => setCopyInput({ ...copyInput, tone: e.target.value })}
-                      className="border-2 border-black p-3 font-extrabold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#FFDE4D] transition-colors cursor-pointer appearance-none"
+                      className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                     >
-                      <option value="爆款活泼">🔥 爆款活泼</option>
-                      <option value="严谨学术">🎓 严谨学术</option>
-                      <option value="幽默整活">🤡 幽默整活</option>
-                      <option value="高端商务">💼 高端商务</option>
+                      <option value="爆款活泼">爆款活泼</option>
+                      <option value="严谨学术">严谨学术</option>
+                      <option value="幽默整活">幽默整活</option>
+                      <option value="高端商务">高端商务</option>
                     </select>
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">📱 Social Platform</label>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">社会投递媒介</label>
                     <select
                       value={copyInput.platform}
                       onChange={(e) => setCopyInput({ ...copyInput, platform: e.target.value })}
-                      className="border-2 border-black p-3 font-extrabold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#FFDE4D] transition-colors cursor-pointer appearance-none"
+                      className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                     >
-                      <option value="Xiaohongshu">📕 小红书</option>
-                      <option value="WeChat">🟢 微信公众号</option>
-                      <option value="default">🌍 英文通用推广</option>
+                      <option value="Xiaohongshu">小红书</option>
+                      <option value="WeChat">微信公众号</option>
+                      <option value="default">英文通用推广</option>
                     </select>
                   </div>
                 </div>
 
+                {/* Primary execute action btn */}
                 <button
                   onClick={handleGenerateCopy}
                   disabled={loading}
-                  className="w-full mt-2 border-3 border-black bg-[#FFDE4D] hover:bg-[#ffe775] p-4 font-extrabold text-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+                  className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
                   {loading ? (
-                    <span className="inline-block animate-spin h-5 w-5 border-2 border-black border-t-transparent rounded-full"></span>
-                  ) : '🪄'}
-                  {loading ? 'GENERATING COPIES...' : 'GENERATE AI COPYWRITING'}
+                    <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                  ) : null}
+                  <span>{loading ? 'AGENT RUNNING...' : '运行文案编排 Agent'}</span>
                 </button>
               </div>
 
-              {/* Output Preview Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center border-b-4 border-black pb-3 mb-5">
-                    <h3 className="text-xl font-extrabold uppercase">📺 Preview Board</h3>
-                    <span className="bg-[#39FF14] text-xs font-extrabold border-2 border-black px-2 py-0.5 uppercase">
-                      Copy
+              {/* Right Output Sheet (Tilted organic paper stack 2) */}
+              <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
+                
+                {/* Typed Manuscript Sheet */}
+                <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-6 min-h-[350px] transform rotate-[0.5deg] transition-all">
+                  
+                  {/* Preview section indicator */}
+                  <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-3">
+                    <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
+                      <span>TYPED MANUSCRIPT PREVIEW</span>
                     </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleShareToCommunity('copy', `[${copyOutput.platform}] ${copyInput.brandName}`, copyOutput)}
+                        className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        <span>分享社区</span>
+                      </button>
+                      <button
+                        onClick={() => handleCopyClipboard(`${copyOutput.title}\n\n${copyOutput.paragraphs.join('\n')}\n\n${copyOutput.tags.map((t: string) => '#' + t).join(' ')}`)}
+                        className="bg-[var(--editorial-stroke)] border border-[var(--editorial-stroke)] text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-black hover:scale-103 active:scale-97 transition-all cursor-pointer"
+                      >
+                        复制剪贴板
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Generated copy details */}
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-[#FFDE4D]/10 border-2 border-dashed border-black p-4 rounded-md">
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">🏷️ Headline / Title</div>
-                      <h4 className="font-extrabold text-lg leading-snug">{copyOutput.title}</h4>
+                  <div className="space-y-5">
+                    {/* Serif Title */}
+                    <div className="bg-[var(--editorial-bg)]/40 p-4 border border-[var(--editorial-stroke)]/40 rounded-none">
+                      <h4 className="serif-header font-bold text-base leading-snug text-[var(--editorial-text)]">{copyOutput.title}</h4>
                     </div>
 
-                    <div className="border-2 border-black p-4 bg-[#F4F4F0] min-h-[140px] flex flex-col gap-3">
-                      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-300 pb-1 mb-1">📄 Paragraph Content</div>
+                    {/* Paragraphs with generous line-height and softened color */}
+                    <div className="space-y-4">
                       {copyOutput.paragraphs.map((p: string, idx: number) => (
-                        <p key={idx} className="text-sm font-semibold leading-relaxed text-gray-800">{p}</p>
+                        <p key={idx} className="text-xs leading-[1.85] text-[var(--editorial-text-muted)] font-medium font-mono text-justify">{p}</p>
                       ))}
                     </div>
 
-                    <div>
-                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">🏷️ Target Tags</div>
-                      <div className="flex flex-wrap gap-2">
-                        {copyOutput.tags.map((t: string, idx: number) => (
-                          <span key={idx} className="bg-white border-2 border-black px-2 py-1 font-bold text-xs hover:bg-[#39FF14] cursor-default transition-colors">
-                            #{t}
-                          </span>
-                        ))}
-                      </div>
+                    {/* Muted pencil blue italics tags */}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--editorial-accent-blue)] italic font-semibold">
+                      {copyOutput.tags.map((t: string, idx: number) => (
+                        <span key={idx}>#{t}</span>
+                      ))}
                     </div>
+                  </div>
 
-                    <div className="border-2 border-black p-3 bg-black text-white text-xs font-bold font-mono">
-                      📣 {copyOutput.call_to_action}
-                    </div>
+                  {/* Minimalist polaroid-styled bottom parameters tag */}
+                  <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-4">
+                    <span>SEED: 827419-TYP</span>
+                    <span>MODEL: MANUSCRIPT-V2</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleCopyClipboard(`${copyOutput.title}\n\n${copyOutput.paragraphs.join('\n')}\n\n${copyOutput.tags.map((t: string) => '#' + t).join(' ')}`)}
-                  className="w-full mt-6 border-2 border-black bg-white hover:bg-gray-100 p-3 font-extrabold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer flex justify-center items-center gap-2"
-                >
-                  📋 COPY TO CLIPBOARD
-                </button>
+                <AgentTerminal logs={agentLogs} />
               </div>
-            </>
+            </div>
           )}
 
-          {/* ==================== 2. IMAGE TAB ==================== */}
+          {/* ==================== 2. IMAGE WORKSPACE ==================== */}
           {activeTab === 'image' && (
-            <>
-              {/* Form Input Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-5">
-                <div className="border-b-4 border-black pb-3">
-                  <h2 className="text-2xl font-extrabold uppercase">🎨 Image parameters</h2>
-                  <p className="text-xs text-gray-500 font-bold tracking-wide mt-1 uppercase">// Configure visual styles</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Left Input Slate */}
+              <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
+                <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
+                  <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
                 </div>
+                
+                <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// VISUAL STICKY SLATE</h3>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-extrabold text-sm uppercase">💬 Visual Prompt</label>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">视觉 Prompt 描述</label>
                   <textarea
                     rows={4}
                     value={imageInput.prompt}
                     onChange={(e) => setImageInput({ ...imageInput, prompt: e.target.value })}
-                    className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#39FF14] transition-colors resize-none leading-relaxed"
-                    placeholder="Describe what image you want to generate"
+                    className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] p-3 text-xs focus:outline-none resize-none font-semibold font-mono leading-relaxed"
+                    placeholder="请输入视觉图像 Prompt 描述..."
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
+                  
+                  {/* Geometric ratio button selector */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">📐 Aspect Ratio</label>
-                    <select
-                      value={imageInput.aspectRatio}
-                      onChange={(e) => setImageInput({ ...imageInput, aspectRatio: e.target.value })}
-                      className="border-2 border-black p-3 font-extrabold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#39FF14] transition-colors cursor-pointer appearance-none"
-                    >
-                      <option value="1:1">⬛ Square (1:1)</option>
-                      <option value="16:9">📺 Widescreen (16:9)</option>
-                      <option value="9:16">📱 Vertical (9:16)</option>
-                    </select>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">尺寸比例</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {['1:1', '16:9', '9:16'].map((ratio) => {
+                        const isSelected = imageInput.aspectRatio === ratio;
+                        return (
+                          <button
+                            type="button"
+                            key={ratio}
+                            onClick={() => setImageInput({ ...imageInput, aspectRatio: ratio })}
+                            className={`border border-[var(--editorial-stroke)] p-2 text-[9px] font-black font-mono transition-all ${
+                              isSelected 
+                                ? 'bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] scale-[1.03]'
+                                : 'bg-[var(--editorial-paper)] text-[var(--editorial-text)] hover:bg-[var(--editorial-unselected)]'
+                            }`}
+                          >
+                            {ratio}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">🎭 Artistic Style</label>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">艺术线条风格 Style</label>
                     <select
                       value={imageInput.style}
                       onChange={(e) => setImageInput({ ...imageInput, style: e.target.value })}
-                      className="border-2 border-black p-3 font-extrabold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#39FF14] transition-colors cursor-pointer appearance-none"
+                      className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                     >
-                      <option value="neo-brutalism">⚡ 新粗野主义</option>
-                      <option value="3d">🧸 3D 萌系拟真</option>
-                      <option value="minimalist">⬜ 极简极白</option>
-                      <option value="cinematic">🎥 电影感写实</option>
+                      <option value="neo-brutalism">新粗野主义</option>
+                      <option value="3d">3D 拟真手办</option>
+                      <option value="minimalist">极简极白</option>
+                      <option value="cinematic">电影感写实</option>
                     </select>
                   </div>
                 </div>
@@ -600,117 +931,133 @@ export default function App() {
                 <button
                   onClick={handleGenerateImage}
                   disabled={loading}
-                  className="w-full mt-2 border-3 border-black bg-[#39FF14] hover:bg-[#68ff4d] p-4 font-extrabold text-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+                  className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
                   {loading ? (
-                    <span className="inline-block animate-spin h-5 w-5 border-2 border-black border-t-transparent rounded-full"></span>
-                  ) : '🪄'}
-                  {loading ? 'GENERATING ARTWORKS...' : 'GENERATE AI SOCIAL IMAGE'}
+                    <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                  ) : null}
+                  <span>{loading ? 'AGENT DESIGNING...' : '运行视觉设计 Agent'}</span>
                 </button>
               </div>
 
-              {/* Output Preview Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center border-b-4 border-black pb-3 mb-5">
-                    <h3 className="text-xl font-extrabold uppercase">📺 Preview Board</h3>
-                    <span className="bg-[#39FF14] text-xs font-extrabold border-2 border-black px-2 py-0.5 uppercase">
-                      IMAGE
+              {/* Right Output Preview */}
+              <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
+                
+                {/* Polaroid container */}
+                <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[-0.5deg]">
+                  
+                  <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-2">
+                    <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
+                      <span>VISUAL POLAROID IMAGE</span>
                     </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleShareToCommunity('image', `[${imageOutput.style}] Graphic Polaroid`, imageOutput, imageOutput.image_url)}
+                        className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        <span>分享社区</span>
+                      </button>
+                      <a
+                        href={imageOutput.image_url}
+                        target="_blank"
+                        className="bg-[var(--editorial-stroke)] border border-[var(--editorial-stroke)] text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-black hover:scale-103 active:scale-97 transition-all cursor-pointer flex items-center text-center"
+                      >
+                        大图
+                      </a>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    {/* Visual box wrapper */}
-                    <div className="border-3 border-black bg-black p-1 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative flex justify-center items-center overflow-hidden min-h-[220px]">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    
+                    {/* Generative picture canvas */}
+                    <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)] p-2 relative flex justify-center items-center overflow-hidden min-h-[220px]">
                       {loading ? (
-                        <div className="text-white text-center p-6 flex flex-col items-center gap-3">
-                          <span className="inline-block animate-spin h-8 w-8 border-3 border-white border-t-transparent rounded-full"></span>
-                          <span className="font-mono text-xs tracking-wider animate-pulse">RENDER PIPELINE ACTIVE...</span>
+                        <div className="w-full h-full absolute inset-0 editorial-loader-bar flex flex-col items-center justify-center border-none">
+                          <span className="font-mono text-[9px] font-black text-black bg-[var(--editorial-accent-yellow)] border border-black px-2 py-0.5 animate-pulse">
+                            AIGC RENDERING ENGINE...
+                          </span>
                         </div>
                       ) : (
                         <img
                           src={imageOutput.image_url}
-                          alt="AI output"
-                          className="max-h-[300px] w-full object-cover object-center border border-black"
+                          alt="AI polaroid output sketch"
+                          className="max-h-[240px] w-full object-cover object-center border border-[var(--editorial-stroke)]"
                         />
-                      )}
-                      
-                      {!loading && (
-                        <span className="absolute bottom-3 right-3 bg-black text-[#39FF14] border border-[#39FF14] font-mono text-[10px] px-2 py-0.5">
-                          RATIO: {imageOutput.aspectRatio}
-                        </span>
                       )}
                     </div>
 
-                    <div className="border-2 border-black p-4 bg-[#F4F4F0] mt-1 text-xs">
-                      <div className="font-extrabold text-gray-500 uppercase tracking-wider mb-1">🤖 Optimized System Prompt</div>
-                      <p className="font-mono leading-relaxed text-gray-700">{imageOutput.revised_prompt}</p>
+                    <div className="space-y-3 font-mono">
+                      <div className="bg-[var(--editorial-bg)]/40 border border-[var(--editorial-stroke)]/40 p-4 text-[10px] leading-relaxed">
+                        <span className="font-black text-[var(--editorial-text)] uppercase tracking-wider block mb-1.5">// REVISED PROMPT</span>
+                        <p className="text-[var(--editorial-text-muted)] font-semibold">{imageOutput.revised_prompt}</p>
+                      </div>
+                      
+                      <button
+                        onClick={() => handleCopyClipboard(imageOutput.revised_prompt)}
+                        className="w-full bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] hover:bg-[var(--editorial-unselected)] text-[var(--editorial-text)] py-2 text-xs font-bold shadow-editorial-sm active:shadow-none active:translate-x-[1.5px] active:translate-y-[1.5px] cursor-pointer transition-all"
+                      >
+                        复制系统微调 Prompt
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Metadata polaroid tag */}
+                  <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
+                    <span>SEED: 309485-VIS</span>
+                    <span>RATIO: {imageOutput.aspectRatio}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <button
-                    onClick={() => handleCopyClipboard(imageOutput.revised_prompt)}
-                    className="border-2 border-black bg-white hover:bg-gray-100 p-3 font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer flex justify-center items-center"
-                  >
-                    📋 COPY PROMPT
-                  </button>
-                  <a
-                    href={imageOutput.image_url}
-                    target="_blank"
-                    className="border-2 border-black bg-white hover:bg-gray-100 p-3 font-extrabold text-xs shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer flex justify-center items-center text-center"
-                  >
-                    🔗 VIEW FULL RES
-                  </a>
-                </div>
+                <AgentTerminal logs={agentLogs} />
               </div>
-            </>
+            </div>
           )}
 
-          {/* ==================== 3. STORYBOARD TAB ==================== */}
+          {/* ==================== 3. STORYBOARD WORKSPACE ==================== */}
           {activeTab === 'storyboard' && (
-            <>
-              {/* Form Input Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-5">
-                <div className="border-b-4 border-black pb-3">
-                  <h2 className="text-2xl font-extrabold uppercase">🎬 Script Parameters</h2>
-                  <p className="text-xs text-gray-500 font-bold tracking-wide mt-1 uppercase">// Map video sequences</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Left Input Slate */}
+              <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
+                <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
+                  <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
                 </div>
+                
+                <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// TIMELINE STICKY SLATE</h3>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-extrabold text-sm uppercase">📽️ Video Topic / Focus</label>
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">视频大纲 Focus</label>
                   <input
                     type="text"
                     value={storyboardInput.topic}
                     onChange={(e) => setStoryboardInput({ ...storyboardInput, topic: e.target.value })}
-                    className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#B983FF] transition-colors"
-                    placeholder="Enter video scene focus"
+                    className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none focus:border-b-2 font-mono font-semibold"
+                    placeholder="输入场景焦点大纲..."
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">⏱️ Total Seconds</label>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">预估总时间 Duration</label>
                     <select
                       value={storyboardInput.duration}
                       onChange={(e) => setStoryboardInput({ ...storyboardInput, duration: parseInt(e.target.value) })}
-                      className="border-2 border-black p-3 font-extrabold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#B983FF] transition-colors cursor-pointer appearance-none"
+                      className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                     >
-                      <option value={15}>15s Short / Douyin</option>
-                      <option value={30}>30s Promotion</option>
-                      <option value={60}>60s Deep Explainer</option>
+                      <option value={15}>15s 抖快极速宣传</option>
+                      <option value={30}>30s 标准剧情广告</option>
+                      <option value={60}>60s 深度讲解剧本</option>
                     </select>
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="font-extrabold text-sm uppercase">👥 Target Audience</label>
+                    <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">目标受众 Audience</label>
                     <input
                       type="text"
                       value={storyboardInput.audience}
                       onChange={(e) => setStoryboardInput({ ...storyboardInput, audience: e.target.value })}
-                      className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#B983FF] transition-colors"
-                      placeholder="Target demographic"
+                      className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none focus:border-b-2 font-mono font-semibold"
+                      placeholder="受众群体描述..."
                     />
                   </div>
                 </div>
@@ -718,110 +1065,132 @@ export default function App() {
                 <button
                   onClick={handleGenerateStoryboard}
                   disabled={loading}
-                  className="w-full mt-2 border-3 border-black bg-[#B983FF] hover:bg-[#d1adff] p-4 font-extrabold text-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+                  className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
                   {loading ? (
-                    <span className="inline-block animate-spin h-5 w-5 border-2 border-black border-t-transparent rounded-full"></span>
-                  ) : '🪄'}
-                  {loading ? 'PLANNING SCENES...' : 'GENERATE AI STORYBOARD'}
+                    <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                  ) : null}
+                  <span>{loading ? 'AGENT DIRECTING...' : '运行分镜编排 Agent'}</span>
                 </button>
               </div>
 
-              {/* Output Preview Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center border-b-4 border-black pb-3 mb-4">
-                    <h3 className="text-xl font-extrabold uppercase">📺 Storyboard Timeline</h3>
-                    <span className="bg-[#B983FF] text-xs font-extrabold border-2 border-black px-2 py-0.5 uppercase">
-                      Timeline
+              {/* Right Output Preview */}
+              <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
+                
+                {/* Manuscript storyboard timeline sheet */}
+                <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[0.4deg]">
+                  
+                  <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-3">
+                    <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
+                      <span>STORYBOARD MANUSCRIPT TIMELINE</span>
                     </span>
+                    <button
+                      onClick={() => handleShareToCommunity('storyboard', `[分镜] ${storyboardOutput.video_topic}`, storyboardOutput)}
+                      className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      <span>分享社区</span>
+                    </button>
                   </div>
 
-                  {/* Scene Timeline container */}
-                  <div className="flex flex-col gap-4 overflow-y-auto max-h-[350px] pr-1">
+                  <div className="flex flex-col gap-4 max-h-[320px] overflow-y-auto pr-1">
                     {loading ? (
-                      <div className="p-12 text-center flex flex-col items-center gap-3">
-                        <span className="inline-block animate-spin h-8 w-8 border-3 border-black border-t-transparent rounded-full"></span>
-                        <span className="font-mono text-xs font-bold animate-pulse">GENERATING SEQUENCES...</span>
+                      <div className="w-full h-32 editorial-loader-bar flex flex-col items-center justify-center">
+                        <span className="font-mono text-[9px] font-black text-black bg-[var(--editorial-accent-yellow)] border border-black px-2 py-0.5 animate-pulse">
+                          STORYBOARD SEGMENTING IN PROGRESS...
+                        </span>
                       </div>
                     ) : (
-                      storyboardOutput.scenes.map((scene: any, idx: number) => (
-                        <div key={idx} className="border-2 border-black p-4 bg-[#F4F4F0] relative shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                          <span className="absolute top-3 right-3 bg-black text-[#B983FF] text-[10px] font-mono px-2 py-0.5 border border-black font-extrabold">
-                            SCENE {scene.scene_number} / {scene.duration_seconds}s
+                      storyboardOutput.scenes.map((scene, idx) => (
+                        <div key={idx} className="border border-[var(--editorial-stroke)]/40 bg-[var(--editorial-bg)]/20 p-4 relative shadow-editorial-sm font-mono">
+                          <span className="absolute top-3 right-3 bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] text-[8px] font-mono px-2 py-0.5 font-bold">
+                            SCENE {scene.scene_number} ({scene.duration_seconds}s)
                           </span>
-                          <div className="font-extrabold text-sm text-[#B983FF] uppercase mb-2">
-                            📹 Scene action description
+                          
+                          <div className="font-black text-[8px] text-[var(--editorial-text-gray)] uppercase mb-1 flex items-center gap-1">
+                            <span>VISUAL FRAME 调度描述</span>
                           </div>
-                          <p className="text-xs font-bold leading-relaxed text-gray-800 mb-3 border-l-2 border-black pl-2">
+                          <p className="text-xs font-bold leading-relaxed text-[var(--editorial-text)] mb-3 pl-2 border-l border-[var(--editorial-stroke)]">
                             {scene.visual_description}
                           </p>
-                          <div className="font-extrabold text-sm text-gray-700 uppercase mb-1">
-                            🎤 Dubbing Narration
+
+                          <div className="font-black text-[8px] text-[var(--editorial-text-gray)] uppercase mb-1 flex items-center gap-1">
+                            <span>AUDIO SPEECH 旁白配音</span>
                           </div>
-                          <p className="text-xs font-mono font-medium leading-relaxed bg-white border border-black p-2 text-black">
+                          <p className="text-xs font-medium leading-relaxed bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)]/60 p-2 text-[var(--editorial-text-muted)]">
                             {scene.audio_narration}
                           </p>
                         </div>
                       ))
                     )}
                   </div>
+
+                  {/* Bottom parameters */}
+                  <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
+                    <span>TOPIC: "{storyboardOutput.video_topic}"</span>
+                    <span>DURATION: {storyboardOutput.total_duration_seconds}S</span>
+                  </div>
                 </div>
 
-                <div className="mt-4 border-t-2 border-black pt-4 flex justify-between items-center text-xs font-bold">
-                  <span>TOPIC: "{storyboardOutput.video_topic}"</span>
-                  <span>TOTAL DUR: {storyboardOutput.total_duration_seconds}S</span>
-                </div>
+                <AgentTerminal logs={agentLogs} />
               </div>
-            </>
+            </div>
           )}
 
-          {/* ==================== 4. AUDIO TAB ==================== */}
+          {/* ==================== 4. AUDIO WORKSPACE ==================== */}
           {activeTab === 'audio' && (
-            <>
-              {/* Form Input Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-5">
-                <div className="border-b-4 border-black pb-3">
-                  <h2 className="text-2xl font-extrabold uppercase">🔊 Voice Synthesizer</h2>
-                  <p className="text-xs text-gray-500 font-bold tracking-wide mt-1 uppercase">// Convert text to audio</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              
+              {/* Left Input Slate */}
+              <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
+                <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
+                  <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
                 </div>
+                
+                <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// AUDIO STICKY SLATE</h3>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="font-extrabold text-sm uppercase">📜 Text script to read</label>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">旁白配音脚本</label>
                   <textarea
                     rows={4}
                     value={audioInput.text}
                     onChange={(e) => setAudioInput({ ...audioInput, text: e.target.value })}
-                    className="border-2 border-black p-3 font-bold bg-[#F4F4F0] focus:bg-white focus:outline-none focus:border-[#FF6B6B] transition-colors resize-none leading-relaxed"
-                    placeholder="Enter script text to synthesize"
+                    className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] p-3 text-xs focus:outline-none resize-none font-semibold font-mono leading-relaxed"
+                    placeholder="请输入配音旁白脚本文本..."
                   />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <label className="font-extrabold text-sm uppercase">🎙️ Voice Character</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">物理配音声线 Speaker</label>
+                  <div className="grid grid-cols-3 gap-2">
                     {[
-                      { id: 'female_warm', label: '👩 温暖女声', color: 'bg-[#FFDE4D]' },
-                      { id: 'male_energetic', label: '👨 激情男声', color: 'bg-[#39FF14]' },
-                      { id: 'child_cheerful', label: '👦 快乐童声', color: 'bg-[#4D96FF]' },
-                    ].map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => setAudioInput({ ...audioInput, voiceId: v.id })}
-                        className={`p-3 font-extrabold text-xs border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer ${
-                          audioInput.voiceId === v.id ? `${v.color} translate-y-0.5 shadow-none` : 'bg-white'
-                        }`}
-                      >
-                        {v.label}
-                      </button>
-                    ))}
+                      { id: 'female_warm', label: '温柔女声' },
+                      { id: 'male_energetic', label: '激情男声' },
+                      { id: 'child_cheerful', label: '快乐童声' },
+                    ].map((v) => {
+                      const isSelected = audioInput.voiceId === v.id;
+                      return (
+                        <button
+                          type="button"
+                          key={v.id}
+                          onClick={() => setAudioInput({ ...audioInput, voiceId: v.id })}
+                          className={`border border-[var(--editorial-stroke)] p-2 text-[9px] font-bold transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] scale-[1.02]' 
+                              : 'bg-[var(--editorial-paper)] text-[var(--editorial-text)] hover:bg-[var(--editorial-unselected)]'
+                          }`}
+                        >
+                          {v.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between items-center font-extrabold text-sm">
-                    <span className="uppercase">🚀 Narration Speed</span>
-                    <span className="font-mono bg-black text-[#FF6B6B] px-1.5 py-0.5 text-xs">{audioInput.speed}x</span>
+                {/* Custom Editorial Slider knob */}
+                <div className="flex flex-col gap-1.5 font-mono">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-[var(--editorial-text)]">
+                    <span className="uppercase">播放语速 Rate</span>
+                    <span className="bg-[var(--editorial-bg)]/40 border border-[var(--editorial-stroke)]/40 px-1.5 text-xs">{audioInput.speed}x</span>
                   </div>
                   <input
                     type="range"
@@ -830,112 +1199,498 @@ export default function App() {
                     step="0.1"
                     value={audioInput.speed}
                     onChange={(e) => setAudioInput({ ...audioInput, speed: parseFloat(e.target.value) })}
-                    className="w-full accent-black bg-[#F4F4F0] border border-black h-2 cursor-pointer rounded-none appearance-none"
+                    className="editorial-slider mt-2"
                   />
                 </div>
 
                 <button
                   onClick={handleGenerateAudio}
                   disabled={loading}
-                  className="w-full mt-2 border-3 border-black bg-[#FF6B6B] hover:bg-[#ffa1a1] p-4 font-extrabold text-lg shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all duration-100 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 cursor-pointer flex justify-center items-center gap-2"
+                  className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
                 >
                   {loading ? (
-                    <span className="inline-block animate-spin h-5 w-5 border-2 border-black border-t-transparent rounded-full"></span>
-                  ) : '🪄'}
-                  {loading ? 'SYNTHESIZING AUDIO...' : 'GENERATE AI VOICEOVER'}
+                    <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                  ) : null}
+                  <span>{loading ? 'AGENT SYNTHESIZING...' : '运行配音合成 Agent'}</span>
                 </button>
               </div>
 
-              {/* Output Preview Card */}
-              <div className="bg-white border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center border-b-4 border-black pb-3 mb-5">
-                    <h3 className="text-xl font-extrabold uppercase">📺 Preview Board</h3>
-                    <span className="bg-[#FF6B6B] text-xs font-extrabold border-2 border-black px-2 py-0.5 uppercase">
-                      VOICE
+              {/* Right Output Preview */}
+              <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
+                
+                {/* Audio Polaroids manuscript */}
+                <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[-0.3deg]">
+                  
+                  <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-2">
+                    <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
+                      <span>AUDIO TIMELINE STREAM PREVIEW</span>
                     </span>
+                    <button
+                      onClick={() => handleShareToCommunity('audio', `[配音] Warm Narrator Sketch`, audioOutput, '', audioOutput.audio_url)}
+                      className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
+                    >
+                      <span>分享社区</span>
+                    </button>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    {/* Simulated Retro Synthesizer Deck */}
-                    <div className="border-3 border-black bg-black p-4 text-[#FF6B6B] font-mono text-xs flex flex-col gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
-                      <div className="absolute top-0 right-0 h-10 w-10 bg-[#FF6B6B]/10 rounded-full blur-xl"></div>
-                      
-                      <div className="flex justify-between items-center border-b border-[#FF6B6B]/30 pb-2">
-                        <span>SYSTEM: [TTS_GENERATOR_V1]</span>
-                        <span className="animate-pulse">● PLAYING</span>
-                      </div>
+                  {/* Mechanical Audio Synth block */}
+                  <div className="bg-[var(--editorial-bg)]/20 border border-[var(--editorial-stroke)]/40 p-5 relative overflow-hidden flex flex-col gap-4 font-mono shadow-inner">
+                    <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)]/40 pb-2 text-[9px] text-[var(--editorial-text-gray)]">
+                      <span>AUDIO_SYNTH_DECK: [READY]</span>
+                      <span className={loading ? "animate-pulse text-indigo-500 font-bold" : "text-emerald-600 font-bold"}>
+                        {loading ? "RENDER_ACTIVE" : "STANDBY"}
+                      </span>
+                    </div>
 
-                      {/* Fake Sound Waveforms */}
-                      <div className="h-16 flex items-end gap-1.5 border-b border-[#FF6B6B]/30 pb-3 mt-1">
+                    {/* Zebra warning loader */}
+                    {loading ? (
+                      <div className="h-10 w-full editorial-loader-bar flex items-center justify-center border-none">
+                        <span className="bg-[var(--editorial-accent-yellow)] text-black text-[8px] font-black border border-black px-2 py-0.5 animate-pulse">
+                          SOUNDWAVE CALCULATING...
+                        </span>
+                      </div>
+                    ) : (
+                      /* Waveforms */
+                      <div className="h-10 flex items-end gap-1 border-b border-[var(--editorial-stroke)]/20 pb-2">
                         {Array.from({ length: 24 }).map((_, idx) => {
-                          const heights = ['h-2', 'h-8', 'h-14', 'h-10', 'h-4', 'h-12', 'h-6', 'h-2', 'h-8', 'h-12', 'h-6', 'h-3'];
+                          const heights = ['h-2', 'h-8', 'h-10', 'h-6', 'h-3', 'h-9', 'h-5', 'h-2', 'h-6', 'h-8', 'h-4', 'h-2'];
                           return (
                             <span
                               key={idx}
-                              className={`flex-grow bg-[#FF6B6B] border border-black transition-all ${
-                                loading ? 'animate-pulse bg-[#FF6B6B]/40' : heights[idx % heights.length]
-                              }`}
+                              className={`flex-grow bg-[var(--editorial-stroke)]/80 transition-all ${heights[idx % heights.length]}`}
                             ></span>
                           );
                         })}
                       </div>
+                    )}
 
-                      <div className="grid grid-cols-2 gap-2 text-[10px] uppercase font-bold text-gray-400">
-                        <div>🗣️ Speaker: <span className="text-white">{audioOutput.voice_id}</span></div>
-                        <div>📈 Tempo Rate: <span className="text-white">{audioOutput.speed}x</span></div>
-                        <div>📝 Characters: <span className="text-white">{audioOutput.text_length} chars</span></div>
-                        <div>⏳ Duration: <span className="text-white">~{audioOutput.estimated_audio_duration_seconds}s</span></div>
+                    <div className="grid grid-cols-2 gap-3 text-[9px] text-[var(--editorial-text-gray)] font-mono uppercase">
+                      <div>声线 Speaker: <span className="text-[var(--editorial-text)] font-bold">{audioOutput.voice_id}</span></div>
+                      <div>语速 Tempo: <span className="text-[var(--editorial-text)] font-bold">{audioOutput.speed}x</span></div>
+                      <div>旁白字数: <span className="text-[var(--editorial-text)] font-bold">{audioOutput.text_length} 字符</span></div>
+                      <div>估计时长: <span className="text-[var(--editorial-text)] font-bold">~{audioOutput.estimated_audio_duration_seconds}S</span></div>
+                    </div>
+                  </div>
+
+                  {/* Player node */}
+                  <div className="border border-[var(--editorial-stroke)]/60 bg-[var(--editorial-bg)]/20 p-3">
+                    <span className="text-[8px] font-black text-[var(--editorial-text-gray)] uppercase block mb-1.5">// SOUND STREAM PLAYER</span>
+                    {loading ? (
+                      <div className="p-2 border border-[var(--editorial-stroke)]/40 text-[9px] text-center font-bold text-[var(--editorial-text-gray)] animate-pulse bg-[var(--editorial-paper)]">
+                        LOADING STREAMING AUDIO PIPELINE...
                       </div>
-                    </div>
+                    ) : (
+                      <audio
+                        key={audioOutput.audio_url}
+                        controls
+                        className="w-full h-8 outline-none rounded-none bg-transparent"
+                      >
+                        <source src={audioOutput.audio_url} type="audio/mpeg" />
+                        Your browser does not support the audio element.
+                      </audio>
+                    )}
+                  </div>
 
-                    {/* True Audio player node */}
-                    <div className="border-2 border-black bg-[#F4F4F0] p-4 flex flex-col gap-2 rounded-md">
-                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">💿 Synthesized Output Audio Stream</div>
-                      {loading ? (
-                        <div className="p-3 bg-white border border-gray-300 text-xs font-mono text-center font-bold text-gray-400">
-                          LOADING STREAMING PIPELINE...
-                        </div>
-                      ) : (
-                        <audio
-                          key={audioOutput.audio_url}
-                          controls
-                          className="w-full h-10 border border-black outline-none accent-black bg-white rounded-none"
-                        >
-                          <source src={audioOutput.audio_url} type="audio/mpeg" />
-                          Your browser does not support the audio element.
-                        </audio>
-                      )}
-                    </div>
+                  {/* Polaroid write area */}
+                  <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
+                    <span>SEED: 120489-TTS</span>
+                    <span>DECK: [MANUSCRIPT_TTS]</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleCopyClipboard(audioOutput.text)}
-                  className="w-full mt-6 border-2 border-black bg-white hover:bg-gray-100 p-3 font-extrabold text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer flex justify-center items-center gap-2"
-                >
-                  📋 COPY READ TEXT
-                </button>
+                <AgentTerminal logs={agentLogs} />
               </div>
-            </>
+            </div>
           )}
 
-        </main>
+          {/* ==================== 5. COMMUNITY Gallery Feed WORKSPACE ==================== */}
+          {activeTab === 'community' && (
+            <div className="flex flex-col gap-8 font-mono">
+              
+              {/* RAG search box card */}
+              <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative">
+                
+                <div>
+                  <h3 className="text-sm font-black text-[var(--editorial-text)] flex items-center gap-2 font-mono uppercase">
+                    <span>[ RAG RETRIEVAL ENGINE ]</span>
+                  </h3>
+                  <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1.5 leading-relaxed font-bold">
+                    已将手写画板数据完成本地向量库 RAG 索引，支持对文本、分镜、图片描述执行高对比度语义检索。
+                  </p>
+                </div>
 
-      </div>
+                <form onSubmit={handleRAGSearch} className="flex gap-3 mt-4">
+                  <div className="relative flex-grow">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-1 py-3 text-xs focus:outline-none focus:border-b-2 transition-all font-semibold font-mono"
+                      placeholder="输入关键词进行语义检索 (如: 小红书咖啡、视觉工作区、文案神器) ..."
+                    />
+                  </div>
+                  
+                  {/* Action highlight primary */}
+                  <button
+                    type="submit"
+                    className="bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] border border-[var(--editorial-stroke)] font-black px-6 py-3 text-xs transition-all shadow-editorial active:shadow-none active:translate-x-[3px] active:translate-y-[3px] cursor-pointer"
+                  >
+                    <span>RAG 检索</span>
+                  </button>
+                </form>
 
-      {/* Footer Design */}
-      <footer className="w-full border-t-3 border-black py-6 mt-16 flex flex-col md:flex-row justify-between items-center gap-4 text-xs md:text-sm font-bold">
-        <span>© 2026 MARKETING-HUB INC. ALL RIGHTS RESERVED.</span>
-        <div className="flex gap-4">
-          <a href="#" className="underline hover:text-[#FFDE4D]">TERMS</a>
-          <span>//</span>
-          <a href="#" className="underline hover:text-[#39FF14]">PRIVACY</a>
-          <span>//</span>
-          <a href="#" className="underline hover:text-[#B983FF]">SUPPORT</a>
+                {/* RAG search index logs */}
+                {isRagActive && ragLogs.length > 0 && (
+                  <div className="bg-[var(--editorial-bg)]/40 border border-[var(--editorial-stroke)]/40 p-4 mt-3">
+                    <span className="text-[8px] text-[var(--editorial-text-gray)] font-black block border-b border-dashed border-[var(--editorial-stroke)]/40 pb-1.5 mb-2">
+                      RAG PIPELINE EXECUTION STACK TRACE LOGS
+                    </span>
+                    <div className="space-y-1 max-h-[140px] overflow-y-auto pr-1">
+                      {ragLogs.map((log, idx) => (
+                        <div key={idx} className="font-mono text-[9px] text-[var(--editorial-text-gray)] font-semibold">
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Creations gallery list */}
+              <div>
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-sm font-black text-[var(--editorial-text)] flex items-center gap-2 font-mono uppercase">
+                    <span>CREATOR MANUSCRIPTS FEED</span>
+                  </h3>
+                  {isRagActive && (
+                    <button 
+                      onClick={() => {
+                        setSearchQuery('');
+                        setIsRagActive(false);
+                        fetchCommunity();
+                      }}
+                      className="text-xs text-[var(--editorial-accent-blue)] hover:underline font-bold"
+                    >
+                      [ 显示全部作品 ]
+                    </button>
+                  )}
+                </div>
+
+                {communityItems.length === 0 ? (
+                  <div className="text-center py-16 bg-[var(--editorial-bg)]/40 border border-dashed border-[var(--editorial-stroke)]/45">
+                    <p className="text-xs text-[var(--editorial-text-gray)] font-bold font-mono">暂无分享作品，请使用 AIGC Agent 生成并分享出来！</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {communityItems.map((item, index) => {
+                      // Alternating rotation classes
+                      const rotations = ['rotate-[0.5deg]', 'rotate-[-0.6deg]', 'rotate-[0.4deg]', 'rotate-[-0.3deg]'];
+                      const rotClass = rotations[index % rotations.length];
+                      
+                      return (
+                        <div key={item.id} className={`bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-12 shadow-editorial relative flex flex-col justify-between hover:scale-[1.01] transition-all group ${rotClass}`}>
+                          
+                          {/* Similarity Score Tag */}
+                          {item.similarity_score !== undefined && (
+                            <span className="absolute top-4 right-4 bg-[var(--editorial-accent-yellow)] border border-[var(--editorial-stroke)] text-black text-[8px] font-bold px-2 py-0.5 shadow-editorial-sm z-10">
+                              SIM: {Math.round(item.similarity_score * 100)}%
+                            </span>
+                          )}
+                          
+                          <div>
+                            {/* Type header */}
+                            <div className="flex items-center justify-between mb-3 border-b border-dashed border-[var(--editorial-stroke)]/40 pb-2">
+                              <span className="bg-[var(--editorial-unselected)] border border-[var(--editorial-stroke)]/60 px-1.5 py-0.5 text-[8px] font-black uppercase text-[var(--editorial-text)] font-mono">
+                                {item.creation_type_display}
+                              </span>
+                              <span className="text-[8px] text-[var(--editorial-text-gray)] font-bold flex items-center gap-1 font-mono">
+                                <span>{item.created_at}</span>
+                              </span>
+                            </div>
+
+                            <h4 className="text-xs font-black text-[var(--editorial-text)] mb-3 line-clamp-1">{item.title}</h4>
+
+                            {/* Content render body based on type */}
+                            <div className="bg-[var(--editorial-bg)]/20 border border-[var(--editorial-stroke)]/40 p-3 text-[10px] min-h-[140px] max-h-[180px] overflow-y-auto mb-4 font-mono leading-relaxed">
+                              {item.creation_type === 'copy' && (
+                                <div className="space-y-2">
+                                  <h5 className="font-black text-[var(--editorial-text)]">{item.content.title}</h5>
+                                  {item.content.paragraphs?.map((p: string, i: number) => (
+                                    <p key={i} className="text-[var(--editorial-text-gray)] font-semibold leading-relaxed">{p}</p>
+                                  ))}
+                                  <div className="text-[9px] text-[var(--editorial-accent-blue)] mt-2 font-bold italic">
+                                    {item.content.tags?.map((t: string) => `#${t} `)}
+                                  </div>
+                                </div>
+                              )}
+
+                              {item.creation_type === 'image' && (
+                                <div className="flex flex-col gap-2">
+                                  <img
+                                    src={item.image_url || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80'}
+                                    alt="Community Visual Sketch"
+                                    className="h-24 w-full object-cover border border-[var(--editorial-stroke)]"
+                                  />
+                                  <p className="text-[9px] text-[var(--editorial-text-gray)] line-clamp-2 leading-relaxed">
+                                    {item.content.revised_prompt}
+                                  </p>
+                                </div>
+                              )}
+
+                              {item.creation_type === 'storyboard' && (
+                                <div className="space-y-2.5">
+                                  {item.content.scenes?.map((scene, i) => (
+                                    <div key={i} className="border-b border-[var(--editorial-stroke)]/40 pb-1.5 mb-1.5 last:border-0 last:pb-0 last:mb-0">
+                                      <div className="font-black text-[8px] text-[var(--editorial-text-gray)] mb-0.5">SCENE {scene.scene_number} ({scene.duration_seconds}s)</div>
+                                      <p className="text-[var(--editorial-text)] leading-snug line-clamp-2 font-semibold">{scene.visual_description}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {item.creation_type === 'audio' && (
+                                <div className="flex flex-col justify-center items-center py-3 gap-2">
+                                  <span className="text-[8px] text-[var(--editorial-text-gray)] text-center font-bold">EST DURATION: ~{item.content.estimated_audio_duration_seconds}S</span>
+                                  <audio controls className="w-full h-8 mt-1 border border-[var(--editorial-stroke)]/40 rounded-none bg-transparent">
+                                    <source src={item.audio_url || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'} type="audio/mpeg" />
+                                  </audio>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Polaroid bottom metadata */}
+                          <div className="absolute bottom-2 left-4 right-4 flex justify-between items-center text-[8px] font-mono text-[var(--editorial-text-gray)] border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5">
+                            <span className="font-bold flex items-center gap-1">
+                              <span className="h-4.5 w-4.5 bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] border border-[var(--editorial-stroke)] flex items-center justify-center text-[8px] font-black uppercase">
+                                {item.username.substring(0, 2)}
+                              </span>
+                              <span>{item.username}</span>
+                            </span>
+                            
+                            <button
+                              onClick={() => handleLike(item.id)}
+                              className="bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] hover:bg-rose-500 hover:text-white px-2 py-1 font-black flex items-center gap-1.5 cursor-pointer text-black active:translate-x-[1px] active:translate-y-[1px] shadow-editorial-sm active:shadow-none transition-all"
+                            >
+                              <span>{item.likes}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* ==================== 6. CONFIG ROUTER WORKSPACE ==================== */}
+          {activeTab === 'config' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start font-mono">
+              
+              {/* Form config panel */}
+              <form onSubmit={handleSaveConfig} className="col-span-1 lg:col-span-6 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative flex flex-col gap-5">
+                <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
+                  <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
+                </div>
+                
+                <h3 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
+                  <span>API ROUTER KEY CONFIG</span>
+                </h3>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">选择服务商</label>
+                  <select
+                    value={activeConfigForm.provider}
+                    onChange={(e) => setActiveConfigForm({ ...activeConfigForm, provider: e.target.value })}
+                    className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
+                  >
+                    <option value="mock">Mock Sandbox Simulator (沙箱模拟演示)</option>
+                    <option value="gemini">Google Gemini API (标准接口)</option>
+                    <option value="openai">OpenAI API (标准接口)</option>
+                  </select>
+                </div>
+
+                {activeConfigForm.provider !== 'mock' && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">API KEY 密钥</label>
+                      <div className="relative">
+                        <input
+                          type={showKey ? "text" : "password"}
+                          required
+                          value={activeConfigForm.api_key}
+                          onChange={(e) => setActiveConfigForm({ ...activeConfigForm, api_key: e.target.value })}
+                          className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
+                          placeholder={activeConfigForm.api_key ? "API 密钥已保存 (输入新密钥以覆盖)" : "请输入 API Key"}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKey(!showKey)}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-[9px] text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] cursor-pointer font-bold"
+                        >
+                          {showKey ? '[HIDE]' : '[SHOW]'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
+                        <span>自定义代理网关 Base URL</span>
+                        <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">可选配置</span>
+                      </label>
+                      <input
+                        type="url"
+                        value={activeConfigForm.base_url}
+                        onChange={(e) => setActiveConfigForm({ ...activeConfigForm, base_url: e.target.value })}
+                        className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
+                        placeholder="e.g. https://api.openai-proxy.org/v1"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
+                        <span>指定模型名称 Model Name</span>
+                        <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">可选配置</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={activeConfigForm.model_name}
+                        onChange={(e) => setActiveConfigForm({ ...activeConfigForm, model_name: e.target.value })}
+                        className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
+                        placeholder={activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Lead save action */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
+                >
+                  {loading ? (
+                    <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                  ) : null}
+                  <span>保存并激活配置</span>
+                </button>
+              </form>
+
+              {/* Status list */}
+              <div className="col-span-1 lg:col-span-6 flex flex-col gap-6 font-mono">
+                <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative flex flex-col gap-4">
+                  
+                  <h4 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
+                    <span>GATEWAY DATABASE STATS</span>
+                  </h4>
+                  
+                  <div className="space-y-3">
+                    {aiConfigs.map((config) => (
+                      <div key={config.id} className={`p-4 border-1.5 flex items-center justify-between ${
+                        config.is_active 
+                          ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/40 text-[var(--editorial-text)]' 
+                          : 'border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] text-[var(--editorial-text-gray)]'
+                      }`}>
+                        <div>
+                          <span className="text-xs font-black block">{config.provider_display}</span>
+                          <div className="flex items-center gap-2.5 mt-1 text-[8px] font-bold uppercase font-mono">
+                            <span>Key: {config.api_key || 'Unset'}</span>
+                            {config.model_name && (
+                              <>
+                                <span>•</span>
+                                <span>Model: {config.model_name}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        {config.is_active ? (
+                          <span className="bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] text-[8px] font-black px-2 py-0.5 border border-[var(--editorial-stroke)]">
+                            ACTIVE
+                          </span>
+                        ) : (
+                          <span className="bg-transparent text-[var(--editorial-text-gray)] text-[8px] font-bold px-2 py-0.5 border border-dashed border-[var(--editorial-stroke)]/40">
+                            STANDBY
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-bg)]/40 p-4 text-[10px] text-[var(--editorial-text-gray)] font-medium leading-relaxed mt-2">
+                    <span className="font-bold text-[var(--editorial-text)] block mb-1">// API GATEWAY MANUAL</span>
+                    1. 本系统将所有 AIGC Agent 调用接口完全收归至底层 sqlite 数据库进行保存。
+                    <br />
+                    2. 无 API 密钥时，系统将无缝调用本地 Agent 仿真编排引擎，输出高保真演示数据。
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
         </div>
-      </footer>
 
+        {/* Paper style footer */}
+        <footer className="w-full border-t border-[var(--editorial-stroke)]/45 py-4 mt-6 flex flex-col md:flex-row justify-between items-center gap-4 text-[9px] font-mono font-bold text-[var(--editorial-text-gray)] uppercase">
+          <span>© 2026 MARKETING-HUB DRAFTBOOK INC. ALL RIGHTS RESERVED.</span>
+          <div className="flex gap-4">
+            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[TERMS]</a>
+            <span>//</span>
+            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[PRIVACY]</a>
+            <span>//</span>
+            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[SUPPORT]</a>
+          </div>
+        </footer>
+
+      </main>
+
+    </div>
+  );
+}
+
+// Sub-component: AIGC Agent workflow logger console
+function AgentTerminal({ logs }: { logs: string[] }) {
+  const [open, setOpen] = useState(true);
+  
+  return (
+    <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] overflow-hidden shadow-editorial transform rotate-[0.1deg]">
+      <button 
+        onClick={() => setOpen(!open)}
+        className="w-full bg-[var(--editorial-unselected)] px-5 py-3 border-b-1.5 border-[var(--editorial-stroke)] flex items-center justify-between text-[10px] font-black text-[var(--editorial-text)] font-mono tracking-wider cursor-pointer transition-all"
+      >
+        <span className="flex items-center gap-2">
+          <span>AI AGENT DRAFT PIPELINE STACK TRACE CONSOLE</span>
+        </span>
+        <span className="text-[9px] bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] px-2 py-0.5 font-bold">
+          {open ? 'COLLAPSE' : 'EXPAND'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="bg-[var(--editorial-bg)]/60 p-4 font-mono text-[9px] leading-relaxed text-[var(--editorial-text)] max-h-[140px] overflow-y-auto pr-1 border-t border-[var(--editorial-stroke)]">
+          {logs.length === 0 ? (
+            <div className="text-[var(--editorial-text-gray)] font-bold">// Waiting for AIGC Agent workflow triggers to print pipeline stack trace...</div>
+          ) : (
+            <div className="space-y-1.5">
+              {logs.map((log, idx) => {
+                let colorClass = 'text-[var(--editorial-text)]';
+                if (log.includes('[WARN]')) colorClass = 'text-yellow-600 dark:text-yellow-400 font-bold';
+                if (log.includes('[ERROR]')) colorClass = 'text-red-500 font-black';
+                if (log.includes('[SUCCESS]')) colorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
+                if (log.includes('---')) colorClass = 'text-[var(--editorial-accent-blue)] font-black border-b border-dashed border-[var(--editorial-stroke)]/40 pb-1 mb-1 block';
+                
+                return (
+                  <div key={idx} className={`${colorClass} font-semibold`}>
+                    {log}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

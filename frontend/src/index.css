@@ -1,29 +1,228 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Light Editorial Paper Mode */
+  --editorial-bg: #FAF8F5; /* Warm Alabaster Paper */
+  --editorial-desk: #F9F6F0; /* Oatmeal Paper */
+  --editorial-paper: #FFFFFF; /* Crisp white paper sheet */
+  --editorial-stroke: #1C1A17; /* Obsidian Charcoal */
+  --editorial-text: #1C1A17;
+  --editorial-text-muted: #3C3A36; /* Softened charcoal for strain-free reading */
+  --editorial-text-gray: #6C6A66;
+  --editorial-unselected: #EAE8E3;
+  --editorial-dot-color: #E2DFD9;
+  
+  --editorial-accent-blue: #2563EB; /* Pencil lead blue */
+  --editorial-accent-yellow: #FEF08A; /* Highlighter yellow */
+  
+  --serif-font: 'Lora', Georgia, 'Times New Roman', serif;
+  --sans-font: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --mono-font: 'JetBrains Mono', monospace;
+}
+
+.dark {
+  /* Dark Charcoal Editorial Board Mode */
+  --editorial-bg: #141311;
+  --editorial-desk: #1C1A17;
+  --editorial-paper: #22201D;
+  --editorial-stroke: #FAF8F5;
+  --editorial-text: #FAF8F5;
+  --editorial-text-muted: #E2DFD9;
+  --editorial-text-gray: #9C9A96;
+  --editorial-unselected: #2C2A26;
+  --editorial-dot-color: #2E2C28;
+  
+  --editorial-accent-blue: #60A5FA;
+  --editorial-accent-yellow: #EAB308;
+}
+
 @layer base {
   body {
-    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    @apply bg-neoBg text-black antialiased;
+    font-family: var(--sans-font);
+    background-color: var(--editorial-bg);
+    color: var(--editorial-text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+    @apply antialiased selection:bg-yellow-200 selection:text-black;
   }
 }
 
-/* Custom Scrollbar to match Neo-brutalism design */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* ==================== bespoke EDITORIAL STYLES ==================== */
+
+/* Typographic headings */
+.serif-header {
+  font-family: var(--serif-font);
 }
-::-webkit-scrollbar-track {
-  background: #F4F4F0;
-  border-left: 2px solid #000000;
+
+.mono-label {
+  font-family: var(--mono-font);
+  letter-spacing: 0.05em;
 }
-::-webkit-scrollbar-thumb {
-  background: #FFDE4D;
-  border: 2px solid #000000;
+
+/* Organic Asymmetric "Hand-Cut" Paper sheet shapes */
+.paper-sheet-1 {
+  border-radius: 4px 12px 3px 8px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #FF6B6B;
+
+.paper-sheet-2 {
+  border-radius: 8px 3px 12px 5px;
+}
+
+.paper-sheet-flat {
+  border-radius: 0px;
+}
+
+/* Matte Ink Offset Hard Shadows */
+.shadow-editorial {
+  box-shadow: 3px 3px 0px var(--editorial-stroke);
+}
+
+.shadow-editorial-sm {
+  box-shadow: 1.5px 1.5px 0px var(--editorial-stroke);
+}
+
+.shadow-editorial-lg {
+  box-shadow: 5px 5px 0px var(--editorial-stroke);
+}
+
+/* Dynamic button stamp/press dynamics */
+.btn-editorial-primary {
+  background-color: var(--editorial-stroke);
+  color: var(--editorial-bg);
+  border: 1.5px solid var(--editorial-stroke);
+  box-shadow: 3px 3px 0px var(--editorial-stroke);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-editorial-primary:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--editorial-stroke);
+}
+
+.btn-editorial-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px var(--editorial-stroke);
+}
+
+.btn-editorial-secondary {
+  background-color: var(--editorial-paper);
+  color: var(--editorial-text);
+  border: 1.5px solid var(--editorial-stroke);
+  box-shadow: 3px 3px 0px var(--editorial-stroke);
+  transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-editorial-secondary:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--editorial-stroke);
+}
+
+.btn-editorial-secondary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px var(--editorial-stroke);
+}
+
+/* Dot matrix grid for background context */
+.editorial-grid {
+  background-image: radial-gradient(var(--editorial-dot-color) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+/* Custom Editorial Range Input Slider */
+.editorial-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  background: transparent;
+}
+
+.editorial-slider:focus {
+  outline: none;
+}
+
+/* Track styling */
+.editorial-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 1.5px;
+  background-color: var(--editorial-stroke);
+  border: none;
+}
+
+/* Thumb knob styling: Solid black square casting 1px shadow */
+.editorial-slider::-webkit-slider-thumb {
+  height: 12px;
+  width: 12px;
+  background: var(--editorial-stroke);
+  border: 1px solid var(--editorial-stroke);
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -5px;
+  border-radius: 0px; /* Solid square */
+  box-shadow: 1px 1px 0px var(--editorial-stroke);
+  transition: transform 0.05s ease;
+}
+
+.editorial-slider::-webkit-slider-thumb:active {
+  transform: scale(1.15);
+}
+
+/* Minimalist static outline Diagonal warning loader */
+.editorial-loader-bar {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    var(--editorial-unselected) 10px,
+    var(--editorial-unselected) 20px
+  );
+  border: 1.5px solid var(--editorial-stroke);
+  height: 8px;
+  width: 100%;
+}
+
+/* Compatibility utilities for the bespoke fractional classes used in JSX. */
+.border-1\.5 {
+  border-width: 1.5px;
+}
+
+.border-b-1\.5 {
+  border-bottom-width: 1.5px;
+}
+
+.h-4\.5 {
+  height: 1.125rem;
+}
+
+.w-4\.5 {
+  width: 1.125rem;
+}
+
+.duration-250 {
+  transition-duration: 250ms;
+}
+
+.hover\:scale-103:hover {
+  transform: scale(1.03);
+}
+
+.active\:scale-97:active {
+  transform: scale(0.97);
+}
+
+.focus\:border-slate-650:focus {
+  border-color: var(--editorial-stroke);
+}
+
+.toast-success {
+  color: #256f46;
+}
+
+.toast-info {
+  color: var(--editorial-text);
+}
+
+.toast-error {
+  color: #b4233a;
 }
