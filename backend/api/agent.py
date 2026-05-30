@@ -374,10 +374,10 @@ class AIAgentWorkflow:
         # Determine image URL based on keyword/style
         config = cls.get_active_config()
         
-        # If real OpenAI key and image generation is available, we can trigger DALL-E.
-        # But to be extremely robust (since DALL-E can be expensive or slow), we'll do high quality unsplash
-        # matching or real DALL-E call if configured. Let's provide a gorgeous professional image pool:
-        logger.log("Resolving optimized prompt to target image asset pipeline...")
+        # This repository does not include a production image generation backend yet.
+        # The current endpoint returns a curated preview asset and exposes the revised
+        # prompt so a real image provider can be wired without changing the UI contract.
+        logger.log("Resolving prompt to local preview asset pipeline. Real image generation is not configured in this repository.", "WARN")
         time.sleep(0.7)
         
         # Premium curated unsplash image pool matching our refined style
@@ -417,7 +417,7 @@ class AIAgentWorkflow:
             "image_url": image_url,
             "revised_prompt": revised_prompt
         }
-        logger.log(f"Visual asset matching completed. Image stream generated.", "SUCCESS")
+        logger.log("Preview asset matching completed. No generated image binary was produced.", "SUCCESS")
         return result, logger.get_logs()
 
     @classmethod
@@ -461,16 +461,8 @@ class AIAgentWorkflow:
             }
             logger.log(f"Preparing TTS post data: model={model}, voice={openai_voice}, speed={speed}...")
             
-            # Note: Because TTS returns binary audio data (MP3), in a production Django setup, 
-            # we would write this binary response into a media file in the local server and serve its URL.
-            # Let's write the code to try to fetch it, but if it's a demo or fails, print the log 
-            # and gracefully use the beautiful fallback. This is exceptionally stable!
-            logger.log("Synthesizing real audio stream from OpenAI. (Key Masked)")
-            
-            # We will simulate the real voiceover generation with a beautiful explanation,
-            # indicating the binary stream is ready. To keep it 100% working in a sandbox,
-            # we provide the streaming link but show that the OpenAI TTS process was successfully simulated/executed!
-            logger.log(f"Successfully processed audio stream of {len(text)} characters via model '{model}' with speaker '{openai_voice}'.", "SUCCESS")
+            logger.log("OpenAI TTS is configured, but this local upgrade does not persist binary media to object storage yet.", "WARN")
+            logger.log("Returning the fallback preview audio URL until S3/OSS media storage is connected.", "WARN")
             
         else:
             logger.log("Sandbox Audio Synthesizer running high-fidelity simulation.")

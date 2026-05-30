@@ -1,5 +1,45 @@
 # Marketing-Hub 维护与升级日志
 
+## 2026-05-30 企业级工作区与任务账本升级
+
+### 已完成
+
+- 新增组织、成员、项目、活动、资产、生成任务、成本审计模型。
+- 新增工作区、任务队列、数据看板 API。
+- 生成接口保留原有同步返回兼容性，同时写入 `GenerationTask` 和 `UsageEvent`。
+- 前端新增“数据看板”入口，展示工作区范围、任务数量、任务类型分布、Token 与成本审计。
+- 后端配置支持 PostgreSQL、Redis、Celery broker/result backend 等环境变量。
+- 新增 Dockerfile 与 `docker-compose.yml`，可拉起 PostgreSQL、Redis、Django、Vite。
+- 清理不真实的模拟说明：RAG、图片、TTS 的未接入能力现在明确标注为 fallback，不伪装成真实云能力。
+
+### 验证
+
+- `uv run python manage.py check` 通过。
+- `uv run python manage.py makemigrations --check --dry-run` 通过。
+- `uv run python manage.py test` 可执行，但当前后端测试数为 0。
+- `npm run lint` 通过。
+- `npm run build` 通过。
+
+### 后续
+
+- 详见 `docs/upgrade_execution_report.md`。
+
+## 2026-05-30 Celery 异步任务管线升级
+
+### 已完成
+
+- 新增 Django/Celery 集成入口 `core/celery.py`。
+- 新增 `api.tasks.process_generation_task`，由 Celery worker 消费 `GenerationTask`。
+- `GenerationTask` 增加 `celery_task_id`，用于追踪 broker 派发任务。
+- `/api/tasks/` 在 `run_now=false` 时会创建账本任务并派发到 Celery。
+- 四类前端生成入口改为提交异步任务并轮询 `/api/tasks/<id>/`，任务完成后再更新输出面板。
+- `docker-compose.yml` 增加 `worker` 服务；Compose 环境下 `CELERY_TASK_ALWAYS_EAGER=false`，由 Redis + worker 执行。
+
+### 真实边界
+
+- 本地非 Compose 开发默认 `CELERY_TASK_ALWAYS_EAGER=true`，这是为了在没有 Redis worker 的情况下验证完整代码路径，不代表分布式异步。
+- 真正的异步队列需要启动 Redis 和 Celery worker。
+
 ## 2026-05-29 前端稳定性与 Creative Sketchbook 视觉升级
 
 ### 修复内容

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Sparkles } from 'lucide-react';
+import { API_BASE_URL } from './hooks/useApi';
+import { ProjectManager } from './components/ProjectManager';
+import { WorkflowBuilder } from './components/WorkflowBuilder';
+import type { BrandContext, CampaignRecord, ProjectRecord } from './types/workspace';
 
-const API_BASE_URL = 'http://localhost:8000/api';
-
-type Tab = 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
+type Tab = 'dashboard' | 'projects' | 'builder' | 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
 type ToastType = 'success' | 'info' | 'error';
 
 interface CopyOutput {
@@ -73,6 +75,53 @@ interface CommunityItem {
   similarity_score?: number;
 }
 
+interface WorkspaceScope {
+  organization: { id: number; name: string; slug: string };
+  project: { id: number; name: string; slug: string; brief: string; brand_context?: BrandContext };
+  campaign: { id: number; name: string; objective: string; status: string };
+  username: string;
+}
+
+interface DashboardSnapshot {
+  scope: WorkspaceScope;
+  metrics: {
+    task_count: number;
+    queued_tasks: number;
+    running_tasks: number;
+    successful_tasks: number;
+    failed_tasks: number;
+    total_tokens: number;
+    total_cost_usd: string;
+    asset_count: number;
+    community_count: number;
+  };
+  tasks_by_type: Record<string, number>;
+  recent_usage: Array<{
+    provider: string;
+    model_name: string;
+    total_tokens: number;
+    cost_usd: string;
+    created_at: string;
+  }>;
+}
+
+interface GenerationTaskRecord {
+  id: number;
+  task_type: 'copy' | 'image' | 'storyboard' | 'audio' | 'rag_search';
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  celery_task_id: string;
+  result: {
+    data?: unknown;
+    logs?: string[];
+  };
+  error_message: string;
+  token_count: number;
+  cost_usd: string;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
 export default function App() {
   // Theme state: Dark Chalkboard vs Light Paper Editorial
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -84,10 +133,13 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ username: 'ROOT', password: '123' });
   const [authError, setAuthError] = useState('');
   
-  const [activeTab, setActiveTab] = useState<Tab>('copy');
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(false);
   const [apiLive, setApiLive] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: ToastType } | null>(null);
+  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope | null>(null);
+  const [dashboardSnapshot, setDashboardSnapshot] = useState<DashboardSnapshot | null>(null);
+  const [latestTask, setLatestTask] = useState<GenerationTaskRecord | null>(null);
 
   // Agent execution logs
   const [agentLogs, setAgentLogs] = useState<string[]>([]);
@@ -309,10 +361,80 @@ export default function App() {
     }
   }, []);
 
+  const fetchWorkspaceBootstrap = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        username: username || 'ROOT',
+      });
+      const storedProject = localStorage.getItem('mh_project_slug');
+      const storedCampaign = localStorage.getItem('mh_campaign_id');
+      if (storedProject) params.set('project', storedProject);
+      if (storedCampaign) params.set('campaign', storedCampaign);
+      const res = await fetch(`${API_BASE_URL}/workspace/bootstrap/?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspaceScope(data.scope);
+      }
+    } catch (err) {
+      console.error('Failed to fetch workspace bootstrap', err);
+    }
+  }, [username]);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        username: username || 'ROOT',
+      });
+      const storedProject = localStorage.getItem('mh_project_slug');
+      const storedCampaign = localStorage.getItem('mh_campaign_id');
+      if (storedProject) params.set('project', storedProject);
+      if (storedCampaign) params.set('campaign', storedCampaign);
+      const res = await fetch(`${API_BASE_URL}/dashboard/?${params.toString()}`);
+      if (res.ok) {
+        const data: DashboardSnapshot = await res.json();
+        setDashboardSnapshot(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics dashboard', err);
+    }
+  }, [username]);
+
+  const handleSelectProjectScope = useCallback((project: ProjectRecord, campaign?: CampaignRecord) => {
+    localStorage.setItem('mh_project_slug', project.slug);
+    if (campaign) {
+      localStorage.setItem('mh_campaign_id', String(campaign.id));
+    } else {
+      localStorage.removeItem('mh_campaign_id');
+    }
+    setWorkspaceScope((prev) => ({
+      organization: prev?.organization || { id: project.organization_id, name: 'Marketing Hub', slug: 'marketing-hub' },
+      project: {
+        id: project.id,
+        name: project.name,
+        slug: project.slug,
+        brief: project.brief,
+        brand_context: project.brand_context,
+      },
+      campaign: campaign
+        ? {
+            id: campaign.id,
+            name: campaign.name,
+            objective: campaign.objective,
+            status: campaign.status,
+          }
+        : prev?.campaign || { id: 0, name: 'Default Campaign', objective: '', status: 'active' },
+      username: username || 'ROOT',
+    }));
+    setActiveTab('builder');
+    triggerToast('当前项目范围已切换', 'success');
+  }, [triggerToast, username]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       fetchConfigs();
       fetchCommunity();
+      fetchWorkspaceBootstrap();
+      fetchDashboard();
       fetch(`${API_BASE_URL}/ai/config/`)
         .then((res) => {
           if (res.ok) setApiLive(true);
@@ -321,7 +443,7 @@ export default function App() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [fetchConfigs, fetchCommunity]);
+  }, [fetchConfigs, fetchCommunity, fetchWorkspaceBootstrap, fetchDashboard]);
 
   const handleLike = async (id: number) => {
     try {
@@ -351,6 +473,9 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: username || 'ROOT',
+          organization: workspaceScope?.organization.slug,
+          project: workspaceScope?.project.slug,
+          campaign: workspaceScope?.campaign.id,
           creation_type: type,
           title,
           content,
@@ -361,6 +486,7 @@ export default function App() {
       if (res.ok) {
         triggerToast('已成功分享到手绘工坊社区！', 'success');
         fetchCommunity();
+        fetchDashboard();
       } else {
         triggerToast('作品分享失败', 'error');
       }
@@ -393,118 +519,142 @@ export default function App() {
     }
   };
 
-  // Agent API triggers
-  const handleGenerateCopy = async () => {
+  const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  const pollGenerationTask = async (taskId: number): Promise<GenerationTaskRecord> => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/`);
+      if (!res.ok) {
+        throw new Error('Task polling failed');
+      }
+      const task: GenerationTaskRecord = await res.json();
+      setLatestTask(task);
+      if (task.status === 'succeeded' || task.status === 'failed') {
+        return task;
+      }
+      await wait(900);
+    }
+    const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/`);
+    if (!res.ok) {
+      throw new Error('Task polling failed');
+    }
+    const task: GenerationTaskRecord = await res.json();
+    setLatestTask(task);
+    return task;
+  };
+
+  const submitQueuedGeneration = async <T,>(
+    taskType: GenerationTaskRecord['task_type'],
+    payload: Record<string, unknown>,
+    applyResult: (result: T) => void,
+    initialLog: string,
+    successMessage: string
+  ) => {
     setLoading(true);
-    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Copywriting Agent Workflow...']);
+    setAgentLogs([initialLog, '[0.01s] [INFO] Queued task submitted to backend task ledger.']);
     try {
-      const res = await fetch(`${API_BASE_URL}/generate/copy/`, {
+      const res = await fetch(`${API_BASE_URL}/tasks/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          task_type: taskType,
+          payload,
+          username: username || 'ROOT',
+          organization: workspaceScope?.organization.slug,
+          project: workspaceScope?.project.slug,
+          campaign: workspaceScope?.campaign.id,
+          run_now: false,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error('Task submit failed');
+      }
+      const data: { task: GenerationTaskRecord } = await res.json();
+      setLatestTask(data.task);
+      const task = data.task.status === 'succeeded' || data.task.status === 'failed'
+        ? data.task
+        : await pollGenerationTask(data.task.id);
+
+      if (task.status === 'failed') {
+        throw new Error(task.error_message || 'Queued task failed');
+      }
+      if (task.status !== 'succeeded') {
+        setAgentLogs((prev) => [
+          ...prev,
+          `[QUEUE] Task #${task.id} is still ${task.status}. Start a Celery worker or run process_generation_tasks to complete it.`,
+        ]);
+        triggerToast('任务已进入队列，等待 worker 执行', 'info');
+        return;
+      }
+
+      const result = task.result.data as T;
+      applyResult(result);
+      setAgentLogs(task.result.logs || []);
+      fetchDashboard();
+      triggerToast(successMessage, 'success');
+    } catch {
+      triggerToast('异步任务提交或轮询失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Agent API triggers
+  const handleGenerateCopy = async () => {
+    await submitQueuedGeneration<CopyOutput>(
+      'copy',
+      {
           brand_name: copyInput.brandName,
           product_description: copyInput.description,
           tone: copyInput.tone,
           platform: copyInput.platform,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCopyOutput(data.result);
-        setAgentLogs(data.logs);
-        triggerToast('文案排版编排完毕', 'success');
-      } else {
-        throw new Error('API Error');
-      }
-    } catch {
-      triggerToast('文案生成服务响应异常', 'error');
-    } finally {
-      setLoading(false);
-    }
+      },
+      setCopyOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Copywriting Agent Workflow...',
+      '文案异步任务执行完毕'
+    );
   };
 
   const handleGenerateImage = async () => {
-    setLoading(true);
-    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Sketch Image Agent Workflow...']);
-    try {
-      const res = await fetch(`${API_BASE_URL}/generate/image/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    await submitQueuedGeneration<ImageOutput>(
+      'image',
+      {
           prompt: imageInput.prompt,
           style: imageInput.style,
           aspect_ratio: imageInput.aspectRatio,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setImageOutput(data.result);
-        setAgentLogs(data.logs);
-        triggerToast('视觉图片生成成功', 'success');
-      } else {
-        throw new Error('API Error');
-      }
-    } catch {
-      triggerToast('图片生成服务异常', 'error');
-    } finally {
-      setLoading(false);
-    }
+      },
+      setImageOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Sketch Image Agent Workflow...',
+      '视觉图片异步任务执行完毕'
+    );
   };
 
   const handleGenerateStoryboard = async () => {
-    setLoading(true);
-    setAgentLogs(['[0.00s] [INFO] Initializing Storyboard Editorial Director Workflow...']);
-    try {
-      const res = await fetch(`${API_BASE_URL}/generate/storyboard/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    await submitQueuedGeneration<StoryboardOutput>(
+      'storyboard',
+      {
           video_topic: storyboardInput.topic,
           duration: storyboardInput.duration,
           target_audience: storyboardInput.audience,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStoryboardOutput(data.result);
-        setAgentLogs(data.logs);
-        triggerToast('分镜脚本编排完毕', 'success');
-      } else {
-        throw new Error('API Error');
-      }
-    } catch {
-      triggerToast('视频脚本编排异常', 'error');
-    } finally {
-      setLoading(false);
-    }
+      },
+      setStoryboardOutput,
+      '[0.00s] [INFO] Initializing queued Storyboard Editorial Director Workflow...',
+      '分镜脚本异步任务执行完毕'
+    );
   };
 
   const handleGenerateAudio = async () => {
-    setLoading(true);
-    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Audio Synthesis Pipeline...']);
-    try {
-      const res = await fetch(`${API_BASE_URL}/generate/audio/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    await submitQueuedGeneration<AudioOutput>(
+      'audio',
+      {
           text: audioInput.text,
           voice_id: audioInput.voiceId,
           speed: audioInput.speed,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAudioOutput(data.result);
-        setAgentLogs(data.logs);
-        triggerToast('配音语音合成成功', 'success');
-      } else {
-        throw new Error('API Error');
-      }
-    } catch {
-      triggerToast('配音生成请求异常', 'error');
-    } finally {
-      setLoading(false);
-    }
+      },
+      setAudioOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Audio Synthesis Pipeline...',
+      '配音异步任务执行完毕'
+    );
   };
 
   // Auth Guard Portal
@@ -617,6 +767,41 @@ export default function App() {
           {/* Links list with brackets menu indicators */}
           <nav className="flex flex-col gap-3 font-mono">
             <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mb-1">
+              // 运营空间
+            </div>
+
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'text-[var(--editorial-text)]'
+                  : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+              }`}
+            >
+              {activeTab === 'dashboard' ? '[ 数据看板 ]' : '  数据看板'}
+            </button>
+
+            {[
+              { id: 'projects', label: '我的项目' },
+              { id: 'builder', label: '画布编排' },
+            ].map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id as Tab)}
+                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
+                    isActive
+                      ? 'text-[var(--editorial-text)]'
+                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+                  }`}
+                >
+                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
+                </button>
+              );
+            })}
+
+            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mb-1">
               // AIGC 编排
             </div>
 
@@ -705,6 +890,9 @@ export default function App() {
         <header className="flex justify-between items-center mb-8 pb-3 border-b border-[var(--editorial-stroke)]">
           <div>
             <h2 className="text-lg md:text-xl font-bold text-[var(--editorial-text)] serif-header">
+              {activeTab === 'dashboard' && '项目制运营与成本看板'}
+              {activeTab === 'projects' && '我的项目与品牌记忆'}
+              {activeTab === 'builder' && '画布编排与节点执行'}
               {activeTab === 'copy' && '智能营销文案排版'}
               {activeTab === 'image' && '社媒手绘图片视觉'}
               {activeTab === 'storyboard' && '场景分镜脚本大纲'}
@@ -713,18 +901,131 @@ export default function App() {
               {activeTab === 'config' && 'AI API 统一网关与密钥配置'}
             </h2>
             <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono">
-              {activeTab === 'community' ? '// Shared typed manuscripts feed' : '// Editorial pipeline controller'}
+              {activeTab === 'dashboard' ? '// Workspace, task ledger and cost audit' : activeTab === 'community' ? '// Shared typed manuscripts feed' : activeTab === 'projects' ? '// Project registry and brand context' : activeTab === 'builder' ? '// Visual workflow engine' : '// Editorial pipeline controller'}
             </p>
           </div>
           
-          <div className="flex items-center gap-2 text-[9px] font-bold font-mono">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-            <span>GATE: {apiLive ? 'LIVE' : 'SANDBOX'}</span>
+          <div className="flex flex-col items-end gap-1 text-[9px] font-bold font-mono">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+              <span>GATE: {apiLive ? 'LIVE' : 'SANDBOX'}</span>
+            </div>
+            {workspaceScope && (
+              <span className="text-[var(--editorial-text-gray)]">
+                {workspaceScope.organization.slug}/{workspaceScope.project.slug}
+              </span>
+            )}
           </div>
         </header>
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
         <div className="flex-grow flex flex-col justify-between z-0">
+          {activeTab === 'projects' && (
+            <ProjectManager
+              organization={workspaceScope?.organization || null}
+              activeProjectId={workspaceScope?.project.id}
+              onSelectScope={handleSelectProjectScope}
+              triggerToast={triggerToast}
+            />
+          )}
+
+          {activeTab === 'builder' && (
+            <WorkflowBuilder
+              organization={workspaceScope?.organization || null}
+              project={workspaceScope?.project || null}
+              campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
+              username={username || 'ROOT'}
+              triggerToast={triggerToast}
+            />
+          )}
+
+          {activeTab === 'dashboard' && (
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+              <div className="xl:col-span-4 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1">
+                <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono mb-5">// WORKSPACE SCOPE</h3>
+                <div className="space-y-4 font-mono">
+                  <div className="border-b border-dashed border-[var(--editorial-stroke)]/40 pb-3">
+                    <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">Organization</span>
+                    <span className="text-sm font-bold">{dashboardSnapshot?.scope.organization.name || workspaceScope?.organization.name || 'Marketing Hub'}</span>
+                  </div>
+                  <div className="border-b border-dashed border-[var(--editorial-stroke)]/40 pb-3">
+                    <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">Project</span>
+                    <span className="text-sm font-bold">{dashboardSnapshot?.scope.project.name || workspaceScope?.project.name || 'Core Launch'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">Campaign</span>
+                    <span className="text-sm font-bold">{dashboardSnapshot?.scope.campaign.name || workspaceScope?.campaign.name || 'Product Launch'}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    fetchWorkspaceBootstrap();
+                    fetchDashboard();
+                    triggerToast('工作区与成本看板已刷新', 'info');
+                  }}
+                  className="w-full btn-editorial-secondary py-2.5 rounded-none font-bold text-[10px] uppercase tracking-wider mt-6"
+                >
+                  刷新工作区状态
+                </button>
+              </div>
+
+              <div className="xl:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+                {[
+                  ['任务总量', dashboardSnapshot?.metrics.task_count ?? 0],
+                  ['成功任务', dashboardSnapshot?.metrics.successful_tasks ?? 0],
+                  ['社区作品', dashboardSnapshot?.metrics.community_count ?? 0],
+                  ['资产记录', dashboardSnapshot?.metrics.asset_count ?? 0],
+                  ['Token 审计', dashboardSnapshot?.metrics.total_tokens ?? 0],
+                  ['账单估算 USD', dashboardSnapshot?.metrics.total_cost_usd ?? '0.0000'],
+                ].map(([label, value]) => (
+                  <div key={label} className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
+                    <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider font-mono">{label}</span>
+                    <span className="block mt-2 text-2xl font-black serif-header text-[var(--editorial-text)]">{value}</span>
+                  </div>
+                ))}
+
+                <div className="md:col-span-2 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial paper-sheet-2">
+                  <div className="flex justify-between border-b border-[var(--editorial-stroke)] pb-3 mb-4">
+                    <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// TASK TYPE DISTRIBUTION</h3>
+                    <span className="text-[9px] font-mono text-[var(--editorial-text-gray)]">LIVE DB RECORDS</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
+                    {['copy', 'image', 'storyboard', 'audio'].map((taskType) => (
+                      <div key={taskType} className="border border-[var(--editorial-stroke)] p-3">
+                        <span className="block text-[9px] text-[var(--editorial-text-gray)] uppercase font-black">{taskType}</span>
+                        <span className="block mt-1 font-black text-lg">{dashboardSnapshot?.tasks_by_type[taskType] ?? 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-5 border-t border-dashed border-[var(--editorial-stroke)]/40 pt-4">
+                    {latestTask && (
+                      <div className="mb-4 border border-[var(--editorial-stroke)] p-3 font-mono">
+                        <span className="block text-[9px] text-[var(--editorial-text-gray)] uppercase font-black">Latest Queued Task</span>
+                        <div className="mt-2 flex flex-wrap justify-between gap-3 text-[10px]">
+                          <span>#{latestTask.id} / {latestTask.task_type}</span>
+                          <span>{latestTask.status}</span>
+                          <span>{latestTask.celery_task_id ? 'CELERY LINKED' : 'LOCAL LEDGER'}</span>
+                        </div>
+                      </div>
+                    )}
+                    <h4 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono mb-3">// RECENT USAGE EVENTS</h4>
+                    {(dashboardSnapshot?.recent_usage.length ?? 0) === 0 ? (
+                      <p className="text-xs text-[var(--editorial-text-gray)] font-mono">暂无成本审计事件。运行任意生成任务后会写入 UsageEvent。</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {dashboardSnapshot?.recent_usage.slice(0, 5).map((event, idx) => (
+                          <div key={`${event.created_at}-${idx}`} className="flex justify-between gap-3 text-[10px] font-mono border-b border-dashed border-[var(--editorial-stroke)]/20 pb-2">
+                            <span>{event.provider || 'mock'} / {event.model_name || 'default'}</span>
+                            <span>{event.total_tokens} tokens / ${event.cost_usd}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* ==================== 1. COPY PANEL ==================== */}
           {activeTab === 'copy' && (

@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 export { API_BASE_URL };
 
-export type Tab = 'dashboard' | 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
+export type Tab = 'dashboard' | 'projects' | 'builder' | 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
 
 export interface ToastMessage {
   text: string;
@@ -42,4 +42,45 @@ export function useCopyClipboard(triggerToast: (text: string, type: 'success' | 
   }, [triggerToast]);
 
   return handleCopyClipboard;
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`);
+  if (!response.ok) {
+    throw new Error(`GET ${path} failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`POST ${path} failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`PATCH ${path} failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`DELETE ${path} failed with ${response.status}`);
+  }
 }
