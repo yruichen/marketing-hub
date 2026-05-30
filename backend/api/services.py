@@ -8,11 +8,24 @@ from django.utils.text import slugify
 from django.utils import timezone
 
 from api.agent import AIAgentWorkflow
+from api.contracts import NODE_IO_SCHEMAS, PLAN_LIMITS, normalize_schema
+from api.serializers import (
+    AssetSerializer,
+    CampaignSerializer,
+    CommunityCreationSerializer,
+    FolderSerializer,
+    OrganizationSerializer,
+    ProjectSerializer,
+    TaskSerializer,
+    WorkflowTemplateSerializer,
+    WorkspaceDraftSerializer,
+)
 from api.models import (
     AIConfiguration,
     Asset,
     Campaign,
     CommunityCreation,
+    Folder,
     GenerationTask,
     Membership,
     Organization,
@@ -21,6 +34,39 @@ from api.models import (
     WorkflowTemplate,
     WorkspaceDraft,
 )
+
+
+def node_io_schema(node: dict[str, Any]) -> dict[str, dict[str, str]]:
+    config = node.get('config') if isinstance(node.get('config'), dict) else {}
+    base = NODE_IO_SCHEMAS.get(str(node.get('type')), NODE_IO_SCHEMAS['custom_agent'])
+    return {
+        'input': normalize_schema(node.get('input_schema') or config.get('input_schema'), base['input']),
+        'output': normalize_schema(node.get('output_schema') or config.get('output_schema'), base['output']),
+    }
+
+
+def validate_workflow_contract(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[str]:
+    warnings: list[str] = []
+    node_by_id = {str(node.get('id')): node for node in nodes if node.get('id')}
+    for edge in edges:
+        source = str(edge.get('source', ''))
+        target = str(edge.get('target', ''))
+        if source not in node_by_id or target not in node_by_id:
+            warnings.append(f'连接 {source}->{target} 指向不存在的节点。')
+            continue
+        source_schema = node_io_schema(node_by_id[source])['output']
+        target_schema = node_io_schema(node_by_id[target])['input']
+        if not source_schema or not target_schema:
+            continue
+        source_types = set(source_schema.values())
+        target_types = set(target_schema.values())
+        compatible = bool(source_types.intersection(target_types)) or 'Any' in source_types or 'Any' in target_types
+        if not compatible:
+            warnings.append(
+                f'{node_by_id[source].get("label", source)} 的输出类型 {sorted(source_types)} '
+                f'与 {node_by_id[target].get("label", target)} 的输入类型 {sorted(target_types)} 不匹配。'
+            )
+    return warnings
 
 
 def ensure_demo_workspace(username: str | None = None) -> dict[str, Any]:
@@ -57,114 +103,35 @@ def ensure_demo_workspace(username: str | None = None) -> dict[str, Any]:
 
 
 def serialize_organization(org: Organization) -> dict[str, Any]:
-    return {
-        'id': org.id,
-        'name': org.name,
-        'slug': org.slug,
-        'created_at': org.created_at.isoformat(),
-    }
+    return OrganizationSerializer(org).data
 
 
 def serialize_project(project: Project) -> dict[str, Any]:
-    return {
-        'id': project.id,
-        'organization_id': project.organization_id,
-        'name': project.name,
-        'slug': project.slug,
-        'brief': project.brief,
-        'brand_context': project.brand_context,
-        'is_archived': project.is_archived,
-        'created_at': project.created_at.isoformat(),
-        'updated_at': project.updated_at.isoformat(),
-    }
+    return ProjectSerializer(project).data
+
+
+def serialize_folder(folder: Folder) -> dict[str, Any]:
+    return FolderSerializer(folder).data
 
 
 def serialize_campaign(campaign: Campaign) -> dict[str, Any]:
-    return {
-        'id': campaign.id,
-        'project_id': campaign.project_id,
-        'name': campaign.name,
-        'objective': campaign.objective,
-        'status': campaign.status,
-        'created_at': campaign.created_at.isoformat(),
-        'updated_at': campaign.updated_at.isoformat(),
-    }
+    return CampaignSerializer(campaign).data
 
 
 def serialize_workspace_draft(draft: WorkspaceDraft) -> dict[str, Any]:
-    return {
-        'id': draft.id,
-        'organization_id': draft.organization_id,
-        'project_id': draft.project_id,
-        'campaign_id': draft.campaign_id,
-        'name': draft.name,
-        'brand_context': draft.brand_context,
-        'nodes': draft.nodes,
-        'edges': draft.edges,
-        'viewport': draft.viewport,
-        'selected_node_id': draft.selected_node_id,
-        'status': draft.status,
-        'last_run_summary': draft.last_run_summary,
-        'created_at': draft.created_at.isoformat(),
-        'updated_at': draft.updated_at.isoformat(),
-    }
+    return WorkspaceDraftSerializer(draft).data
 
 
 def serialize_workflow_template(template: WorkflowTemplate) -> dict[str, Any]:
-    return {
-        'id': template.id,
-        'organization_id': template.organization_id,
-        'source_project_id': template.source_project_id,
-        'source_campaign_id': template.source_campaign_id,
-        'title': template.title,
-        'description': template.description,
-        'author_username': template.author_username,
-        'brand_context': template.brand_context,
-        'nodes': template.nodes,
-        'edges': template.edges,
-        'preview_image_url': template.preview_image_url,
-        'tags': template.tags,
-        'is_public': template.is_public,
-        'fork_count': template.fork_count,
-        'created_at': template.created_at.isoformat(),
-        'updated_at': template.updated_at.isoformat(),
-    }
+    return WorkflowTemplateSerializer(template).data
 
 
 def serialize_asset(asset: Asset) -> dict[str, Any]:
-    return {
-        'id': asset.id,
-        'organization_id': asset.organization_id,
-        'project_id': asset.project_id,
-        'campaign_id': asset.campaign_id,
-        'asset_type': asset.asset_type,
-        'title': asset.title,
-        'source_url': asset.source_url,
-        'tags': asset.tags,
-        'metadata': asset.metadata,
-        'created_at': asset.created_at.isoformat(),
-    }
+    return AssetSerializer(asset).data
 
 
 def serialize_task(task: GenerationTask) -> dict[str, Any]:
-    return {
-        'id': task.id,
-        'organization_id': task.organization_id,
-        'project_id': task.project_id,
-        'campaign_id': task.campaign_id,
-        'requested_by': task.requested_by.username if task.requested_by else None,
-        'task_type': task.task_type,
-        'status': task.status,
-        'payload': task.payload,
-        'result': task.result,
-        'error_message': task.error_message,
-        'celery_task_id': task.celery_task_id,
-        'token_count': task.token_count,
-        'cost_usd': str(task.cost_usd),
-        'created_at': task.created_at.isoformat(),
-        'updated_at': task.updated_at.isoformat(),
-        'completed_at': task.completed_at.isoformat() if task.completed_at else None,
-    }
+    return TaskSerializer(task).data
 
 
 def estimate_tokens(payload: dict[str, Any], result: dict[str, Any]) -> int:
@@ -381,10 +348,14 @@ def get_or_create_default_draft(project: Project, campaign: Campaign | None = No
             'label': '品牌卖点提炼',
             'x': 80,
             'y': 120,
+            'width': 240,
+            'height': 132,
             'status': 'idle',
             'config': {
                 'summary': project.brief or '整理品牌定位、卖点和受众特征。',
             },
+            'input_schema': NODE_IO_SCHEMAS['context']['input'],
+            'output_schema': NODE_IO_SCHEMAS['context']['output'],
             'output': {},
         },
         {
@@ -393,11 +364,15 @@ def get_or_create_default_draft(project: Project, campaign: Campaign | None = No
             'label': '小红书文案专家',
             'x': 360,
             'y': 90,
+            'width': 240,
+            'height': 132,
             'status': 'idle',
             'config': {
                 'tone': '爆款活泼',
                 'platform': 'Xiaohongshu',
             },
+            'input_schema': NODE_IO_SCHEMAS['copy']['input'],
+            'output_schema': NODE_IO_SCHEMAS['copy']['output'],
             'output': {},
         },
         {
@@ -406,11 +381,15 @@ def get_or_create_default_draft(project: Project, campaign: Campaign | None = No
             'label': '配图生成器',
             'x': 650,
             'y': 190,
+            'width': 240,
+            'height': 132,
             'status': 'idle',
             'config': {
                 'style': 'minimalist',
                 'aspect_ratio': '1:1',
             },
+            'input_schema': NODE_IO_SCHEMAS['image']['input'],
+            'output_schema': NODE_IO_SCHEMAS['image']['output'],
             'output': {},
         },
     ]
@@ -517,6 +496,16 @@ def build_payload_for_node(
             'speed': float(config.get('speed') or 1.0),
             'workflow_context': context_text,
         }
+    if node_type == 'custom_agent':
+        return {
+            'name': config.get('name') or node.get('label') or '自定义智能体',
+            'icon': config.get('icon') or 'Sparkles',
+            'prompt': config.get('prompt') or '',
+            'temperature': float(config.get('temperature') or 0.7),
+            'workflow_context': context_text,
+            'upstream': upstream,
+            'feedback': feedback,
+        }
     return {
         'context': context_text,
         'upstream': upstream,
@@ -546,6 +535,32 @@ def run_workflow_node(
         }
         node['output'] = output
         node['status'] = 'succeeded'
+        node['input_schema'] = node_io_schema(node)['input']
+        node['output_schema'] = node_io_schema(node)['output']
+        return node, None
+
+    if node_type == 'custom_agent':
+        payload = build_payload_for_node(
+            node,
+            brand_context=brand_context,
+            upstream=upstream_outputs(node_id, nodes, edges),
+            feedback=feedback,
+        )
+        output = {
+            'response': (
+                f"{payload['name']} 已基于上游内容完成处理。"
+                f" Prompt: {str(payload['prompt'])[:180] or '未填写'}"
+            ),
+            'metadata': {
+                'temperature': payload['temperature'],
+                'upstream_count': len(payload['upstream']),
+                'schema': node_io_schema(node),
+            },
+        }
+        node['output'] = output
+        node['status'] = 'succeeded'
+        node['input_schema'] = node_io_schema(node)['input']
+        node['output_schema'] = node_io_schema(node)['output']
         return node, None
 
     if node_type not in dict(GenerationTask.TASK_TYPES):
@@ -555,6 +570,8 @@ def run_workflow_node(
         }
         node['output'] = output
         node['status'] = 'succeeded'
+        node['input_schema'] = node_io_schema(node)['input']
+        node['output_schema'] = node_io_schema(node)['output']
         return node, None
 
     payload = build_payload_for_node(
@@ -576,6 +593,8 @@ def run_workflow_node(
     node['task_id'] = task.id
     node['status'] = task.status
     node['error_message'] = task.error_message
+    node['input_schema'] = node_io_schema(node)['input']
+    node['output_schema'] = node_io_schema(node)['output']
     return node, task
 
 
@@ -592,6 +611,7 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
 
     try:
         order = workflow_execution_order(nodes, edges)
+        schema_warnings = validate_workflow_contract(nodes, edges)
         by_id = {str(node.get('id')): node for node in nodes}
         for ordered_node in order:
             node = by_id[str(ordered_node.get('id'))]
@@ -614,6 +634,7 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
         draft.last_run_summary = {
             'task_ids': [task.id for task in tasks],
             'node_count': len(nodes),
+            'schema_warnings': schema_warnings,
             'completed_at': timezone.now().isoformat(),
         }
         draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])

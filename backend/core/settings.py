@@ -41,6 +41,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'api',
+    'accounts',
+    'workspaces',
+    'generation',
+    'community',
+    'ai_gateway',
+    'billing',
 ]
 
 MIDDLEWARE = [

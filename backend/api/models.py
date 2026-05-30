@@ -5,8 +5,15 @@ from django.db import models
 
 
 class Organization(models.Model):
+    PLAN_CHOICES = [
+        ('free', 'Free'),
+        ('pro', 'Pro'),
+        ('enterprise', 'Enterprise'),
+    ]
+
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=140, unique=True)
+    subscription_plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default='free')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
@@ -33,19 +40,58 @@ class Membership(models.Model):
         return f'{self.user.username} @ {self.organization.slug} ({self.role})'
 
 
+class Folder(models.Model):
+    PERMISSION_CHOICES = [
+        ('workspace', 'Workspace'),
+        ('private', 'Private'),
+        ('restricted', 'Restricted'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='folders')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, related_name='children', null=True, blank=True)
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140)
+    sort_order = models.IntegerField(default=0)
+    permission_scope = models.CharField(max_length=20, choices=PERMISSION_CHOICES, default='workspace')
+    is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['parent_id', 'sort_order', 'name']
+        unique_together = [('organization', 'parent', 'slug')]
+
+    def __str__(self) -> str:
+        return self.path
+
+    @property
+    def path(self) -> str:
+        names = [self.name]
+        parent = self.parent
+        while parent:
+            names.append(parent.name)
+            parent = parent.parent
+        return '/'.join(reversed(names))
+
+
 class Project(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='projects')
+    folder = models.ForeignKey(Folder, on_delete=models.SET_NULL, related_name='projects', null=True, blank=True)
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180)
     brief = models.TextField(blank=True, default='')
     brand_context = models.JSONField(default=dict, blank=True)
+    folder_path = models.CharField(max_length=255, blank=True, default='')
+    platform_tags = models.JSONField(default=list, blank=True)
+    status_tag = models.CharField(max_length=40, default='creating')
+    sort_order = models.IntegerField(default=0)
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         unique_together = [('organization', 'slug')]
-        ordering = ['-created_at']
+        ordering = ['folder_path', 'sort_order', '-created_at']
 
     def __str__(self) -> str:
         return f'{self.organization.slug}/{self.slug}'
@@ -209,12 +255,18 @@ class AIConfiguration(models.Model):
         ('mock', 'Mock Sandbox Simulator'),
         ('gemini', 'Google Gemini API'),
         ('openai', 'OpenAI API'),
+        ('anthropic', 'Anthropic API'),
+    ]
+    BILLING_MODE_CHOICES = [
+        ('platform', 'Platform Credits'),
+        ('byok', 'Bring Your Own Key'),
     ]
 
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='mock')
     api_key = models.CharField(max_length=255, blank=True, default='')
     base_url = models.CharField(max_length=255, blank=True, default='')
     model_name = models.CharField(max_length=100, blank=True, default='')
+    billing_mode = models.CharField(max_length=20, choices=BILLING_MODE_CHOICES, default='platform')
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

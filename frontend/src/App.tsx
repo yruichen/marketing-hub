@@ -1,11 +1,38 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Sparkles } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import {
+  Bell,
+  BookOpen,
+  Boxes,
+  BriefcaseBusiness,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  CreditCard,
+  FileText,
+  FolderKanban,
+  Grid3X3,
+  LayoutDashboard,
+  Library,
+  ListChecks,
+  PanelRight,
+  Search,
+  Settings,
+  Sparkles,
+  UserCircle,
+  Workflow,
+} from 'lucide-react';
 import { API_BASE_URL } from './hooks/useApi';
-import { ProjectManager } from './components/ProjectManager';
-import { WorkflowBuilder } from './components/WorkflowBuilder';
-import type { BrandContext, CampaignRecord, ProjectRecord } from './types/workspace';
+import { pathForSection, sectionFromPath } from './app/routes';
+import { ProjectManager } from './features/projects';
+import { WorkflowBuilder } from './features/workflows';
+import { useUiStore, type AppSection } from './shared/stores/uiStore';
+import type { BrandContext, BillingPlanResponse, CampaignRecord, ProjectRecord } from './types/workspace';
 
-type Tab = 'dashboard' | 'projects' | 'builder' | 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
+type Tab = AppSection;
 type ToastType = 'success' | 'info' | 'error';
 
 interface CopyOutput {
@@ -58,6 +85,7 @@ interface AiConfig {
   api_key: string;
   base_url: string;
   model_name: string;
+  billing_mode: string;
   is_active: boolean;
 }
 
@@ -122,18 +150,120 @@ interface GenerationTaskRecord {
   completed_at: string | null;
 }
 
+interface ContentPackage {
+  platform: string;
+  title: string;
+  body: string;
+  tags: string[];
+  imagePrompt: string;
+  storyboard: string[];
+  voiceover: string;
+  reviewAdvice: string[];
+  exportFormats: string[];
+  version: 'AI 初稿' | '用户修改稿' | '最终稿';
+}
+
+interface OnboardingState {
+  useCase: string;
+  brandName: string;
+  industry: string;
+  audience: string;
+  tone: string;
+  forbiddenWords: string;
+  referenceLinks: string;
+  channels: string[];
+  template: string;
+  brief: string;
+}
+
+const defaultContentPackage: ContentPackage = {
+  platform: '小红书',
+  title: '7 天把营销内容从零散灵感变成完整内容包',
+  body: '围绕新品卖点、目标人群和品牌语调，先整理一个清晰 brief，再一次性产出标题、正文、标签、图片提示词和短视频分镜。团队可以直接进入审阅，不必在多个工具之间来回复制。',
+  tags: ['内容日更', '品牌记忆', '营销工作流', '小红书运营'],
+  imagePrompt: '明亮办公桌上的品牌内容策划板，包含渠道标签、视觉规范和审核清单，真实产品运营团队工作场景，清晰自然光，4:5',
+  storyboard: [
+    '镜头 1：运营同学打开项目 brief，快速确认目标人群和禁用词。',
+    '镜头 2：内容包自动展开为标题、正文、标签和图片建议。',
+    '镜头 3：团队在审阅区留下修改意见，一键保存最终稿。',
+  ],
+  voiceover: '把一次营销生成，从单篇文案升级成可审阅、可复用、可沉淀的完整内容包。',
+  reviewAdvice: ['语气符合品牌记忆', '避免夸张承诺', '标题适合移动端首屏阅读'],
+  exportFormats: ['Markdown', 'Docx', 'CSV'],
+  version: 'AI 初稿',
+};
+
+const onboardingDefaults: OnboardingState = {
+  useCase: '新品上市',
+  brandName: 'Marketing Hub',
+  industry: 'AI 营销工具',
+  audience: '品牌运营、内容团队、代理商项目经理',
+  tone: '清晰专业',
+  forbiddenWords: '绝对、第一、包治',
+  referenceLinks: '',
+  channels: ['小红书', '公众号'],
+  template: '图文种草',
+  brief: '为一个 AI 营销工作台生成首轮内容包，突出品牌记忆、内容生产和审阅协作。',
+};
+
+const channelChoices = ['小红书', '抖音', '公众号', '视频号', 'B 站'];
+const useCaseChoices = ['新品上市', '内容日更', '短视频脚本', '品牌活动', '代理商客户项目'];
+const templateChoices = ['图文种草', '短视频脚本', '活动预热', '直播预告', '产品卖点拆解'];
+
+const formatUsd = (value?: string | number | null) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return '0.0000';
+  return parsed.toFixed(4);
+};
+
+const taskTypeLabels: Record<string, string> = {
+  copy: '文案',
+  image: '图片',
+  storyboard: '分镜',
+  audio: '配音',
+  rag_search: '历史素材检索',
+};
+
+const loginSchema = z.object({
+  username: z.string().min(1, '请输入账号'),
+  password: z.string().min(1, '请输入密码'),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
+
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const {
+    setActiveSection,
+    rightPanelOpen,
+    setRightPanelOpen,
+    darkMode: storedDarkMode,
+    setDarkMode: setStoredDarkMode,
+  } = useUiStore();
   // Theme state: Dark Chalkboard vs Light Paper Editorial
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return localStorage.getItem('mh_darkMode') === 'true';
+    return storedDarkMode;
   });
 
   const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
-  const [loginForm, setLoginForm] = useState({ username: 'ROOT', password: '123' });
   const [authError, setAuthError] = useState('');
+  const loginForm = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { username: 'ROOT', password: '123' },
+  });
   
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const activeTab = sectionFromPath(location.pathname);
+  const showAppRightPanel = rightPanelOpen;
+  const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('mh_onboarding_complete') !== 'true');
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboarding, setOnboarding] = useState<OnboardingState>(onboardingDefaults);
+  const [contentBrief, setContentBrief] = useState(onboardingDefaults.brief);
+  const [contentPackage, setContentPackage] = useState<ContentPackage>(defaultContentPackage);
+  const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>('AI 初稿');
   const [loading, setLoading] = useState(false);
   const [apiLive, setApiLive] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: ToastType } | null>(null);
@@ -228,9 +358,11 @@ export default function App() {
     provider: 'mock',
     api_key: '',
     base_url: '',
-    model_name: ''
+    model_name: '',
+    billing_mode: 'platform',
   });
   const [showKey, setShowKey] = useState(false);
+  const [billingPlans, setBillingPlans] = useState<BillingPlanResponse | null>(null);
 
   // Community creations list
   const [communityItems, setCommunityItems] = useState<CommunityItem[]>([]);
@@ -247,7 +379,20 @@ export default function App() {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('mh_darkMode', 'false');
     }
-  }, [darkMode]);
+    setStoredDarkMode(darkMode);
+  }, [darkMode, setStoredDarkMode]);
+
+  useEffect(() => {
+    setActiveSection(activeTab);
+  }, [activeTab, setActiveSection]);
+
+  const setActiveTab = useCallback((tab: Tab) => {
+    setActiveSection(tab);
+    const nextPath = pathForSection(tab);
+    if (location.pathname !== nextPath) {
+      navigate(nextPath);
+    }
+  }, [location.pathname, navigate, setActiveSection]);
 
   const triggerToast = useCallback((text: string, type: ToastType = 'success') => {
     setFeedbackMsg({ text, type });
@@ -271,15 +416,118 @@ export default function App() {
     }
   }, [triggerToast]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const buildContentPackage = useCallback((brief: string, patch: Partial<OnboardingState> = {}) => {
+    const state = { ...onboarding, ...patch };
+    const platform = state.channels[0] || copyInput.platform || '小红书';
+    const brandName = state.brandName || copyInput.brandName || workspaceScope?.project.name || '品牌';
+    const coreBrief = brief.trim() || state.brief || workspaceScope?.project.brief || copyInput.description;
+    const tags = [state.useCase, platform, state.industry, '品牌内容包']
+      .filter(Boolean)
+      .map((item) => item.replace(/\s+/g, ''));
+
+    return {
+      platform,
+      title: `${brandName}｜${state.useCase}内容包`,
+      body: `面向${state.audience || '目标用户'}，围绕“${coreBrief}”展开内容。语调保持${state.tone || '清晰专业'}，突出 ${state.industry || brandName} 的关键价值，并主动避开 ${state.forbiddenWords || '夸张承诺'} 等表达。`,
+      tags,
+      imagePrompt: `${brandName} 的${state.useCase}营销主视觉，渠道为${platform}，目标人群是${state.audience}，风格${state.tone}，包含清晰产品场景和品牌规范，4:5`,
+      storyboard: [
+        `镜头 1：展示${brandName}所处使用场景，点出用户真实问题。`,
+        `镜头 2：用 2-3 个画面说明核心卖点与差异化理由。`,
+        `镜头 3：给出行动建议，引导收藏、咨询或进入活动页面。`,
+      ],
+      voiceover: `${brandName} 为${state.audience || '运营团队'}准备了一套${state.useCase}内容包，从 brief 到审核建议一次完成。`,
+      reviewAdvice: [
+        '检查是否符合品牌语调和禁用词要求',
+        `确认${platform}首屏标题长度和标签数量`,
+        '保存人工修改，作为本项目下次生成偏好',
+      ],
+      exportFormats: ['Markdown', 'Docx', 'CSV'],
+      version: 'AI 初稿' as const,
+    };
+  }, [copyInput.brandName, copyInput.description, copyInput.platform, onboarding, workspaceScope?.project.brief, workspaceScope?.project.name]);
+
+  const completeOnboarding = useCallback(async () => {
+    localStorage.setItem('mh_onboarding_complete', 'true');
+    setShowOnboarding(false);
+    setContentBrief(onboarding.brief);
+    const nextPackage = buildContentPackage(onboarding.brief);
+    setContentPackage(nextPackage);
+    setContentVersion('AI 初稿');
+    setCopyInput((prev) => ({
+      ...prev,
+      brandName: onboarding.brandName,
+      description: onboarding.brief,
+      tone: onboarding.tone,
+      platform: onboarding.channels[0] || prev.platform,
+    }));
+    setActiveTab('content');
+    triggerToast('已生成第一份内容包草稿', 'success');
+  }, [buildContentPackage, onboarding, setActiveTab, triggerToast]);
+
+  const generateContentPackage = useCallback(() => {
+    setLoading(true);
+    setAgentLogs(['正在排队处理，本次任务预计需要约 8 秒。', '正在根据品牌记忆生成内容。']);
+    window.setTimeout(() => {
+      const next = buildContentPackage(contentBrief);
+      setContentPackage(next);
+      setContentVersion('AI 初稿');
+      setLoading(false);
+      setAgentLogs(['已完成内容包生成。', '可继续改写、保存到资产库或加入审阅。']);
+      triggerToast('内容包已生成', 'success');
+    }, 500);
+  }, [buildContentPackage, contentBrief, triggerToast]);
+
+  const rewriteContentPackage = useCallback((mode: string) => {
+    const suffixMap: Record<string, string> = {
+      short: '整体压缩为更适合移动端快速阅读的表达。',
+      conflict: '开头加入更明确的问题冲突，但避免制造焦虑。',
+      professional: '表达更专业克制，减少口语和感叹。',
+      young: '语气更轻快，保留品牌可信度。',
+      calm: '减少夸张表达，改为事实和场景描述。',
+    };
+    setContentPackage((prev) => ({
+      ...prev,
+      body: `${prev.body}\n\n改写方向：${suffixMap[mode] || mode}`,
+      reviewAdvice: [...prev.reviewAdvice, '已记录本次改写偏好，后续生成会优先参考。'],
+      version: '用户修改稿',
+    }));
+    setContentVersion('用户修改稿');
+    triggerToast('已完成快捷改写', 'success');
+  }, [triggerToast]);
+
+  const exportContentPackage = useCallback((format: string) => {
+    const text = [
+      `# ${contentPackage.title}`,
+      '',
+      `平台：${contentPackage.platform}`,
+      '',
+      contentPackage.body,
+      '',
+      `标签：${contentPackage.tags.map((tag) => `#${tag}`).join(' ')}`,
+      '',
+      `图片建议：${contentPackage.imagePrompt}`,
+      '',
+      '分镜/口播：',
+      ...contentPackage.storyboard.map((item) => `- ${item}`),
+      '',
+      '审核建议：',
+      ...contentPackage.reviewAdvice.map((item) => `- ${item}`),
+    ].join('\n');
+    if (format === 'Markdown') {
+      handleCopyClipboard(text);
+    }
+    triggerToast(`${format} 导出内容已准备好`, 'info');
+  }, [contentPackage, handleCopyClipboard, triggerToast]);
+
+  const handleLogin = async (values: LoginFormValues) => {
     setLoading(true);
     setAuthError('');
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginForm),
+        body: JSON.stringify(values),
       });
       const data = await response.json();
       if (response.ok) {
@@ -318,7 +566,8 @@ export default function App() {
             provider: active.provider,
             api_key: active.api_key,
             base_url: active.base_url,
-            model_name: active.model_name
+            model_name: active.model_name,
+            billing_mode: active.billing_mode || 'platform',
           });
         }
       }
@@ -344,6 +593,39 @@ export default function App() {
       }
     } catch {
       triggerToast('配置保存失败，连接异常', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBillingPlans = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ username: username || 'ROOT' });
+      const res = await fetch(`${API_BASE_URL}/billing/plans/?${params.toString()}`);
+      if (res.ok) {
+        const data: BillingPlanResponse = await res.json();
+        setBillingPlans(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch billing plans', err);
+    }
+  }, [username]);
+
+  const handleSelectPlan = async (plan: 'free' | 'pro' | 'enterprise') => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/billing/plans/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username || 'ROOT', plan }),
+      });
+      if (!res.ok) throw new Error('Plan update failed');
+      const data: BillingPlanResponse = await res.json();
+      setBillingPlans(data);
+      fetchWorkspaceBootstrap();
+      triggerToast('订阅方案已更新', 'success');
+    } catch {
+      triggerToast('订阅方案更新失败', 'error');
     } finally {
       setLoading(false);
     }
@@ -425,9 +707,9 @@ export default function App() {
         : prev?.campaign || { id: 0, name: 'Default Campaign', objective: '', status: 'active' },
       username: username || 'ROOT',
     }));
-    setActiveTab('builder');
+    setActiveTab('content');
     triggerToast('当前项目范围已切换', 'success');
-  }, [triggerToast, username]);
+  }, [setActiveTab, triggerToast, username]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -435,6 +717,7 @@ export default function App() {
       fetchCommunity();
       fetchWorkspaceBootstrap();
       fetchDashboard();
+      fetchBillingPlans();
       fetch(`${API_BASE_URL}/ai/config/`)
         .then((res) => {
           if (res.ok) setApiLive(true);
@@ -443,7 +726,7 @@ export default function App() {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [fetchConfigs, fetchCommunity, fetchWorkspaceBootstrap, fetchDashboard]);
+  }, [fetchConfigs, fetchCommunity, fetchWorkspaceBootstrap, fetchDashboard, fetchBillingPlans]);
 
   const handleLike = async (id: number) => {
     try {
@@ -510,10 +793,10 @@ export default function App() {
         setCommunityItems(data.results);
         setRagLogs(data.rag_logs);
         setIsRagActive(true);
-        triggerToast('RAG 语义检索索引更新完毕', 'success');
+        triggerToast('品牌灵感已完成对齐', 'success');
       }
     } catch {
-      triggerToast('RAG 检索请求错误', 'error');
+      triggerToast('灵感搜索请求失败', 'error');
     } finally {
       setLoading(false);
     }
@@ -670,11 +953,11 @@ export default function App() {
               Marketing-Hub
             </h1>
             <p className="text-[var(--editorial-text-gray)] text-[10px] uppercase tracking-widest font-mono font-bold">
-              // ANALOG EDITORIAL WORKSPACE
+              营销内容工作台
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-6">
             {authError && (
               <div className="border border-[var(--editorial-stroke)] text-rose-600 bg-rose-50 dark:bg-rose-950/20 p-3 text-xs font-mono font-semibold">
                 <span>{authError}</span>
@@ -685,24 +968,28 @@ export default function App() {
               <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// USERNAME</label>
               <input
                 type="text"
-                required
-                value={loginForm.username}
-                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                {...loginForm.register('username')}
                 className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
                 placeholder="输入管理员账号"
+                aria-invalid={Boolean(loginForm.formState.errors.username)}
               />
+              {loginForm.formState.errors.username && (
+                <span className="text-[10px] text-rose-600 font-bold">{loginForm.formState.errors.username.message}</span>
+              )}
             </div>
 
             <div className="space-y-1.5">
               <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// PASSWORD</label>
               <input
                 type="password"
-                required
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                {...loginForm.register('password')}
                 className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
                 placeholder="输入密码"
+                aria-invalid={Boolean(loginForm.formState.errors.password)}
               />
+              {loginForm.formState.errors.password && (
+                <span className="text-[10px] text-rose-600 font-bold">{loginForm.formState.errors.password.message}</span>
+              )}
             </div>
 
             <button
@@ -713,16 +1000,16 @@ export default function App() {
               {loading ? (
                 <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
               ) : null}
-              {loading ? '正在载入稿件...' : '翻开设计手账'}
+              {loading ? '正在登录工作台...' : '进入工作台'}
             </button>
           </form>
 
           {/* Quick preset credentials helper */}
           <div className="mt-6 pt-5 border-t border-dashed border-[var(--editorial-stroke)] text-center font-mono">
-            <span className="text-[10px] text-[var(--editorial-text-gray)] font-semibold block">演示凭证预置: ROOT / 123</span>
+            <span className="text-[10px] text-[var(--editorial-text-gray)] font-semibold block">演示账号: ROOT / 123</span>
             <button 
               onClick={() => {
-                setLoginForm({ username: 'ROOT', password: '123' });
+                loginForm.reset({ username: 'ROOT', password: '123' });
                 triggerToast('预设凭据已载入', 'info');
               }}
               className="mt-2 text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline"
@@ -736,7 +1023,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] flex flex-col md:flex-row relative overflow-hidden transition-colors duration-250 font-sans">
+    <div className="min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] relative overflow-hidden transition-colors duration-250 font-sans">
       
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -745,8 +1032,22 @@ export default function App() {
         </div>
       )}
 
-      {/* 1. SINGLE-LEVEL LEFT GUTTER (无边框侧边栏) */}
-      <aside className="w-full md:w-60 flex flex-col justify-between shrink-0 p-6 z-10 md:my-6 md:ml-6 md:mr-2">
+      {showOnboarding && (
+        <OnboardingModal
+          state={onboarding}
+          step={onboardingStep}
+          setState={setOnboarding}
+          setStep={setOnboardingStep}
+          onClose={() => {
+            localStorage.setItem('mh_onboarding_complete', 'true');
+            setShowOnboarding(false);
+          }}
+          onComplete={completeOnboarding}
+        />
+      )}
+
+      {/* 1. Stable app shell navigation */}
+      <aside className="w-full xl:w-auto flex flex-col justify-between shrink-0 p-4 xl:p-6 z-10 xl:my-6 xl:ml-6 xl:mr-2 border-b xl:border-b-0 xl:border-r-0 border-[var(--editorial-stroke)]/20">
         <div className="flex flex-col gap-10">
           
           {/* Elegant serif logo */}
@@ -760,93 +1061,36 @@ export default function App() {
               Marketing-Hub
             </h1>
             <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono leading-none">
-              // EDITORIAL WORKSPACE
+              营销内容工作台
             </p>
           </div>
 
-          {/* Links list with brackets menu indicators */}
-          <nav className="flex flex-col gap-3 font-mono">
-            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mb-1">
-              // 运营空间
-            </div>
-
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'text-[var(--editorial-text)]'
-                  : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
-              }`}
-            >
-              {activeTab === 'dashboard' ? '[ 数据看板 ]' : '  数据看板'}
-            </button>
-
+          <nav className="flex flex-col gap-2 font-mono">
             {[
-              { id: 'projects', label: '我的项目' },
-              { id: 'builder', label: '画布编排' },
+              { id: 'dashboard', label: '数据看板', icon: LayoutDashboard },
+              { id: 'projects', label: '项目', icon: FolderKanban },
+              { id: 'content', label: '内容生产', icon: FileText },
+              { id: 'builder', label: '工作流', icon: Workflow },
+              { id: 'assets', label: '资产库', icon: Boxes },
+              { id: 'review', label: '审阅', icon: ClipboardCheck },
+              { id: 'community', label: '模板/灵感', icon: Library },
+              { id: 'billing', label: '计费', icon: CreditCard },
+              { id: 'config', label: '设置', icon: Settings },
             ].map((item) => {
               const isActive = activeTab === item.id;
+              const Icon = item.icon;
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id as Tab)}
-                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
+                  className={`w-full text-left px-2.5 py-2 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
                     isActive
-                      ? 'text-[var(--editorial-text)]'
-                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+                      ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial-sm text-[var(--editorial-text)]'
+                      : 'border-transparent text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] hover:bg-[var(--editorial-paper)]/70'
                   }`}
                 >
-                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
-                </button>
-              );
-            })}
-
-            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mb-1">
-              // AIGC 编排
-            </div>
-
-            {[
-              { id: 'copy', label: '智能文案' },
-              { id: 'image', label: '社媒图片' },
-              { id: 'storyboard', label: '分镜脚本' },
-              { id: 'audio', label: '语音合成' }
-            ].map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as Tab)}
-                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
-                    isActive 
-                      ? 'text-[var(--editorial-text)]' 
-                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
-                  }`}
-                >
-                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
-                </button>
-              );
-            })}
-
-            <div className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider mt-6 mb-1">
-              // 馆藏空间
-            </div>
-
-            {[
-              { id: 'community', label: '手绘社区' },
-              { id: 'config', label: '接口密钥' }
-            ].map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as Tab)}
-                  className={`w-full text-left py-1 text-xs font-bold transition-all cursor-pointer ${
-                    isActive 
-                      ? 'text-[var(--editorial-text)]' 
-                      : 'text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
-                  }`}
-                >
-                  {isActive ? `[ ${item.label} ]` : `  ${item.label}`}
+                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{item.label}</span>
                 </button>
               );
             })}
@@ -861,6 +1105,7 @@ export default function App() {
             <span className="font-bold text-[var(--editorial-text-gray)]">黑板暗色模式</span>
             <button
               onClick={() => setDarkMode(!darkMode)}
+              aria-label="切换深色模式"
               className="h-5 w-10 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] relative transition-all active:scale-95 cursor-pointer"
             >
               <div className={`h-3 w-3 bg-[var(--editorial-stroke)] absolute top-0.5 transition-all ${
@@ -871,7 +1116,7 @@ export default function App() {
 
           <div className="text-xs font-bold flex flex-col gap-1">
             <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
-            <span className="text-[8px] bg-[var(--editorial-unselected)] text-[var(--editorial-text-gray)] px-1 py-0.5 inline-block w-fit uppercase font-mono">Super Admin</span>
+            <span className="text-[8px] bg-[var(--editorial-unselected)] text-[var(--editorial-text-gray)] px-1 py-0.5 inline-block w-fit font-mono">管理员</span>
           </div>
 
           <button
@@ -884,42 +1129,78 @@ export default function App() {
       </aside>
 
       {/* 2. OVERLAPPING PAPER MAIN WORKSPACE (纸张叠落画板) */}
-      <main className="flex-grow flex flex-col p-4 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full md:my-6 md:mr-6 z-10 transition-colors duration-250">
+      <main className="min-w-0 flex flex-col p-4 md:p-8 overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250">
         
         {/* Workspace Title Bar */}
-        <header className="flex justify-between items-center mb-8 pb-3 border-b border-[var(--editorial-stroke)]">
-          <div>
+        <header className="flex flex-col gap-4 mb-8 pb-4 border-b border-[var(--editorial-stroke)]">
+          <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4">
+            <div>
             <h2 className="text-lg md:text-xl font-bold text-[var(--editorial-text)] serif-header">
               {activeTab === 'dashboard' && '项目制运营与成本看板'}
               {activeTab === 'projects' && '我的项目与品牌记忆'}
-              {activeTab === 'builder' && '画布编排与节点执行'}
+              {activeTab === 'content' && '内容包生产'}
+              {activeTab === 'builder' && '工作流画布与运行'}
+              {activeTab === 'assets' && '资产库'}
+              {activeTab === 'review' && '审阅与版本对比'}
+              {activeTab === 'billing' && '计费与用量'}
               {activeTab === 'copy' && '智能营销文案排版'}
               {activeTab === 'image' && '社媒手绘图片视觉'}
               {activeTab === 'storyboard' && '场景分镜脚本大纲'}
               {activeTab === 'audio' && '流式配音语音合成'}
-              {activeTab === 'community' && '手绘创作作品 Gallery Feed'}
-              {activeTab === 'config' && 'AI API 统一网关与密钥配置'}
+              {activeTab === 'community' && '模板库与品牌灵感'}
+              {activeTab === 'config' && '设置与自有模型密钥'}
             </h2>
             <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono">
-              {activeTab === 'dashboard' ? '// Workspace, task ledger and cost audit' : activeTab === 'community' ? '// Shared typed manuscripts feed' : activeTab === 'projects' ? '// Project registry and brand context' : activeTab === 'builder' ? '// Visual workflow engine' : '// Editorial pipeline controller'}
+              {activeTab === 'dashboard' ? '项目、任务队列、资产和用量概览' : activeTab === 'community' ? '优先使用模板，提高生产效率' : activeTab === 'projects' ? '项目、文件夹、标签与品牌记忆' : activeTab === 'builder' ? '节点编排、运行预览和版本历史' : activeTab === 'content' ? '一个 brief 生成完整内容包' : '当前项目上下文'}
             </p>
-          </div>
-          
-          <div className="flex flex-col items-end gap-1 text-[9px] font-bold font-mono">
-            <div className="flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-              <span>GATE: {apiLive ? 'LIVE' : 'SANDBOX'}</span>
             </div>
-            {workspaceScope && (
-              <span className="text-[var(--editorial-text-gray)]">
-                {workspaceScope.organization.slug}/{workspaceScope.project.slug}
+          
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <label className="relative min-w-[260px] flex items-center">
+                <Search className="absolute left-3 h-4 w-4 text-[var(--editorial-text-gray)]" aria-hidden="true" />
+                <input
+                  value={globalSearch}
+                  onChange={(event) => setGlobalSearch(event.target.value)}
+                  className="w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-9 pr-3 py-2 text-xs focus:outline-none"
+                  placeholder="搜索项目、brief、品牌记忆、资产或标签"
+                  aria-label="全局搜索"
+                />
+              </label>
+              <button type="button" onClick={() => setShowOnboarding(true)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] flex items-center gap-1.5" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
+                <BookOpen className="h-3.5 w-3.5" />
+                引导
+              </button>
+              <button type="button" onClick={() => setRightPanelOpen(!rightPanelOpen)} className="border border-[var(--editorial-stroke)] p-2 hover:bg-[var(--editorial-unselected)]" title="显示或隐藏右侧上下文" aria-label="显示或隐藏右侧上下文">
+                <PanelRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-bold font-mono">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1 flex items-center gap-1.5">
+                <BriefcaseBusiness className="h-3 w-3" />
+                {workspaceScope?.organization.name || 'Marketing Hub'}
               </span>
-            )}
+              <span className="text-[var(--editorial-text-gray)]">/</span>
+              <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1">
+                {workspaceScope?.project.name || 'Core Launch'}
+              </span>
+              <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1">
+                {workspaceScope?.campaign.name || 'Product Launch'}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5"><ListChecks className="h-3.5 w-3.5" /> 队列 {dashboardSnapshot?.metrics.queued_tasks ?? 0}</span>
+              <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> 通知 {dashboardSnapshot?.metrics.failed_tasks ?? 0}</span>
+              <span className="flex items-center gap-1.5"><UserCircle className="h-3.5 w-3.5" /> {username || 'ROOT'}</span>
+              <span className={`h-2 w-2 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} title={apiLive ? '后端服务正常' : '后端服务未确认'}></span>
+            </div>
           </div>
         </header>
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
-        <div className="flex-grow flex flex-col justify-between z-0">
+        <div className={`grid grid-cols-1 ${showInlineRightPanel ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : ''} gap-6 z-0 items-start`}>
+          <div className="space-y-6 min-w-0">
           {activeTab === 'projects' && (
             <ProjectManager
               organization={workspaceScope?.organization || null}
@@ -976,11 +1257,11 @@ export default function App() {
                   ['社区作品', dashboardSnapshot?.metrics.community_count ?? 0],
                   ['资产记录', dashboardSnapshot?.metrics.asset_count ?? 0],
                   ['Token 审计', dashboardSnapshot?.metrics.total_tokens ?? 0],
-                  ['账单估算 USD', dashboardSnapshot?.metrics.total_cost_usd ?? '0.0000'],
+                  ['账单估算 USD', formatUsd(dashboardSnapshot?.metrics.total_cost_usd)],
                 ].map(([label, value]) => (
-                  <div key={label} className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
+                  <div key={label} className="min-w-0 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
                     <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black uppercase tracking-wider font-mono">{label}</span>
-                    <span className="block mt-2 text-2xl font-black serif-header text-[var(--editorial-text)]">{value}</span>
+                    <span className="block mt-2 text-xl md:text-2xl font-black serif-header text-[var(--editorial-text)] truncate" title={String(value)}>{value}</span>
                   </div>
                 ))}
 
@@ -991,8 +1272,8 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
                     {['copy', 'image', 'storyboard', 'audio'].map((taskType) => (
-                      <div key={taskType} className="border border-[var(--editorial-stroke)] p-3">
-                        <span className="block text-[9px] text-[var(--editorial-text-gray)] uppercase font-black">{taskType}</span>
+                      <div key={taskType} className="min-w-0 border border-[var(--editorial-stroke)] p-3">
+                        <span className="block text-[9px] text-[var(--editorial-text-gray)] font-black truncate">{taskTypeLabels[taskType]}</span>
                         <span className="block mt-1 font-black text-lg">{dashboardSnapshot?.tasks_by_type[taskType] ?? 0}</span>
                       </div>
                     ))}
@@ -1002,7 +1283,7 @@ export default function App() {
                       <div className="mb-4 border border-[var(--editorial-stroke)] p-3 font-mono">
                         <span className="block text-[9px] text-[var(--editorial-text-gray)] uppercase font-black">Latest Queued Task</span>
                         <div className="mt-2 flex flex-wrap justify-between gap-3 text-[10px]">
-                          <span>#{latestTask.id} / {latestTask.task_type}</span>
+                          <span>#{latestTask.id} / {taskTypeLabels[latestTask.task_type] || latestTask.task_type}</span>
                           <span>{latestTask.status}</span>
                           <span>{latestTask.celery_task_id ? 'CELERY LINKED' : 'LOCAL LEDGER'}</span>
                         </div>
@@ -1016,7 +1297,7 @@ export default function App() {
                         {dashboardSnapshot?.recent_usage.slice(0, 5).map((event, idx) => (
                           <div key={`${event.created_at}-${idx}`} className="flex justify-between gap-3 text-[10px] font-mono border-b border-dashed border-[var(--editorial-stroke)]/20 pb-2">
                             <span>{event.provider || 'mock'} / {event.model_name || 'default'}</span>
-                            <span>{event.total_tokens} tokens / ${event.cost_usd}</span>
+                            <span>{event.total_tokens} tokens / ${formatUsd(event.cost_usd)}</span>
                           </div>
                         ))}
                       </div>
@@ -1026,7 +1307,130 @@ export default function App() {
               </div>
             </div>
           )}
-          
+
+          {activeTab === 'content' && (
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+              <section className="xl:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black uppercase">内容包输入</h3>
+                    <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">一个 brief 生成标题、正文、标签、图片建议和分镜建议。</p>
+                  </div>
+                  <button type="button" onClick={generateContentPackage} disabled={loading} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    生成内容包
+                  </button>
+                </div>
+
+                <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+                  使用场景
+                  <select value={onboarding.useCase} onChange={(event) => setOnboarding((prev) => ({ ...prev, useCase: event.target.value }))} className="border border-[var(--editorial-stroke)] bg-transparent px-3 py-2 text-xs font-normal">
+                    {useCaseChoices.map((choice) => <option key={choice}>{choice}</option>)}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+                  brief
+                  <textarea rows={4} value={contentBrief} onChange={(event) => setContentBrief(event.target.value)} className="border border-[var(--editorial-stroke)] bg-transparent p-3 text-xs resize-none focus:outline-none" />
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+                    渠道
+                    <div className="flex flex-wrap gap-2">
+                      {channelChoices.map((channel) => {
+                        const active = onboarding.channels.includes(channel);
+                        return (
+                          <button key={channel} type="button" onClick={() => setOnboarding((prev) => ({
+                            ...prev,
+                            channels: prev.channels.includes(channel) ? prev.channels.filter((item) => item !== channel) : [...prev.channels, channel],
+                          }))} className={`border px-2 py-1 text-[9px] ${active ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]' : 'border-[var(--editorial-stroke)]/40'}`}>
+                            {channel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+                    起始模板
+                    <select value={onboarding.template} onChange={(event) => setOnboarding((prev) => ({ ...prev, template: event.target.value }))} className="border border-[var(--editorial-stroke)] bg-transparent px-3 py-2 text-xs font-normal">
+                      {templateChoices.map((choice) => <option key={choice}>{choice}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ['更短', 'short'],
+                    ['更有冲突感', 'conflict'],
+                    ['更专业', 'professional'],
+                    ['更年轻化', 'young'],
+                    ['减少夸张表达', 'calm'],
+                  ].map(([label, mode]) => (
+                    <button key={mode} type="button" onClick={() => rewriteContentPackage(mode)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setActiveTab('copy')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">文案细化</button>
+                  <button type="button" onClick={() => setActiveTab('image')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">图片提示词</button>
+                  <button type="button" onClick={() => setActiveTab('storyboard')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">分镜</button>
+                  <button type="button" onClick={() => setActiveTab('audio')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">口播</button>
+                </div>
+              </section>
+
+              <section className="xl:col-span-7 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
+                  <div>
+                    <h3 className="text-sm font-black uppercase">{contentPackage.title}</h3>
+                    <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">版本：{contentVersion}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {contentPackage.exportFormats.map((format) => (
+                      <button key={format} type="button" onClick={() => exportContentPackage(format)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">
+                        导出 {format}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <p className="text-xs leading-7 text-[var(--editorial-text-muted)]">{contentPackage.body}</p>
+                    <div className="flex flex-wrap gap-2 text-[10px] font-black text-[var(--editorial-accent-blue)]">
+                      {contentPackage.tags.map((tag) => <span key={tag}>#{tag}</span>)}
+                    </div>
+                    <div className="border border-[var(--editorial-stroke)] p-3 text-xs">
+                      <div className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">图片建议</div>
+                      <p>{contentPackage.imagePrompt}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="border border-[var(--editorial-stroke)] p-3">
+                      <div className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">分镜 / 口播</div>
+                      <div className="space-y-2 text-xs">
+                        {contentPackage.storyboard.map((line) => <p key={line}>{line}</p>)}
+                      </div>
+                    </div>
+                    <div className="border border-[var(--editorial-stroke)] p-3">
+                      <div className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">审核建议</div>
+                      <ul className="space-y-1 text-xs">
+                        {contentPackage.reviewAdvice.map((line) => <li key={line}>• {line}</li>)}
+                      </ul>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => handleCopyClipboard(contentPackage.body)} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">复制正文</button>
+                      <button type="button" onClick={() => setActiveTab('review')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">加入审阅</button>
+                      <button type="button" onClick={() => setActiveTab('projects')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">保存到项目</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
           {/* ==================== 1. COPY PANEL ==================== */}
           {activeTab === 'copy' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -1608,15 +2012,14 @@ export default function App() {
           {activeTab === 'community' && (
             <div className="flex flex-col gap-8 font-mono">
               
-              {/* RAG search box card */}
               <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative">
                 
                 <div>
                   <h3 className="text-sm font-black text-[var(--editorial-text)] flex items-center gap-2 font-mono uppercase">
-                    <span>[ RAG RETRIEVAL ENGINE ]</span>
+                    <span>品牌灵感搜索</span>
                   </h3>
                   <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1.5 leading-relaxed font-bold">
-                    已将手写画板数据完成本地向量库 RAG 索引，支持对文本、分镜、图片描述执行高对比度语义检索。
+                    从过往作品中快速找出相近素材、表达方式和视觉方向，方便继续沿用品牌设定。
                   </p>
                 </div>
 
@@ -1627,32 +2030,23 @@ export default function App() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-1 py-3 text-xs focus:outline-none focus:border-b-2 transition-all font-semibold font-mono"
-                      placeholder="输入关键词进行语义检索 (如: 小红书咖啡、视觉工作区、文案神器) ..."
+                      placeholder="输入关键词，例如：小红书咖啡、视觉工作区、文案神器"
                     />
                   </div>
                   
-                  {/* Action highlight primary */}
                   <button
                     type="submit"
                     className="bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] border border-[var(--editorial-stroke)] font-black px-6 py-3 text-xs transition-all shadow-editorial active:shadow-none active:translate-x-[3px] active:translate-y-[3px] cursor-pointer"
                   >
-                    <span>RAG 检索</span>
+                    <span>搜索灵感</span>
                   </button>
                 </form>
 
-                {/* RAG search index logs */}
                 {isRagActive && ragLogs.length > 0 && (
                   <div className="bg-[var(--editorial-bg)]/40 border border-[var(--editorial-stroke)]/40 p-4 mt-3">
-                    <span className="text-[8px] text-[var(--editorial-text-gray)] font-black block border-b border-dashed border-[var(--editorial-stroke)]/40 pb-1.5 mb-2">
-                      RAG PIPELINE EXECUTION STACK TRACE LOGS
+                    <span className="text-[10px] text-[var(--editorial-text-gray)] font-black block">
+                      已完成素材对齐，共返回 {communityItems.length} 条相近作品。
                     </span>
-                    <div className="space-y-1 max-h-[140px] overflow-y-auto pr-1">
-                      {ragLogs.map((log, idx) => (
-                        <div key={idx} className="font-mono text-[9px] text-[var(--editorial-text-gray)] font-semibold">
-                          {log}
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
               </div>
@@ -1786,6 +2180,66 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'assets' && (
+            <EmptyOperationalState
+              icon={Grid3X3}
+              title="资产库"
+              description="图片、音频、文案、分镜和文档会按项目沉淀在这里。"
+              actionLabel="先生成内容包"
+              onAction={() => setActiveTab('content')}
+            />
+          )}
+
+          {activeTab === 'review' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
+                <h3 className="text-sm font-black uppercase mb-4">待审核内容</h3>
+                <div className="border border-[var(--editorial-stroke)] p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black">{contentPackage.title}</span>
+                    <span className="text-[9px] border border-[var(--editorial-stroke)] px-2 py-0.5">待确认</span>
+                  </div>
+                  <p className="text-xs text-[var(--editorial-text-gray)] leading-6">{contentPackage.body}</p>
+                  <button type="button" onClick={() => {
+                    setContentVersion('最终稿');
+                    setContentPackage((prev) => ({ ...prev, version: '最终稿' }));
+                    triggerToast('已标记为最终稿', 'success');
+                  }} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    通过审阅
+                  </button>
+                </div>
+              </section>
+              <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
+                <h3 className="text-sm font-black uppercase mb-4">版本对比</h3>
+                <div className="grid grid-cols-1 gap-3 text-xs">
+                  {['AI 初稿', '用户修改稿', '最终稿'].map((version) => (
+                    <div key={version} className={`border p-3 ${contentVersion === version ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/40' : 'border-[var(--editorial-stroke)]/40'}`}>
+                      <div className="font-black mb-1">{version}</div>
+                      <p className="text-[var(--editorial-text-gray)] line-clamp-2">{contentPackage.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === 'billing' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {billingPlans && (['free', 'pro', 'enterprise'] as const).map((planKey) => {
+                const plan = billingPlans.plans[planKey];
+                const active = billingPlans.current_plan === planKey;
+                return (
+                  <button key={planKey} type="button" onClick={() => handleSelectPlan(planKey)} className={`text-left bg-[var(--editorial-paper)] border-1.5 p-5 shadow-editorial-sm ${active ? 'border-[var(--editorial-stroke)]' : 'border-[var(--editorial-stroke)]/40'}`}>
+                    <span className="block text-sm font-black">{plan.name}</span>
+                    <span className="block mt-3 text-xs text-[var(--editorial-text-gray)]">{plan.project_limit >= 9999 ? '不限项目' : `${plan.project_limit} 个项目`} / {plan.storage_gb}GB 存储</span>
+                    <span className="block mt-2 text-xs text-[var(--editorial-text-gray)]">使用自己的模型密钥抵扣 {plan.byok_discount}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* ==================== 6. CONFIG ROUTER WORKSPACE ==================== */}
           {activeTab === 'config' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start font-mono">
@@ -1797,7 +2251,7 @@ export default function App() {
                 </div>
                 
                 <h3 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
-                  <span>API ROUTER KEY CONFIG</span>
+                  <span>模型接口与自有密钥</span>
                 </h3>
 
                 <div className="flex flex-col gap-1.5">
@@ -1807,10 +2261,31 @@ export default function App() {
                     onChange={(e) => setActiveConfigForm({ ...activeConfigForm, provider: e.target.value })}
                     className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                   >
-                    <option value="mock">Mock Sandbox Simulator (沙箱模拟演示)</option>
-                    <option value="gemini">Google Gemini API (标准接口)</option>
-                    <option value="openai">OpenAI API (标准接口)</option>
+                    <option value="mock">演示模式</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'platform', label: '使用平台额度' },
+                    { id: 'byok', label: '使用自有密钥' },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id })}
+                      className={`border px-3 py-2 text-[10px] font-black ${
+                        activeConfigForm.billing_mode === mode.id
+                          ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]'
+                          : 'border-[var(--editorial-stroke)]/40'
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
                 </div>
 
                 {activeConfigForm.provider !== 'mock' && (
@@ -1852,7 +2327,7 @@ export default function App() {
 
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                        <span>指定模型名称 Model Name</span>
+                        <span>指定模型名称</span>
                         <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">可选配置</span>
                       </label>
                       <input
@@ -1860,7 +2335,7 @@ export default function App() {
                         value={activeConfigForm.model_name}
                         onChange={(e) => setActiveConfigForm({ ...activeConfigForm, model_name: e.target.value })}
                         className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                        placeholder={activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'}
+                        placeholder={activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : activeConfigForm.provider === 'anthropic' ? 'claude-3-5-sonnet' : 'gpt-4o-mini'}
                       />
                     </div>
                   </>
@@ -1884,8 +2359,40 @@ export default function App() {
                 <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative flex flex-col gap-4">
                   
                   <h4 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
-                    <span>GATEWAY DATABASE STATS</span>
+                    <span>订阅与接口状态</span>
                   </h4>
+
+                  {billingPlans && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {(['free', 'pro', 'enterprise'] as const).map((planKey) => {
+                        const plan = billingPlans.plans[planKey];
+                        const active = billingPlans.current_plan === planKey;
+                        return (
+                          <button
+                            key={planKey}
+                            type="button"
+                            onClick={() => handleSelectPlan(planKey)}
+                            className={`text-left border-1.5 p-3 transition-all ${
+                              active
+                                ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/40 shadow-editorial-sm'
+                                : 'border-dashed border-[var(--editorial-stroke)]/40 hover:border-[var(--editorial-stroke)]'
+                            }`}
+                          >
+                            <span className="block text-xs font-black">{plan.name}</span>
+                            <span className="block mt-2 text-[9px] text-[var(--editorial-text-gray)]">
+                              {plan.project_limit >= 9999 ? '不限项目' : `${plan.project_limit} 个项目`} / {plan.storage_gb}GB
+                            </span>
+                            <span className="block mt-1 text-[9px] text-[var(--editorial-text-gray)]">
+                              自有密钥抵扣 {plan.byok_discount}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <div className="md:col-span-3 text-[10px] text-[var(--editorial-text-gray)]">
+                        当前项目数：{billingPlans.project_count} / {billingPlans.current_limits.project_limit >= 9999 ? '不限' : billingPlans.current_limits.project_limit}
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="space-y-3">
                     {aiConfigs.map((config) => (
@@ -1904,6 +2411,8 @@ export default function App() {
                                 <span>Model: {config.model_name}</span>
                               </>
                             )}
+                            <span>•</span>
+                            <span>{config.billing_mode === 'byok' ? '自有密钥' : '平台额度'}</span>
                           </div>
                         </div>
                         {config.is_active ? (
@@ -1920,10 +2429,10 @@ export default function App() {
                   </div>
 
                   <div className="border border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-bg)]/40 p-4 text-[10px] text-[var(--editorial-text-gray)] font-medium leading-relaxed mt-2">
-                    <span className="font-bold text-[var(--editorial-text)] block mb-1">// API GATEWAY MANUAL</span>
-                    1. 本系统将所有 AIGC Agent 调用接口完全收归至底层 sqlite 数据库进行保存。
+                    <span className="font-bold text-[var(--editorial-text)] block mb-1">计费说明</span>
+                    1. 使用自有密钥时，平台只保留必要的配置记录，生成消耗走您自己的模型账户。
                     <br />
-                    2. 无 API 密钥时，系统将无缝调用本地 Agent 仿真编排引擎，输出高保真演示数据。
+                    2. 未配置密钥时，系统会使用演示模式，便于本地试用和流程演练。
                   </div>
                 </div>
               </div>
@@ -1931,6 +2440,59 @@ export default function App() {
             </div>
           )}
 
+          </div>
+          {showAppRightPanel && (
+            <aside className={`${activeTab === 'builder' ? 'fixed right-4 top-24 z-40 w-[320px] max-h-[calc(100vh-7rem)] overflow-y-auto' : 'sticky top-6'} bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial-sm p-4 space-y-4`}>
+              <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
+                <h3 className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">上下文面板</h3>
+                <button type="button" onClick={() => setRightPanelOpen(false)} className="text-[9px] font-black hover:text-rose-500" aria-label="隐藏上下文面板">隐藏</button>
+              </div>
+
+              <section className="border border-[var(--editorial-stroke)] p-3">
+                <div className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">当前项目</div>
+                <h4 className="text-sm font-black">{workspaceScope?.project.name || '未选择项目'}</h4>
+                <p className="text-[10px] text-[var(--editorial-text-gray)] leading-5 mt-2">{workspaceScope?.project.brief || '先创建或选择项目，再开始生成内容包。'}</p>
+                <button type="button" onClick={() => setActiveTab('projects')} className="mt-3 w-full border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] flex items-center justify-center gap-1.5">
+                  管理项目 <ChevronRight className="h-3 w-3" />
+                </button>
+              </section>
+
+              <section className="border border-[var(--editorial-stroke)] p-3">
+                <div className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">任务队列</div>
+                {latestTask ? (
+                  <div className="space-y-2 text-[10px]">
+                    <div className="flex justify-between"><span>生成任务 #{latestTask.id}</span><span>{latestTask.status}</span></div>
+                    <p className="text-[var(--editorial-text-gray)] leading-5">
+                      {latestTask.status === 'queued' && '正在排队处理，本次任务预计需要约 8 秒。'}
+                      {latestTask.status === 'running' && '正在根据品牌记忆生成内容。'}
+                      {latestTask.status === 'succeeded' && '任务已完成，可保存到资产库或加入审阅。'}
+                      {latestTask.status === 'failed' && (latestTask.error_message || '生成失败，可重试、换模型或减少输入长度。')}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-[var(--editorial-text-gray)] leading-5">暂无生成任务。生成内容包后会在这里显示排队、生成和失败原因。</p>
+                )}
+              </section>
+
+              <section className="border border-[var(--editorial-stroke)] p-3">
+                <div className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">用量摘要</div>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">任务</span><b>{dashboardSnapshot?.metrics.task_count ?? 0}</b></div>
+                  <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">资产</span><b>{dashboardSnapshot?.metrics.asset_count ?? 0}</b></div>
+                  <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">成功</span><b>{dashboardSnapshot?.metrics.successful_tasks ?? 0}</b></div>
+                  <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">失败</span><b>{dashboardSnapshot?.metrics.failed_tasks ?? 0}</b></div>
+                </div>
+                <button type="button" onClick={() => setActiveTab('billing')} className="mt-3 w-full border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">查看计费详情</button>
+              </section>
+
+              <section className="border border-[var(--editorial-stroke)] p-3">
+                <div className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">当前内容包</div>
+                <p className="text-[10px] font-black leading-5">{contentPackage.title}</p>
+                <p className="text-[10px] text-[var(--editorial-text-gray)] leading-5 mt-1">{contentPackage.platform} / {contentPackage.version}</p>
+                <button type="button" onClick={() => setActiveTab('content')} className="mt-3 w-full border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">继续编辑</button>
+              </section>
+            </aside>
+          )}
         </div>
 
         {/* Paper style footer */}
@@ -1951,9 +2513,9 @@ export default function App() {
   );
 }
 
-// Sub-component: AIGC Agent workflow logger console
 function AgentTerminal({ logs }: { logs: string[] }) {
   const [open, setOpen] = useState(true);
+  const hasActivity = logs.length > 0;
   
   return (
     <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] overflow-hidden shadow-editorial transform rotate-[0.1deg]">
@@ -1962,36 +2524,167 @@ function AgentTerminal({ logs }: { logs: string[] }) {
         className="w-full bg-[var(--editorial-unselected)] px-5 py-3 border-b-1.5 border-[var(--editorial-stroke)] flex items-center justify-between text-[10px] font-black text-[var(--editorial-text)] font-mono tracking-wider cursor-pointer transition-all"
       >
         <span className="flex items-center gap-2">
-          <span>AI AGENT DRAFT PIPELINE STACK TRACE CONSOLE</span>
+          <span>创作进度</span>
         </span>
         <span className="text-[9px] bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] px-2 py-0.5 font-bold">
-          {open ? 'COLLAPSE' : 'EXPAND'}
+          {open ? '收起' : '展开'}
         </span>
       </button>
 
       {open && (
         <div className="bg-[var(--editorial-bg)]/60 p-4 font-mono text-[9px] leading-relaxed text-[var(--editorial-text)] max-h-[140px] overflow-y-auto pr-1 border-t border-[var(--editorial-stroke)]">
-          {logs.length === 0 ? (
-            <div className="text-[var(--editorial-text-gray)] font-bold">// Waiting for AIGC Agent workflow triggers to print pipeline stack trace...</div>
-          ) : (
-            <div className="space-y-1.5">
-              {logs.map((log, idx) => {
-                let colorClass = 'text-[var(--editorial-text)]';
-                if (log.includes('[WARN]')) colorClass = 'text-yellow-600 dark:text-yellow-400 font-bold';
-                if (log.includes('[ERROR]')) colorClass = 'text-red-500 font-black';
-                if (log.includes('[SUCCESS]')) colorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
-                if (log.includes('---')) colorClass = 'text-[var(--editorial-accent-blue)] font-black border-b border-dashed border-[var(--editorial-stroke)]/40 pb-1 mb-1 block';
-                
+          <div className="space-y-2">
+            <div className="flex items-center justify-between border border-[var(--editorial-stroke)]/30 px-3 py-2">
+              <span>{hasActivity ? '素材已整理完成' : '等待开始创作'}</span>
+              <span className={hasActivity ? 'text-emerald-600 font-black' : 'text-[var(--editorial-text-gray)]'}>{hasActivity ? '完成' : '待处理'}</span>
+            </div>
+            <div className="flex items-center justify-between border border-[var(--editorial-stroke)]/30 px-3 py-2">
+              <span>品牌设定同步</span>
+              <span className="text-emerald-600 font-black">{hasActivity ? '已同步' : '准备中'}</span>
+            </div>
+            <div className="text-[var(--editorial-text-gray)] leading-relaxed">
+              {hasActivity ? '已根据当前输入生成结果，可继续修改参数或发布到作品库。' : '点击生成后，这里会显示面向创作者的进度摘要。'}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyOperationalState({
+  icon: Icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: typeof Grid3X3;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-8 shadow-editorial-sm min-h-[360px] flex flex-col items-center justify-center text-center gap-4">
+      <Icon className="h-8 w-8 text-[var(--editorial-text-gray)]" aria-hidden="true" />
+      <div>
+        <h3 className="text-sm font-black uppercase">{title}</h3>
+        <p className="text-xs text-[var(--editorial-text-gray)] mt-2 max-w-md leading-6">{description}</p>
+      </div>
+      <button type="button" onClick={onAction} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase">
+        {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function OnboardingModal({
+  state,
+  step,
+  setState,
+  setStep,
+  onClose,
+  onComplete,
+}: {
+  state: OnboardingState;
+  step: number;
+  setState: React.Dispatch<React.SetStateAction<OnboardingState>>;
+  setStep: React.Dispatch<React.SetStateAction<number>>;
+  onClose: () => void;
+  onComplete: () => void;
+}) {
+  const steps = ['使用场景', '创建品牌', '选择渠道', '起始模板', '生成内容包'];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial p-6">
+        <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-4">
+          <div>
+            <h2 className="text-lg serif-header font-bold">首次使用引导</h2>
+            <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">5 步完成第一轮内容生成，后续可以再补品牌细节。</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-xs font-black hover:text-rose-500" aria-label="关闭首次使用引导">关闭</button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 my-5">
+          {steps.map((label, index) => (
+            <button key={label} type="button" onClick={() => setStep(index)} className={`border px-3 py-1.5 text-[10px] font-black ${step === index ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]' : 'border-[var(--editorial-stroke)]/40'}`}>
+              {index + 1}. {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-[300px]">
+          {step === 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {useCaseChoices.map((choice) => (
+                <button key={choice} type="button" onClick={() => setState((prev) => ({ ...prev, useCase: choice }))} className={`border p-4 text-left text-sm font-black ${state.useCase === choice ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50' : 'border-[var(--editorial-stroke)]/40'}`}>
+                  {choice}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                ['brandName', '品牌名称'],
+                ['industry', '行业'],
+                ['audience', '目标人群'],
+                ['tone', '语调'],
+                ['forbiddenWords', '禁用词'],
+                ['referenceLinks', '参考链接'],
+              ].map(([key, label]) => (
+                <label key={key} className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+                  {label}
+                  <input value={String(state[key as keyof OnboardingState] || '')} onChange={(event) => setState((prev) => ({ ...prev, [key]: event.target.value }))} className="border border-[var(--editorial-stroke)] bg-transparent px-3 py-2 text-xs font-normal focus:outline-none" />
+                </label>
+              ))}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {channelChoices.map((channel) => {
+                const active = state.channels.includes(channel);
                 return (
-                  <div key={idx} className={`${colorClass} font-semibold`}>
-                    {log}
-                  </div>
+                  <button key={channel} type="button" onClick={() => setState((prev) => ({ ...prev, channels: active ? prev.channels.filter((item) => item !== channel) : [...prev.channels, channel] }))} className={`border p-4 text-left text-sm font-black ${active ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50' : 'border-[var(--editorial-stroke)]/40'}`}>
+                    {channel}
+                  </button>
                 );
               })}
             </div>
           )}
+
+          {step === 3 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {templateChoices.map((template) => (
+                <button key={template} type="button" onClick={() => setState((prev) => ({ ...prev, template }))} className={`border p-4 text-left text-sm font-black ${state.template === template ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50' : 'border-[var(--editorial-stroke)]/40'}`}>
+                  {template}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === 4 && (
+            <label className="flex flex-col gap-2 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+              第一份内容包 brief
+              <textarea value={state.brief} onChange={(event) => setState((prev) => ({ ...prev, brief: event.target.value }))} rows={7} className="border border-[var(--editorial-stroke)] bg-transparent p-3 text-xs font-normal resize-none focus:outline-none" />
+            </label>
+          )}
         </div>
-      )}
+
+        <div className="flex items-center justify-between border-t border-[var(--editorial-stroke)] pt-4">
+          <button type="button" onClick={() => setStep((value) => Math.max(0, value - 1))} disabled={step === 0} className="border border-[var(--editorial-stroke)] px-4 py-2 text-[10px] font-black disabled:opacity-40">
+            上一步
+          </button>
+          <button type="button" onClick={() => isLast ? onComplete() : setStep((value) => Math.min(steps.length - 1, value + 1))} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase">
+            {isLast ? '生成第一份内容包' : '下一步'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

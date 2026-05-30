@@ -5,6 +5,7 @@ from api.models import (
     Asset,
     Campaign,
     CommunityCreation,
+    Folder,
     GenerationTask,
     Membership,
     Organization,
@@ -27,10 +28,17 @@ class MembershipAdmin(admin.ModelAdmin):
     list_filter = ('role', 'organization')
 
 
+@admin.register(Folder)
+class FolderAdmin(admin.ModelAdmin):
+    list_display = ('name', 'organization', 'parent', 'sort_order', 'permission_scope', 'is_archived', 'updated_at')
+    list_filter = ('organization', 'permission_scope', 'is_archived')
+    search_fields = ('name', 'slug')
+
+
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'organization', 'slug', 'is_archived', 'created_at')
-    list_filter = ('organization', 'is_archived')
+    list_display = ('name', 'organization', 'folder', 'slug', 'status_tag', 'is_archived', 'created_at')
+    list_filter = ('organization', 'folder', 'status_tag', 'is_archived')
     search_fields = ('name', 'slug', 'brief')
 
 
