@@ -45,7 +45,7 @@ test('workflow canvas supports core editing interactions', async ({ page }) => {
   await expect(page.locator('.react-flow__node').first()).toBeVisible();
   await page.getByRole('button', { name: '检索节点' }).click();
   await expect(page.locator('.react-flow__node')).toHaveCount(5);
-  await page.getByRole('button', { name: '复制' }).click();
+  await page.getByRole('button', { name: '复制', exact: true }).click();
   await page.getByRole('button', { name: '粘贴' }).click();
   await expect(page.locator('.react-flow__node')).toHaveCount(6);
   await page.getByRole('button', { name: '撤销' }).click();

@@ -4,7 +4,7 @@ New endpoint ownership lives in the domain apps:
 accounts, workspaces, generation, community, ai_gateway, and billing.
 """
 
-from accounts.views import LoginView
+from accounts.views import LoginView, MembershipCollectionView, MembershipDetailView
 from ai_gateway.views import AIConfigView
 from billing.views import BillingPlansView
 from community.views import CommunityCreationView, LikeCreationView, RAGSearchView
@@ -47,6 +47,8 @@ __all__ = [
     'ImageGenerateView',
     'LikeCreationView',
     'LoginView',
+    'MembershipCollectionView',
+    'MembershipDetailView',
     'MarketingCopyView',
     'ProjectCollectionView',
     'ProjectDetailView',

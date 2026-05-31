@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from api.models import CommunityCreation
 from api.scope import get_scope
+from api.serializers import CommunityCreationSerializer
 
 
 class CommunityCreationView(APIView):
@@ -22,26 +23,7 @@ class CommunityCreationView(APIView):
         if project_slug:
             query = query.filter(project__slug=project_slug)
 
-        serialized = []
-        for item in query:
-            serialized.append({
-                'id': item.id,
-                'username': item.username,
-                'creation_type': item.creation_type,
-                'creation_type_display': item.get_creation_type_display(),
-                'title': item.title,
-                'content': item.get_content_dict(),
-                'image_url': item.image_url,
-                'audio_url': item.audio_url,
-                'created_at': item.created_at.strftime('%Y-%m-%d %H:%M'),
-                'likes': item.likes,
-                'rag_indexed': item.rag_indexed,
-                'tags': item.tags,
-                'organization': item.organization.slug if item.organization else None,
-                'project': item.project.slug if item.project else None,
-                'campaign': item.campaign_id,
-            })
-        return Response(serialized)
+        return Response(CommunityCreationSerializer(query, many=True).data)
 
     def post(self, request):
         username, org, project, campaign = get_scope(request)
@@ -119,4 +101,3 @@ class RAGSearchView(APIView):
                 '当前使用本地关键词相似度作为检索策略。',
             ],
         })
-

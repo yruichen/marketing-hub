@@ -59,3 +59,19 @@ urlpatterns = [
 - 不要在视图里复制大段序列化字典。
 - 不要在一个接口文件里同时处理项目、生成、社区、计费等多个领域。
 
+## 安全与交付底座
+
+- 认证默认走 Django session，`/api/auth/login/` 不再返回 demo token。
+- RBAC 基于 `Membership.role`，角色矩阵集中在 `api.rbac`，DRF permission class 集中在 `api.permissions`。
+- 组织级请求作用域由 `api.scope.get_scope` 解析；涉及任务队列、AI 配置、成员管理时必须按组织过滤 queryset。
+- 生成、工作流重跑等写操作支持 `Idempotency-Key`，记录在 `IdempotencyKey`。
+- 登录、成员变更、密钥变更、删除、计费变更、生成任务、工作流运行写入 `AuditLog`。
+- `/api/schema/` 提供 OpenAPI schema，前端类型应从 schema 派生，而不是手写漂移的接口类型。
+
+## AI 网关边界
+
+- 业务 view 不直接调用模型。生成业务进入 service 层，再由 `ai_gateway.services.AIModelGateway` 统一调度。
+- Provider adapter 覆盖 `mock`、`openai`、`anthropic`、`gemini`、`local_proxy`。
+- Capability registry、prompt registry、model policy、cost calculator、retry/fallback policy、safety policy 都集中在 `ai_gateway.services`。
+- BYOK 配置通过 `AIConfiguration.organization` 隔离；组织专属配置优先，缺省才回退平台配置。
+- 主模型失败时网关回退 mock/provider fallback，并在日志里标注 fallback 信息，避免静默切换。

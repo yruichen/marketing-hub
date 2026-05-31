@@ -256,12 +256,21 @@ class AIConfiguration(models.Model):
         ('gemini', 'Google Gemini API'),
         ('openai', 'OpenAI API'),
         ('anthropic', 'Anthropic API'),
+        ('local_proxy', 'Local Model Proxy'),
     ]
     BILLING_MODE_CHOICES = [
         ('platform', 'Platform Credits'),
         ('byok', 'Bring Your Own Key'),
     ]
 
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='ai_configurations',
+        null=True,
+        blank=True,
+        help_text='Blank means platform-managed configuration. BYOK keys must be organization-scoped.',
+    )
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='mock')
     api_key = models.CharField(max_length=255, blank=True, default='')
     base_url = models.CharField(max_length=255, blank=True, default='')
@@ -271,7 +280,65 @@ class AIConfiguration(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return f"{self.get_provider_display()} ({self.model_name or 'Default Model'})"
+        scope = self.organization.slug if self.organization_id else 'platform'
+        return f"{scope}:{self.get_provider_display()} ({self.model_name or 'Default Model'})"
+
+
+class IdempotencyKey(models.Model):
+    STATUS_CHOICES = [
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
+    key = models.CharField(max_length=128)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='idempotency_keys')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='idempotency_keys')
+    request_hash = models.CharField(max_length=64)
+    request_path = models.CharField(max_length=255, blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='processing')
+    response_status = models.IntegerField(null=True, blank=True)
+    response_body = models.JSONField(default=dict, blank=True)
+    resource_type = models.CharField(max_length=80, blank=True, default='')
+    resource_id = models.CharField(max_length=80, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('organization', 'key')]
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.organization.slug}:{self.key}:{self.status}'
+
+
+class AuditLog(models.Model):
+    ACTION_CHOICES = [
+        ('login', 'Login'),
+        ('member_change', 'Member Change'),
+        ('key_change', 'Key Change'),
+        ('export', 'Export'),
+        ('delete', 'Delete'),
+        ('billing_change', 'Billing Change'),
+        ('generation_create', 'Generation Create'),
+        ('workflow_run', 'Workflow Run'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    action = models.CharField(max_length=40, choices=ACTION_CHOICES)
+    target_type = models.CharField(max_length=80, blank=True, default='')
+    target_id = models.CharField(max_length=80, blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True, default='')
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.action}:{self.target_type}:{self.target_id}'
 
 
 class CommunityCreation(models.Model):
