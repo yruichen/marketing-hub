@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
 from api.models import (
     Asset,
@@ -221,6 +222,16 @@ class FolderDetailView(APIView):
         folder = Folder.objects.filter(pk=pk).first()
         if not folder:
             return Response({'error': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)
+        user, _, _, _ = get_scope(request)
+        record_audit_log(
+            action='delete',
+            actor=user,
+            organization=folder.organization,
+            target_type='folder',
+            target_id=str(folder.id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
         folder.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -336,6 +347,16 @@ class ProjectDetailView(APIView):
         project = Project.objects.filter(pk=pk).first()
         if not project:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        user, _, _, _ = get_scope(request)
+        record_audit_log(
+            action='delete',
+            actor=user,
+            organization=project.organization,
+            target_type='project',
+            target_id=str(project.id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
         project.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -380,6 +401,16 @@ class CampaignDetailView(APIView):
         campaign = Campaign.objects.filter(pk=pk).first()
         if not campaign:
             return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+        user, _, _, _ = get_scope(request)
+        record_audit_log(
+            action='delete',
+            actor=user,
+            organization=campaign.project.organization,
+            target_type='campaign',
+            target_id=str(campaign.id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+        )
         campaign.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

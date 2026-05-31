@@ -2,11 +2,14 @@ from rest_framework import serializers
 
 from api.models import (
     AIConfiguration,
+    AuditLog,
     Asset,
     Campaign,
     CommunityCreation,
     Folder,
     GenerationTask,
+    IdempotencyKey,
+    Membership,
     Organization,
     Project,
     UsageEvent,
@@ -26,6 +29,16 @@ class OrganizationSerializer(serializers.ModelSerializer):
         from api.contracts import PLAN_LIMITS
 
         return PLAN_LIMITS.get(obj.subscription_plan, PLAN_LIMITS['free'])
+
+
+class MembershipSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    organization_slug = serializers.CharField(source='organization.slug', read_only=True)
+
+    class Meta:
+        model = Membership
+        fields = ('id', 'user_id', 'username', 'email', 'organization_id', 'organization_slug', 'role', 'created_at')
 
 
 class FolderSerializer(serializers.ModelSerializer):
@@ -186,14 +199,42 @@ class TaskSerializer(serializers.ModelSerializer):
 
 class AIConfigurationSerializer(serializers.ModelSerializer):
     provider_display = serializers.CharField(source='get_provider_display', read_only=True)
+    organization_slug = serializers.SerializerMethodField()
+    api_key_masked = serializers.SerializerMethodField()
 
     class Meta:
         model = AIConfiguration
-        fields = ('id', 'provider', 'provider_display', 'api_key', 'base_url', 'model_name', 'billing_mode', 'is_active')
+        fields = (
+            'id',
+            'organization_id',
+            'organization_slug',
+            'provider',
+            'provider_display',
+            'api_key_masked',
+            'base_url',
+            'model_name',
+            'billing_mode',
+            'is_active',
+            'updated_at',
+        )
+
+    def get_api_key_masked(self, obj: AIConfiguration):
+        if not obj.api_key:
+            return ''
+        if len(obj.api_key) <= 8:
+            return '****'
+        return f'{obj.api_key[:4]}...{obj.api_key[-4:]}'
+
+    def get_organization_slug(self, obj: AIConfiguration):
+        return obj.organization.slug if obj.organization_id else None
 
 
 class CommunityCreationSerializer(serializers.ModelSerializer):
     creation_type_display = serializers.CharField(source='get_creation_type_display', read_only=True)
+    content = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+    project = serializers.SerializerMethodField()
+    campaign = serializers.IntegerField(source='campaign_id', allow_null=True, read_only=True)
 
     class Meta:
         model = CommunityCreation
@@ -215,8 +256,58 @@ class CommunityCreationSerializer(serializers.ModelSerializer):
             'campaign',
         )
 
+    def get_content(self, obj: CommunityCreation):
+        return obj.get_content_dict()
+
+    def get_organization(self, obj: CommunityCreation):
+        return obj.organization.slug if obj.organization_id else None
+
+    def get_project(self, obj: CommunityCreation):
+        return obj.project.slug if obj.project_id else None
+
 
 class UsageEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = UsageEvent
         fields = ('provider', 'model_name', 'total_tokens', 'cost_usd', 'created_at')
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source='actor.username', read_only=True)
+    organization_slug = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AuditLog
+        fields = (
+            'id',
+            'action',
+            'actor_username',
+            'organization_slug',
+            'target_type',
+            'target_id',
+            'ip_address',
+            'user_agent',
+            'metadata',
+            'created_at',
+        )
+
+    def get_organization_slug(self, obj: AuditLog):
+        return obj.organization.slug if obj.organization_id else None
+
+
+class IdempotencyKeySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IdempotencyKey
+        fields = (
+            'id',
+            'key',
+            'request_hash',
+            'request_path',
+            'status',
+            'response_status',
+            'response_body',
+            'resource_type',
+            'resource_id',
+            'created_at',
+            'updated_at',
+        )

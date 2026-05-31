@@ -4,11 +4,11 @@ from typing import Any
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.utils.text import slugify
 from django.utils import timezone
 
-from api.agent import AIAgentWorkflow
 from api.contracts import NODE_IO_SCHEMAS, PLAN_LIMITS, normalize_schema
+from ai_gateway.services import AIModelGateway
+from api.audit import record_audit_log
 from api.serializers import (
     AssetSerializer,
     CampaignSerializer,
@@ -34,6 +34,13 @@ from api.models import (
     WorkflowTemplate,
     WorkspaceDraft,
 )
+
+
+def membership_role(user: User | None, organization: Organization | None) -> str | None:
+    if not user or not getattr(user, 'is_authenticated', False) or organization is None:
+        return None
+    membership = Membership.objects.filter(user=user, organization=organization).only('role').first()
+    return membership.role if membership else None
 
 
 def node_io_schema(node: dict[str, Any]) -> dict[str, dict[str, str]]:
@@ -171,31 +178,55 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
 
     try:
         payload = task.payload or {}
+        provider = 'mock'
+        model_name = ''
+        prompt_tokens = 0
+        completion_tokens = 0
+        cost_usd = Decimal('0')
         if task.task_type == 'copy':
-            result, logs = AIAgentWorkflow.generate_copywriting(
-                brand_name=payload.get('brand_name', 'Marketing-Hub'),
-                product_description=payload.get('product_description', 'AI 营销场景全能助手'),
-                tone=payload.get('tone', '爆款活泼'),
-                platform=payload.get('platform', 'Xiaohongshu'),
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='copy',
+                payload=payload,
+                prompt_key='marketing.copy.system',
             )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         elif task.task_type == 'image':
-            result, logs = AIAgentWorkflow.generate_image(
-                prompt=payload.get('prompt', 'A creative workspace'),
-                style=payload.get('style', 'neo-brutalism'),
-                aspect_ratio=payload.get('aspect_ratio', '1:1'),
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='image',
+                payload=payload,
+                prompt_key='marketing.image.system',
             )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         elif task.task_type == 'storyboard':
-            result, logs = AIAgentWorkflow.generate_storyboard(
-                video_topic=payload.get('video_topic', 'Coffee Shop Morning'),
-                duration=int(payload.get('duration', 30)),
-                target_audience=payload.get('target_audience', 'Young creators'),
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='storyboard',
+                payload=payload,
+                prompt_key='marketing.storyboard.system',
             )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         elif task.task_type == 'audio':
-            result, logs = AIAgentWorkflow.generate_audio(
-                text=payload.get('text', '欢迎使用 Marketing Hub'),
-                voice_id=payload.get('voice_id', 'female_warm'),
-                speed=float(payload.get('speed', 1.0)),
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='audio',
+                payload=payload,
+                prompt_key='marketing.audio.system',
             )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         elif task.task_type == 'rag_search':
             query = payload.get('query', '').strip()
             results = []
@@ -226,8 +257,21 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
         task.status = 'succeeded'
         task.completed_at = timezone.now()
         task.error_message = ''
-        task.save(update_fields=['result', 'status', 'completed_at', 'error_message', 'updated_at'])
-        persist_usage(task, result)
+        task.token_count = max(prompt_tokens + completion_tokens, estimate_tokens(task.payload, result))
+        task.cost_usd = cost_usd if cost_usd else estimate_cost(task.token_count)
+        task.save(update_fields=['result', 'status', 'completed_at', 'error_message', 'token_count', 'cost_usd', 'updated_at'])
+        UsageEvent.objects.create(
+            organization=task.organization,
+            project=task.project,
+            campaign=task.campaign,
+            generation_task=task,
+            provider=provider,
+            model_name=model_name,
+            prompt_tokens=prompt_tokens or max(40, task.token_count // 2),
+            completion_tokens=completion_tokens or max(40, task.token_count // 2),
+            total_tokens=task.token_count,
+            cost_usd=task.cost_usd,
+        )
         create_asset_from_task_result(task, result)
         return task
     except Exception as exc:
@@ -268,6 +312,14 @@ def create_generation_task(
 
     if run_now:
         run_generation_task(task)
+    record_audit_log(
+        action='generation_create',
+        actor=user,
+        organization=organization,
+        target_type='generation_task',
+        target_id=str(task.id),
+        metadata={'task_type': task_type, 'run_now': run_now},
+    )
 
     return task
 
@@ -638,6 +690,14 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
             'completed_at': timezone.now().isoformat(),
         }
         draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
+        record_audit_log(
+            action='workflow_run',
+            organization=draft.organization,
+            actor=User.objects.filter(username=username).first() if username else None,
+            target_type='workspace_draft',
+            target_id=str(draft.id),
+            metadata={'task_ids': [task.id for task in tasks], 'node_count': len(nodes)},
+        )
         return draft, tasks
     except Exception as exc:
         draft.nodes = nodes
@@ -677,4 +737,12 @@ def retry_workspace_node(draft: WorkspaceDraft, node_id: str, feedback: str, use
         'last_retry_at': timezone.now().isoformat(),
     }
     draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
+    record_audit_log(
+        action='workflow_run',
+        organization=draft.organization,
+        actor=User.objects.filter(username=username).first() if username else None,
+        target_type='workspace_draft',
+        target_id=str(draft.id),
+        metadata={'last_retry_node_id': node_id, 'task_id': task.id if task else None},
+    )
     return draft, task

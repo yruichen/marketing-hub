@@ -17,6 +17,7 @@ def create_demo_user_and_config(sender, **kwargs):
             api_key='',
             base_url='',
             model_name='gpt-mock-agent',
+            billing_mode='platform',
             is_active=True
         )
         print("--- Default Mock AI Configuration initialized. ---")

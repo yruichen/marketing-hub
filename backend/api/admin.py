@@ -2,11 +2,13 @@ from django.contrib import admin
 
 from api.models import (
     AIConfiguration,
+    AuditLog,
     Asset,
     Campaign,
     CommunityCreation,
     Folder,
     GenerationTask,
+    IdempotencyKey,
     Membership,
     Organization,
     Project,
@@ -71,8 +73,22 @@ class UsageEventAdmin(admin.ModelAdmin):
 
 @admin.register(AIConfiguration)
 class AIConfigurationAdmin(admin.ModelAdmin):
-    list_display = ('provider', 'model_name', 'base_url', 'is_active', 'updated_at')
-    list_filter = ('provider', 'is_active')
+    list_display = ('provider', 'organization', 'model_name', 'billing_mode', 'base_url', 'is_active', 'updated_at')
+    list_filter = ('provider', 'billing_mode', 'organization', 'is_active')
+
+
+@admin.register(IdempotencyKey)
+class IdempotencyKeyAdmin(admin.ModelAdmin):
+    list_display = ('key', 'organization', 'status', 'resource_type', 'resource_id', 'created_at')
+    list_filter = ('status', 'organization', 'resource_type')
+    search_fields = ('key', 'request_hash', 'resource_id')
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('action', 'organization', 'actor', 'target_type', 'target_id', 'created_at')
+    list_filter = ('action', 'organization', 'target_type')
+    search_fields = ('target_type', 'target_id', 'actor__username')
 
 
 @admin.register(CommunityCreation)
