@@ -26,6 +26,62 @@ class WorkspaceUpgradeTests(APITestCase):
         )
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
 
+    def test_copy_generation_returns_structured_payload(self):
+        response = self.client.post('/api/generate/copy/', {
+            'username': 'ROOT',
+            'brand_name': 'Launchbook',
+            'product_description': 'AI marketing workspace for creator teams',
+            'tone': 'concise',
+            'platform': 'Xiaohongshu',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        result = response.data['result']
+        self.assertIn('title', result)
+        self.assertIn('paragraphs', result)
+        self.assertGreaterEqual(len(result['paragraphs']), 1)
+        self.assertIn('tags', result)
+        self.assertIn('call_to_action', result)
+        self.assertEqual(result['platform'], 'Xiaohongshu')
+        self.assertEqual(result['tone'], 'concise')
+        self.assertEqual(response.data['task']['status'], 'succeeded')
+
+    def test_content_package_generation_returns_structured_payload(self):
+        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        response = self.client.post('/api/generate/content-package/', {
+            'username': 'ROOT',
+            'brief': 'Launch an AI marketing workspace for creator teams',
+            'brand_name': 'Launchbook',
+            'use_case': '新品上市',
+            'audience': 'content creators',
+            'tone': 'concise',
+            'channels': ['Xiaohongshu'],
+            'forbidden_words': '绝对',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        package = response.data['content_package']
+        self.assertIn('title', package)
+        self.assertIn('body', package)
+        self.assertIn('tags', package)
+        self.assertIn('storyboard', package)
+        self.assertGreaterEqual(len(package['storyboard']), 1)
+        self.assertIn('content_package:orchestration=copy+storyboard', response.data['logs'][0])
+
+    def test_image_generation_returns_structured_payload(self):
+        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        response = self.client.post('/api/generate/image/', {
+            'username': 'ROOT',
+            'prompt': 'A minimalist marketing desk setup',
+            'style': 'editorial sketch',
+            'aspect_ratio': '1:1',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        result = response.data['result']
+        self.assertIn('image_url', result)
+        self.assertTrue(result['image_url'])
+        self.assertIn('revised_prompt', result)
+        self.assertEqual(result['aspect_ratio'], '1:1')
+        self.assertEqual(response.data['task']['status'], 'succeeded')
+
     def test_project_crud_updates_brand_memory(self):
         response = self.client.post('/api/projects/', {
             'organization': self.organization.slug,

@@ -199,6 +199,7 @@ class TaskSerializer(serializers.ModelSerializer):
 
 class AIConfigurationSerializer(serializers.ModelSerializer):
     provider_display = serializers.CharField(source='get_provider_display', read_only=True)
+    config_scope_display = serializers.CharField(source='get_config_scope_display', read_only=True)
     organization_slug = serializers.SerializerMethodField()
     api_key_masked = serializers.SerializerMethodField()
 
@@ -213,6 +214,9 @@ class AIConfigurationSerializer(serializers.ModelSerializer):
             'api_key_masked',
             'base_url',
             'model_name',
+            'image_model_name',
+            'config_scope',
+            'config_scope_display',
             'billing_mode',
             'is_active',
             'updated_at',

@@ -253,6 +253,7 @@ class UsageEvent(models.Model):
 class AIConfiguration(models.Model):
     PROVIDER_CHOICES = [
         ('mock', 'Mock Sandbox Simulator'),
+        ('agnes', 'Agnes AI'),
         ('gemini', 'Google Gemini API'),
         ('openai', 'OpenAI API'),
         ('anthropic', 'Anthropic API'),
@@ -261,6 +262,12 @@ class AIConfiguration(models.Model):
     BILLING_MODE_CHOICES = [
         ('platform', 'Platform Credits'),
         ('byok', 'Bring Your Own Key'),
+    ]
+    CONFIG_SCOPE_CHOICES = [
+        ('all', 'All Capabilities'),
+        ('text', 'Text Generation'),
+        ('image', 'Image Generation'),
+        ('audio', 'Audio Generation'),
     ]
 
     organization = models.ForeignKey(
@@ -275,9 +282,14 @@ class AIConfiguration(models.Model):
     api_key = models.CharField(max_length=255, blank=True, default='')
     base_url = models.CharField(max_length=255, blank=True, default='')
     model_name = models.CharField(max_length=100, blank=True, default='')
+    image_model_name = models.CharField(max_length=100, blank=True, default='')
+    config_scope = models.CharField(max_length=16, choices=CONFIG_SCOPE_CHOICES, default='all')
     billing_mode = models.CharField(max_length=20, choices=BILLING_MODE_CHOICES, default='platform')
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('provider', 'organization', 'config_scope')
 
     def __str__(self) -> str:
         scope = self.organization.slug if self.organization_id else 'platform'

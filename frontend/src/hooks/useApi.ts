@@ -11,6 +11,49 @@ export interface ToastMessage {
   type: 'success' | 'info' | 'error';
 }
 
+let cachedCsrfToken: string | null = null;
+
+function captureCsrfToken(response: Response) {
+  const token = response.headers.get('X-CSRFToken');
+  if (token) {
+    cachedCsrfToken = token;
+  }
+}
+
+export async function ensureCsrfToken() {
+  if (cachedCsrfToken) {
+    return cachedCsrfToken;
+  }
+  const response = await fetch(`${API_BASE_URL}/ai/config/`, {
+    credentials: 'include',
+  });
+  captureCsrfToken(response);
+  return cachedCsrfToken;
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method || 'GET').toUpperCase();
+  const headers = new Headers(init.headers || {});
+  if (!headers.has('Content-Type') && init.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    if (!cachedCsrfToken) {
+      await ensureCsrfToken();
+    }
+    if (cachedCsrfToken) {
+      headers.set('X-CSRFToken', cachedCsrfToken);
+    }
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: 'include',
+  });
+  captureCsrfToken(response);
+  return response;
+}
+
 export function useToast() {
   const [feedbackMsg, setFeedbackMsg] = useState<ToastMessage | null>(null);
 
@@ -28,7 +71,6 @@ export function useCopyClipboard(triggerToast: (text: string, type: 'success' | 
       await navigator.clipboard.writeText(text);
       triggerToast('已复制到剪贴板', 'success');
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement('textarea');
       textarea.value = text;
       textarea.style.position = 'fixed';
@@ -45,7 +87,7 @@ export function useCopyClipboard(triggerToast: (text: string, type: 'success' | 
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+  const response = await apiFetch(path);
   if (!response.ok) {
     throw new Error(`GET ${path} failed with ${response.status}`);
   }
@@ -53,9 +95,8 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -65,9 +106,8 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(path, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -77,7 +117,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await apiFetch(path, {
     method: 'DELETE',
   });
   if (!response.ok) {

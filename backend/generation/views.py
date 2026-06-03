@@ -6,8 +6,10 @@ from rest_framework.views import APIView
 from api.idempotency import claim_idempotency_key, finish_idempotency_key
 from api.models import GenerationTask
 from api.scope import as_bool, get_scope
+from ai_gateway.content_package import generate_content_package
 from api.services import (
     create_generation_task,
+    membership_role,
     queue_generation_task,
     retry_workspace_node,
     run_generation_task,
@@ -40,6 +42,25 @@ def finalize_idempotency(record, response, resource_type='', resource_id=''):
         resource_id=str(resource_id) if resource_id else '',
     )
     return response
+
+
+class ContentPackageView(APIView):
+    throttle_classes = [GenerationRateThrottle]
+
+    def post(self, request):
+        user, org, project, campaign = get_scope(request)
+        replay, idempotency = idempotency_response(request, org)
+        if replay:
+            return replay
+
+        role = membership_role(user, org)
+        package, logs, _, _ = generate_content_package(
+            organization=org,
+            role=role,
+            payload=dict(request.data),
+        )
+        response = Response({'content_package': package, 'logs': logs}, status=status.HTTP_200_OK)
+        return finalize_idempotency(idempotency, response, 'content_package', package.get('title', ''))
 
 
 class MarketingCopyView(APIView):
