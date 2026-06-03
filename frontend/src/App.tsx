@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -6,29 +6,25 @@ import { z } from 'zod';
 import {
   Bell,
   BookOpen,
-  Boxes,
   BriefcaseBusiness,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
-  CreditCard,
-  FileText,
-  FolderKanban,
   Grid3X3,
-  LayoutDashboard,
-  Library,
   ListChecks,
   PanelRight,
   Search,
-  Settings,
   Sparkles,
   UserCircle,
-  Workflow,
 } from 'lucide-react';
-import { API_BASE_URL } from './hooks/useApi';
+import { apiFetch } from './hooks/useApi';
 import { pathForSection, sectionFromPath } from './app/routes';
+import { TAB_META } from './app/navigation';
+import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
-import { WorkflowBuilder } from './features/workflows';
+
+const WorkflowBuilder = lazy(() =>
+  import('./features/workflows').then((module) => ({ default: module.WorkflowBuilder })),
+);
 import { useUiStore, type AppSection } from './shared/stores/uiStore';
 import type { BrandContext, BillingPlanResponse, CampaignRecord, ProjectRecord } from './types/workspace';
 
@@ -82,12 +78,30 @@ interface AiConfig {
   id: number;
   provider: string;
   provider_display: string;
-  api_key: string;
+  api_key?: string;
+  api_key_masked?: string;
   base_url: string;
   model_name: string;
+  image_model_name?: string;
+  config_scope?: 'all' | 'text' | 'image' | 'audio';
+  config_scope_display?: string;
   billing_mode: string;
   is_active: boolean;
 }
+
+const providerDefaultScope = (provider: string): 'all' | 'text' | 'image' | 'audio' => {
+  if (provider === 'anthropic') return 'text';
+  return 'all';
+};
+
+const providerSupportsImageConfig = (provider: string) => ['mock', 'agnes', 'openai', 'gemini'].includes(provider);
+
+const configScopeLabels: Record<string, string> = {
+  all: '全部能力',
+  text: '仅文本（文案/分镜）',
+  image: '仅图片',
+  audio: '仅配音',
+};
 
 interface CommunityItem {
   id: number;
@@ -359,6 +373,8 @@ export default function App() {
     api_key: '',
     base_url: '',
     model_name: '',
+    image_model_name: '',
+    config_scope: 'all' as 'all' | 'text' | 'image' | 'audio',
     billing_mode: 'platform',
   });
   const [showKey, setShowKey] = useState(false);
@@ -447,6 +463,34 @@ export default function App() {
     };
   }, [copyInput.brandName, copyInput.description, copyInput.platform, onboarding, workspaceScope?.project.brief, workspaceScope?.project.name]);
 
+  const buildContentPackageRequest = useCallback(() => ({
+    brief: contentBrief,
+    brand_name: onboarding.brandName || copyInput.brandName || workspaceScope?.project.name || 'Marketing Hub',
+    use_case: onboarding.useCase,
+    industry: onboarding.industry,
+    audience: onboarding.audience,
+    tone: onboarding.tone || copyInput.tone,
+    forbidden_words: onboarding.forbiddenWords,
+    reference_links: onboarding.referenceLinks,
+    channels: onboarding.channels,
+    template: onboarding.template,
+    platform: onboarding.channels[0] || copyInput.platform,
+    duration: storyboardInput.duration,
+    username: username || 'ROOT',
+    organization: workspaceScope?.organization.slug,
+    project: workspaceScope?.project.slug,
+    campaign: workspaceScope?.campaign.id,
+  }), [
+    contentBrief,
+    copyInput.brandName,
+    copyInput.platform,
+    copyInput.tone,
+    onboarding,
+    storyboardInput.duration,
+    username,
+    workspaceScope,
+  ]);
+
   const completeOnboarding = useCallback(async () => {
     localStorage.setItem('mh_onboarding_complete', 'true');
     setShowOnboarding(false);
@@ -465,36 +509,54 @@ export default function App() {
     triggerToast('已生成第一份内容包草稿', 'success');
   }, [buildContentPackage, onboarding, setActiveTab, triggerToast]);
 
-  const generateContentPackage = useCallback(() => {
+  const generateContentPackage = useCallback(async () => {
     setLoading(true);
-    setAgentLogs(['正在排队处理，本次任务预计需要约 8 秒。', '正在根据品牌记忆生成内容。']);
-    window.setTimeout(() => {
-      const next = buildContentPackage(contentBrief);
-      setContentPackage(next);
-      setContentVersion('AI 初稿');
-      setLoading(false);
-      setAgentLogs(['已完成内容包生成。', '可继续改写、保存到资产库或加入审阅。']);
+    setAgentLogs(['正在调用 AI 生成内容包（文案 + 分镜）...', '正在根据 brief 和品牌记忆编排任务。']);
+    try {
+      const res = await apiFetch('/generate/content-package/', {
+        method: 'POST',
+        body: JSON.stringify(buildContentPackageRequest()),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || data.error || `生成失败 (${res.status})`);
+      }
+      const data: { content_package: ContentPackage; logs?: string[] } = await res.json();
+      setContentPackage(data.content_package);
+      setContentVersion(data.content_package.version || 'AI 初稿');
+      setAgentLogs(data.logs?.length ? data.logs : ['已完成内容包生成。', '可继续改写、保存到资产库或加入审阅。']);
       triggerToast('内容包已生成', 'success');
-    }, 500);
-  }, [buildContentPackage, contentBrief, triggerToast]);
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : '内容包生成失败', 'error');
+      setAgentLogs((prev) => [...prev, '内容包生成失败，请稍后重试。']);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildContentPackageRequest, triggerToast]);
 
-  const rewriteContentPackage = useCallback((mode: string) => {
-    const suffixMap: Record<string, string> = {
-      short: '整体压缩为更适合移动端快速阅读的表达。',
-      conflict: '开头加入更明确的问题冲突，但避免制造焦虑。',
-      professional: '表达更专业克制，减少口语和感叹。',
-      young: '语气更轻快，保留品牌可信度。',
-      calm: '减少夸张表达，改为事实和场景描述。',
-    };
-    setContentPackage((prev) => ({
-      ...prev,
-      body: `${prev.body}\n\n改写方向：${suffixMap[mode] || mode}`,
-      reviewAdvice: [...prev.reviewAdvice, '已记录本次改写偏好，后续生成会优先参考。'],
-      version: '用户修改稿',
-    }));
-    setContentVersion('用户修改稿');
-    triggerToast('已完成快捷改写', 'success');
-  }, [triggerToast]);
+  const rewriteContentPackage = useCallback(async (mode: string) => {
+    setLoading(true);
+    setAgentLogs([`正在按「${mode}」方向改写内容包...`]);
+    try {
+      const res = await apiFetch('/generate/content-package/', {
+        method: 'POST',
+        body: JSON.stringify({ ...buildContentPackageRequest(), rewrite_mode: mode }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || data.error || `改写失败 (${res.status})`);
+      }
+      const data: { content_package: ContentPackage; logs?: string[] } = await res.json();
+      setContentPackage(data.content_package);
+      setContentVersion(data.content_package.version || '用户修改稿');
+      setAgentLogs(data.logs?.length ? data.logs : ['已完成快捷改写。']);
+      triggerToast('已完成快捷改写', 'success');
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : '改写失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [buildContentPackageRequest, triggerToast]);
 
   const exportContentPackage = useCallback((format: string) => {
     const text = [
@@ -524,16 +586,16 @@ export default function App() {
     setLoading(true);
     setAuthError('');
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+      const response = await apiFetch('/auth/login/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       });
       const data = await response.json();
       if (response.ok) {
-        localStorage.setItem('mh_token', data.token);
+        const sessionMarker = data.auth_type === 'session' ? 'session' : (data.token || 'session');
+        localStorage.setItem('mh_token', sessionMarker);
         localStorage.setItem('mh_username', data.username);
-        setToken(data.token);
+        setToken(sessionMarker);
         setUsername(data.username);
         triggerToast(`欢迎回来, ${data.username}!`, 'success');
       } else {
@@ -556,7 +618,7 @@ export default function App() {
 
   const fetchConfigs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/ai/config/`);
+      const res = await apiFetch('/ai/config/');
       if (res.ok) {
         const data: AiConfig[] = await res.json();
         setAiConfigs(data);
@@ -564,9 +626,11 @@ export default function App() {
         if (active) {
           setActiveConfigForm({
             provider: active.provider,
-            api_key: active.api_key,
+            api_key: '',
             base_url: active.base_url,
             model_name: active.model_name,
+            image_model_name: active.image_model_name || '',
+            config_scope: active.config_scope || providerDefaultScope(active.provider),
             billing_mode: active.billing_mode || 'platform',
           });
         }
@@ -580,16 +644,20 @@ export default function App() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/ai/config/`, {
+      const res = await apiFetch('/ai/config/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(activeConfigForm),
+        body: JSON.stringify({
+          ...activeConfigForm,
+          ...(activeConfigForm.api_key.trim() ? { api_key: activeConfigForm.api_key.trim() } : {}),
+          username: username || 'ROOT',
+        }),
       });
       if (res.ok) {
         triggerToast('AI 接口配置保存并激活成功', 'success');
         fetchConfigs();
       } else {
-        triggerToast('配置保存失败', 'error');
+        const data = await res.json().catch(() => ({}));
+        triggerToast(data.detail || data.error || `配置保存失败 (${res.status})`, 'error');
       }
     } catch {
       triggerToast('配置保存失败，连接异常', 'error');
@@ -601,7 +669,7 @@ export default function App() {
   const fetchBillingPlans = useCallback(async () => {
     try {
       const params = new URLSearchParams({ username: username || 'ROOT' });
-      const res = await fetch(`${API_BASE_URL}/billing/plans/?${params.toString()}`);
+      const res = await apiFetch(`/billing/plans/?${params.toString()}`);
       if (res.ok) {
         const data: BillingPlanResponse = await res.json();
         setBillingPlans(data);
@@ -614,7 +682,7 @@ export default function App() {
   const handleSelectPlan = async (plan: 'free' | 'pro' | 'enterprise') => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/billing/plans/`, {
+      const res = await apiFetch('/billing/plans/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username || 'ROOT', plan }),
@@ -633,7 +701,7 @@ export default function App() {
 
   const fetchCommunity = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/community/creations/`);
+      const res = await apiFetch('/community/creations/');
       if (res.ok) {
         const data: CommunityItem[] = await res.json();
         setCommunityItems(data);
@@ -652,7 +720,7 @@ export default function App() {
       const storedCampaign = localStorage.getItem('mh_campaign_id');
       if (storedProject) params.set('project', storedProject);
       if (storedCampaign) params.set('campaign', storedCampaign);
-      const res = await fetch(`${API_BASE_URL}/workspace/bootstrap/?${params.toString()}`);
+      const res = await apiFetch(`/workspace/bootstrap/?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setWorkspaceScope(data.scope);
@@ -671,7 +739,7 @@ export default function App() {
       const storedCampaign = localStorage.getItem('mh_campaign_id');
       if (storedProject) params.set('project', storedProject);
       if (storedCampaign) params.set('campaign', storedCampaign);
-      const res = await fetch(`${API_BASE_URL}/dashboard/?${params.toString()}`);
+      const res = await apiFetch(`/dashboard/?${params.toString()}`);
       if (res.ok) {
         const data: DashboardSnapshot = await res.json();
         setDashboardSnapshot(data);
@@ -718,7 +786,7 @@ export default function App() {
       fetchWorkspaceBootstrap();
       fetchDashboard();
       fetchBillingPlans();
-      fetch(`${API_BASE_URL}/ai/config/`)
+      apiFetch('/ai/config/')
         .then((res) => {
           if (res.ok) setApiLive(true);
         })
@@ -730,7 +798,7 @@ export default function App() {
 
   const handleLike = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/community/creations/${id}/like/`, {
+      const res = await apiFetch(`/community/creations/${id}/like/`, {
         method: 'POST',
       });
       if (res.ok) {
@@ -751,7 +819,7 @@ export default function App() {
     audio_url = ''
   ) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/community/creations/`, {
+      const res = await apiFetch('/community/creations/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -787,7 +855,7 @@ export default function App() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/community/search/?q=${encodeURIComponent(searchQuery)}`);
+      const res = await apiFetch(`/community/search/?q=${encodeURIComponent(searchQuery)}`);
       if (res.ok) {
         const data = await res.json();
         setCommunityItems(data.results);
@@ -806,7 +874,7 @@ export default function App() {
 
   const pollGenerationTask = async (taskId: number): Promise<GenerationTaskRecord> => {
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/`);
+      const res = await apiFetch(`/tasks/${taskId}/`);
       if (!res.ok) {
         throw new Error('Task polling failed');
       }
@@ -817,7 +885,7 @@ export default function App() {
       }
       await wait(900);
     }
-    const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/`);
+    const res = await apiFetch(`/tasks/${taskId}/`);
     if (!res.ok) {
       throw new Error('Task polling failed');
     }
@@ -834,11 +902,10 @@ export default function App() {
     successMessage: string
   ) => {
     setLoading(true);
-    setAgentLogs([initialLog, '[0.01s] [INFO] Queued task submitted to backend task ledger.']);
+    setAgentLogs([initialLog, '正在连接 AI 并生成，请稍候…']);
     try {
-      const res = await fetch(`${API_BASE_URL}/tasks/`, {
+      const res = await apiFetch('/tasks/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           task_type: taskType,
           payload,
@@ -846,7 +913,7 @@ export default function App() {
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
           campaign: workspaceScope?.campaign.id,
-          run_now: false,
+          run_now: true,
         }),
       });
       if (!res.ok) {
@@ -864,9 +931,9 @@ export default function App() {
       if (task.status !== 'succeeded') {
         setAgentLogs((prev) => [
           ...prev,
-          `[QUEUE] Task #${task.id} is still ${task.status}. Start a Celery worker or run process_generation_tasks to complete it.`,
+          `任务 #${task.id} 状态：${task.status}。若长时间无结果，请检查后端是否在运行。`,
         ]);
-        triggerToast('任务已进入队列，等待 worker 执行', 'info');
+        triggerToast('生成未完成，请稍后重试', 'error');
         return;
       }
 
@@ -1046,89 +1113,17 @@ export default function App() {
         />
       )}
 
-      {/* 1. Stable app shell navigation */}
-      <aside className="w-full xl:w-auto flex flex-col justify-between shrink-0 p-4 xl:p-6 z-10 xl:my-6 xl:ml-6 xl:mr-2 border-b xl:border-b-0 xl:border-r-0 border-[var(--editorial-stroke)]/20">
-        <div className="flex flex-col gap-10">
-          
-          {/* Elegant serif logo */}
-          <div className="flex flex-col gap-1 select-none">
-            {/* APP LOGO PLACEHOLDER: 
-                Swap this block out for your standard logo file if desired.
-                Example:
-                <img src="/logo.png" className="h-6 w-auto" alt="Logo" />
-            */}
-            <h1 className="serif-header text-xl font-bold tracking-tight text-[var(--editorial-text)]">
-              Marketing-Hub
-            </h1>
-            <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono leading-none">
-              营销内容工作台
-            </p>
-          </div>
+      {/* 左侧导航 */}
+      <AppSidebar
+        activeTab={activeTab}
+        onNavigate={setActiveTab}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        username={username}
+        onLogout={handleLogout}
+      />
 
-          <nav className="flex flex-col gap-2 font-mono">
-            {[
-              { id: 'dashboard', label: '数据看板', icon: LayoutDashboard },
-              { id: 'projects', label: '项目', icon: FolderKanban },
-              { id: 'content', label: '内容生产', icon: FileText },
-              { id: 'builder', label: '工作流', icon: Workflow },
-              { id: 'assets', label: '资产库', icon: Boxes },
-              { id: 'review', label: '审阅', icon: ClipboardCheck },
-              { id: 'community', label: '模板/灵感', icon: Library },
-              { id: 'billing', label: '计费', icon: CreditCard },
-              { id: 'config', label: '设置', icon: Settings },
-            ].map((item) => {
-              const isActive = activeTab === item.id;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as Tab)}
-                  className={`w-full text-left px-2.5 py-2 text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border ${
-                    isActive
-                      ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial-sm text-[var(--editorial-text)]'
-                      : 'border-transparent text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] hover:bg-[var(--editorial-paper)]/70'
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Bottom Switcher & User deck */}
-        <div className="pt-6 border-t border-dashed border-[var(--editorial-stroke)]/40 space-y-4 font-mono">
-          
-          {/* Light/Dark Toggle */}
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="font-bold text-[var(--editorial-text-gray)]">黑板暗色模式</span>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              aria-label="切换深色模式"
-              className="h-5 w-10 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] relative transition-all active:scale-95 cursor-pointer"
-            >
-              <div className={`h-3 w-3 bg-[var(--editorial-stroke)] absolute top-0.5 transition-all ${
-                darkMode ? 'right-0.5' : 'left-0.5'
-              }`}></div>
-            </button>
-          </div>
-
-          <div className="text-xs font-bold flex flex-col gap-1">
-            <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
-            <span className="text-[8px] bg-[var(--editorial-unselected)] text-[var(--editorial-text-gray)] px-1 py-0.5 inline-block w-fit font-mono">管理员</span>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full text-left py-1.5 text-[10px] text-rose-500 font-bold transition-all hover:underline cursor-pointer"
-          >
-            <span>合上设计草稿本</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* 2. OVERLAPPING PAPER MAIN WORKSPACE (纸张叠落画板) */}
+      {/* 主工作区 */}
       <main className="min-w-0 flex flex-col p-4 md:p-8 overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250">
         
         {/* Workspace Title Bar */}
@@ -1136,23 +1131,16 @@ export default function App() {
           <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4">
             <div>
             <h2 className="text-lg md:text-xl font-bold text-[var(--editorial-text)] serif-header">
-              {activeTab === 'dashboard' && '项目制运营与成本看板'}
-              {activeTab === 'projects' && '我的项目与品牌记忆'}
-              {activeTab === 'content' && '内容包生产'}
-              {activeTab === 'builder' && '工作流画布与运行'}
-              {activeTab === 'assets' && '资产库'}
-              {activeTab === 'review' && '审阅与版本对比'}
-              {activeTab === 'billing' && '计费与用量'}
-              {activeTab === 'copy' && '智能营销文案排版'}
-              {activeTab === 'image' && '社媒手绘图片视觉'}
-              {activeTab === 'storyboard' && '场景分镜脚本大纲'}
-              {activeTab === 'audio' && '流式配音语音合成'}
-              {activeTab === 'community' && '模板库与品牌灵感'}
-              {activeTab === 'config' && '设置与自有模型密钥'}
+              {TAB_META[activeTab]?.title || '工作台'}
             </h2>
-            <p className="text-[9px] text-[var(--editorial-text-gray)] font-bold uppercase tracking-widest font-mono">
-              {activeTab === 'dashboard' ? '项目、任务队列、资产和用量概览' : activeTab === 'community' ? '优先使用模板，提高生产效率' : activeTab === 'projects' ? '项目、文件夹、标签与品牌记忆' : activeTab === 'builder' ? '节点编排、运行预览和版本历史' : activeTab === 'content' ? '一个 brief 生成完整内容包' : '当前项目上下文'}
+            <p className="text-[11px] text-[var(--editorial-text-gray)] mt-2 leading-relaxed max-w-2xl">
+              {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
             </p>
+            {TAB_META[activeTab]?.primaryAction && (
+              <p className="text-[10px] text-[var(--editorial-accent-blue)] font-bold mt-1">
+                主操作按钮文案：「{TAB_META[activeTab].primaryAction}」（一般在页面左侧或顶部）
+              </p>
+            )}
             </div>
           
             <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -1211,6 +1199,7 @@ export default function App() {
           )}
 
           {activeTab === 'builder' && (
+            <Suspense fallback={<div className="p-8 text-sm text-[var(--editorial-text-gray)]">工作流模块加载中…</div>}>
             <WorkflowBuilder
               organization={workspaceScope?.organization || null}
               project={workspaceScope?.project || null}
@@ -1218,6 +1207,7 @@ export default function App() {
               username={username || 'ROOT'}
               triggerToast={triggerToast}
             />
+            </Suspense>
           )}
 
           {activeTab === 'dashboard' && (
@@ -1248,6 +1238,28 @@ export default function App() {
                 >
                   刷新工作区状态
                 </button>
+
+                <div className="mt-6 pt-5 border-t border-dashed border-[var(--editorial-stroke)]/40">
+                  <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase mb-3">常用功能</h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { tab: 'content' as Tab, label: '一键内容包', desc: 'brief → 全套初稿' },
+                      { tab: 'copy' as Tab, label: '写文案', desc: '标题正文标签' },
+                      { tab: 'image' as Tab, label: '做配图', desc: 'AI 生成图片' },
+                      { tab: 'config' as Tab, label: 'AI 设置', desc: '配置 API Key' },
+                    ].map((item) => (
+                      <button
+                        key={item.tab}
+                        type="button"
+                        onClick={() => setActiveTab(item.tab)}
+                        className="text-left border border-[var(--editorial-stroke)] px-3 py-2 hover:bg-[var(--editorial-unselected)]"
+                      >
+                        <span className="block text-xs font-black">{item.label}</span>
+                        <span className="block text-[9px] text-[var(--editorial-text-gray)] mt-0.5">{item.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="xl:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1709,7 +1721,7 @@ export default function App() {
                   {/* Metadata polaroid tag */}
                   <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
                     <span>SEED: 309485-VIS</span>
-                    <span>RATIO: {imageOutput.aspectRatio}</span>
+                    <span>RATIO: {imageOutput.aspectRatio || imageOutput.aspect_ratio}</span>
                   </div>
                 </div>
 
@@ -2258,14 +2270,41 @@ export default function App() {
                   <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">选择服务商</label>
                   <select
                     value={activeConfigForm.provider}
-                    onChange={(e) => setActiveConfigForm({ ...activeConfigForm, provider: e.target.value })}
+                    onChange={(e) => {
+                      const provider = e.target.value;
+                      setActiveConfigForm({
+                        ...activeConfigForm,
+                        provider,
+                        config_scope: providerDefaultScope(provider),
+                      });
+                    }}
                     className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
                   >
                     <option value="mock">演示模式</option>
+                    <option value="agnes">Agnes AI</option>
                     <option value="gemini">Google Gemini</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                   </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">配置用途</label>
+                  <select
+                    value={activeConfigForm.config_scope}
+                    onChange={(e) => setActiveConfigForm({
+                      ...activeConfigForm,
+                      config_scope: e.target.value as 'all' | 'text' | 'image' | 'audio',
+                    })}
+                    className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
+                  >
+                    {Object.entries(configScopeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-[var(--editorial-text-gray)] leading-relaxed">
+                    不同用途可分别保存并同时激活。例如：OpenAI 仅文本 + Agnes 仅图片。
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -2295,11 +2334,10 @@ export default function App() {
                       <div className="relative">
                         <input
                           type={showKey ? "text" : "password"}
-                          required
                           value={activeConfigForm.api_key}
                           onChange={(e) => setActiveConfigForm({ ...activeConfigForm, api_key: e.target.value })}
                           className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                          placeholder={activeConfigForm.api_key ? "API 密钥已保存 (输入新密钥以覆盖)" : "请输入 API Key"}
+                          placeholder="请输入 API Key（留空则保留已保存的密钥）"
                         />
                         <button
                           type="button"
@@ -2321,23 +2359,60 @@ export default function App() {
                         value={activeConfigForm.base_url}
                         onChange={(e) => setActiveConfigForm({ ...activeConfigForm, base_url: e.target.value })}
                         className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                        placeholder="e.g. https://api.openai-proxy.org/v1"
+                        placeholder={
+                          activeConfigForm.provider === 'agnes'
+                            ? 'https://apihub.agnes-ai.com/v1'
+                            : 'e.g. https://api.openai-proxy.org/v1'
+                        }
                       />
                     </div>
 
+                    {activeConfigForm.config_scope !== 'image' && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                        <span>指定模型名称</span>
-                        <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">可选配置</span>
+                        <span>文本模型名称</span>
+                        <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">文案 / 分镜</span>
                       </label>
                       <input
                         type="text"
                         value={activeConfigForm.model_name}
                         onChange={(e) => setActiveConfigForm({ ...activeConfigForm, model_name: e.target.value })}
                         className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                        placeholder={activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : activeConfigForm.provider === 'anthropic' ? 'claude-3-5-sonnet' : 'gpt-4o-mini'}
+                        placeholder={
+                          activeConfigForm.provider === 'agnes'
+                            ? 'agnes-2.0-flash'
+                            : activeConfigForm.provider === 'gemini'
+                              ? 'gemini-1.5-flash'
+                              : activeConfigForm.provider === 'anthropic'
+                                ? 'claude-3-5-sonnet'
+                                : 'gpt-4o-mini'
+                        }
                       />
                     </div>
+                    )}
+
+                    {providerSupportsImageConfig(activeConfigForm.provider)
+                      && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'image') && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
+                        <span>图片模型名称</span>
+                        <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">图片任务专用</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={activeConfigForm.image_model_name}
+                        onChange={(e) => setActiveConfigForm({ ...activeConfigForm, image_model_name: e.target.value })}
+                        className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
+                        placeholder={
+                          activeConfigForm.provider === 'agnes'
+                            ? 'agnes-image-2.0-flash'
+                            : activeConfigForm.provider === 'openai'
+                              ? 'dall-e-3'
+                              : 'image-model'
+                        }
+                      />
+                    </div>
+                    )}
                   </>
                 )}
 
@@ -2403,12 +2478,20 @@ export default function App() {
                       }`}>
                         <div>
                           <span className="text-xs font-black block">{config.provider_display}</span>
-                          <div className="flex items-center gap-2.5 mt-1 text-[8px] font-bold uppercase font-mono">
-                            <span>Key: {config.api_key || 'Unset'}</span>
-                            {config.model_name && (
+                          <div className="flex items-center gap-2.5 mt-1 text-[8px] font-bold uppercase font-mono flex-wrap">
+                            <span>{config.config_scope_display || configScopeLabels[config.config_scope || 'all']}</span>
+                            <span>•</span>
+                            <span>Key: {config.api_key_masked || 'Unset'}</span>
+                            {config.model_name && config.config_scope !== 'image' && (
                               <>
                                 <span>•</span>
-                                <span>Model: {config.model_name}</span>
+                                <span>Text: {config.model_name}</span>
+                              </>
+                            )}
+                            {config.image_model_name && (
+                              <>
+                                <span>•</span>
+                                <span>Image: {config.image_model_name}</span>
                               </>
                             )}
                             <span>•</span>
@@ -2433,6 +2516,8 @@ export default function App() {
                     1. 使用自有密钥时，平台只保留必要的配置记录，生成消耗走您自己的模型账户。
                     <br />
                     2. 未配置密钥时，系统会使用演示模式，便于本地试用和流程演练。
+                    <br />
+                    3. 文本与图片可分别配置不同服务商，同一用途下保存时会替换该用途的旧配置。
                   </div>
                 </div>
               </div>

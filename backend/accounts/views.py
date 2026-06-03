@@ -1,5 +1,8 @@
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.models import User
+from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +16,7 @@ from api.services import ensure_demo_workspace
 
 
 class LoginView(APIView):
+    @method_decorator(ensure_csrf_cookie)
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
@@ -34,7 +38,7 @@ class LoginView(APIView):
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
                 metadata={'auth_type': 'session'},
             )
-            return Response({
+            response = Response({
                 'username': user.username,
                 'email': user.email,
                 'auth_type': 'session',
@@ -42,6 +46,8 @@ class LoginView(APIView):
                 'project': workspace['project'].slug,
                 'campaign': workspace['campaign'].id,
             }, status=status.HTTP_200_OK)
+            response['X-CSRFToken'] = get_token(request)
+            return response
         return Response({'error': '用户名或密码错误。'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
