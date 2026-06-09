@@ -1,1 +1,10 @@
 export { WorkflowBuilder } from '../../components/WorkflowBuilder';
+export { WorkflowNodeComponent } from './WorkflowNodeComponent';
+export { ContextMenu } from './ContextMenu';
+export { CustomAgentDialog } from './CustomAgentDialog';
+export { wfToRF, rfToWF } from './conversions';
+export * from './constants';
+export * from './utils';
+export * from './types';
+export type { FlowNodeData, FlowNode } from './WorkflowNodeComponent';
+export type { WorkflowCanvasHandle } from './WorkflowCanvas';

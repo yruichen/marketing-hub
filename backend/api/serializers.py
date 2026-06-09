@@ -107,6 +107,9 @@ class CampaignSerializer(serializers.ModelSerializer):
         fields = ('id', 'project_id', 'name', 'objective', 'status', 'created_at', 'updated_at')
 
 
+from api.contracts import validate_workflow_graph
+
+
 class WorkspaceDraftSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkspaceDraft
@@ -126,6 +129,25 @@ class WorkspaceDraftSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         )
+
+    def validate_nodes(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('nodes must be a list')
+        return value
+
+    def validate_edges(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('edges must be a list')
+        return value
+
+    def validate(self, attrs):
+        nodes = attrs.get('nodes')
+        edges = attrs.get('edges')
+        if nodes is not None and edges is not None:
+            errors = validate_workflow_graph(nodes, edges)
+            if errors:
+                raise serializers.ValidationError({'nodes': errors[:3], 'edges': errors[:3]})
+        return attrs
 
 
 class WorkflowTemplateSerializer(serializers.ModelSerializer):

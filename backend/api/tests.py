@@ -1,13 +1,14 @@
 from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, Campaign, Organization, Project, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, Campaign, Membership, Organization, Project, WorkflowTemplate, WorkspaceDraft
 
 
 class WorkspaceUpgradeTests(APITestCase):
     def setUp(self):
         self.user = User.objects.get(username='ROOT')
         self.organization = Organization.objects.create(name='Test Organization', slug='test-org')
+        Membership.objects.create(user=self.user, organization=self.organization, role='admin')
         self.project = Project.objects.create(
             organization=self.organization,
             name='Spring Launch',
@@ -25,6 +26,7 @@ class WorkspaceUpgradeTests(APITestCase):
             objective='Validate the launch message',
         )
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        self.client.login(username='ROOT', password='123')
 
     def test_copy_generation_returns_structured_payload(self):
         response = self.client.post('/api/generate/copy/', {

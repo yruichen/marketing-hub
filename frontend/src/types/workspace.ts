@@ -183,7 +183,7 @@ export interface BillingPlanResponse {
 
 export interface GenerationTaskRecord {
   id: number;
-  task_type: 'copy' | 'image' | 'storyboard' | 'audio' | 'rag_search';
+  task_type: 'copy' | 'image' | 'storyboard' | 'audio' | 'rag_search' | 'custom_agent';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   result: {
     data?: unknown;

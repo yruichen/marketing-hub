@@ -515,6 +515,8 @@ class WorkflowTemplateForkView(APIView):
         project = Project.objects.filter(pk=request.data.get('project_id')).first()
         if not project:
             return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        runtime_fields = {'status', 'output', 'task_id', 'error_message', 'feedback', 'input_schema', 'output_schema'}
+        clean_nodes = [{k: v for k, v in node.items() if k not in runtime_fields} for node in (template.nodes or [])]
         draft, _ = WorkspaceDraft.objects.update_or_create(
             project=project,
             campaign=Campaign.objects.filter(pk=request.data.get('campaign_id'), project=project).first() if request.data.get('campaign_id') else None,
@@ -522,7 +524,7 @@ class WorkflowTemplateForkView(APIView):
             defaults={
                 'organization': project.organization,
                 'brand_context': template.brand_context,
-                'nodes': template.nodes,
+                'nodes': clean_nodes,
                 'edges': template.edges,
                 'viewport': request.data.get('viewport', {'x': 0, 'y': 0, 'zoom': 1}),
                 'selected_node_id': '',
