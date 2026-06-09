@@ -1,10 +1,12 @@
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from api.idempotency import claim_idempotency_key, finish_idempotency_key
 from api.models import GenerationTask
+from api.permissions import organization_for_user
 from api.scope import as_bool, get_scope
 from ai_gateway.content_package import generate_content_package
 from api.services import (
@@ -287,12 +289,17 @@ class TaskDetailView(APIView):
 
 
 class WorkflowRunView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationRateThrottle]
+
     def post(self, request, pk: int):
         from api.models import WorkspaceDraft
 
         draft = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').filter(pk=pk).first()
         if not draft:
             return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not organization_for_user(request.user, draft.organization):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay
@@ -304,12 +311,17 @@ class WorkflowRunView(APIView):
 
 
 class WorkflowNodeRetryView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationRateThrottle]
+
     def post(self, request, pk: int, node_id: str):
         from api.models import WorkspaceDraft
 
         draft = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').filter(pk=pk).first()
         if not draft:
             return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not organization_for_user(request.user, draft.organization):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay

@@ -500,6 +500,24 @@ def upstream_outputs(node_id: str, nodes: list[dict[str, Any]], edges: list[dict
     return [by_id[source_id].get('output', {}) for source_id in source_ids if source_id in by_id]
 
 
+def extract_upstream_text(upstream: list[dict[str, Any]], max_chars: int = 2000) -> str:
+    """Extract meaningful text from upstream node outputs instead of dumping raw JSON."""
+    parts: list[str] = []
+    for output in upstream:
+        if not isinstance(output, dict):
+            continue
+        for key in ('summary', 'title', 'response', 'paragraphs', 'text', 'query'):
+            val = output.get(key)
+            if not val:
+                continue
+            if isinstance(val, list):
+                parts.append('\n'.join(str(item) for item in val))
+            else:
+                parts.append(str(val))
+    text = '\n'.join(parts)
+    return text[:max_chars] if text else ''
+
+
 def build_payload_for_node(
     node: dict[str, Any],
     *,
@@ -509,14 +527,14 @@ def build_payload_for_node(
 ) -> dict[str, Any]:
     config = node.get('config') if isinstance(node.get('config'), dict) else {}
     context_text = json.dumps(brand_context, ensure_ascii=False)
-    upstream_text = json.dumps(upstream, ensure_ascii=False)
+    upstream_text = extract_upstream_text(upstream)
     feedback_text = f'\n修改意见：{feedback}' if feedback else ''
     node_type = node.get('type')
 
     if node_type == 'copy':
         return {
             'brand_name': config.get('brand_name') or brand_context.get('brand_name') or 'Marketing-Hub',
-            'product_description': config.get('product_description') or brand_context.get('selling_points') or upstream_text or 'AI 营销场景全能助手',
+            'product_description': config.get('product_description') or upstream_text or brand_context.get('selling_points') or 'AI 营销场景全能助手',
             'tone': config.get('tone') or brand_context.get('tone') or '爆款活泼',
             'platform': config.get('platform') or 'Xiaohongshu',
             'workflow_context': context_text,
@@ -531,9 +549,13 @@ def build_payload_for_node(
             'workflow_context': context_text,
         }
     if node_type == 'storyboard':
+        try:
+            duration = int(str(config.get('duration', 30)).strip())
+        except (ValueError, TypeError):
+            duration = 30
         return {
-            'video_topic': config.get('video_topic') or brand_context.get('campaign_goal') or upstream_text or 'Product launch story',
-            'duration': int(config.get('duration') or 30),
+            'video_topic': config.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or 'Product launch story',
+            'duration': duration,
             'target_audience': config.get('target_audience') or brand_context.get('audience') or 'Young creators',
             'workflow_context': context_text,
             'feedback': feedback,
@@ -541,12 +563,16 @@ def build_payload_for_node(
     if node_type == 'audio':
         text = config.get('text') or ''
         if not text and upstream:
-            text = json.dumps(upstream[-1], ensure_ascii=False)[:600]
+            text = upstream_text[:2000] or '欢迎使用 Marketing Hub'
         return {
-            'text': f'{text or "欢迎使用 Marketing Hub"}{feedback_text}',
+            'text': f'{text}{feedback_text}',
             'voice_id': config.get('voice_id') or 'female_warm',
             'speed': float(config.get('speed') or 1.0),
             'workflow_context': context_text,
+        }
+    if node_type == 'rag_search':
+        return {
+            'query': config.get('query') or upstream_text or '',
         }
     if node_type == 'custom_agent':
         return {
@@ -650,7 +676,6 @@ def run_workflow_node(
     return node, task
 
 
-@transaction.atomic
 def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -> tuple[WorkspaceDraft, list[GenerationTask]]:
     nodes = [dict(node, status='queued') for node in draft.nodes]
     edges = draft.edges
@@ -665,26 +690,37 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
         order = workflow_execution_order(nodes, edges)
         schema_warnings = validate_workflow_contract(nodes, edges)
         by_id = {str(node.get('id')): node for node in nodes}
+        failed_node_ids: list[str] = []
+
         for ordered_node in order:
             node = by_id[str(ordered_node.get('id'))]
             node['status'] = 'running'
-            updated_node, task = run_workflow_node(
-                node=node,
-                nodes=nodes,
-                edges=edges,
-                brand_context=brand_context,
-                organization=draft.organization,
-                project=draft.project,
-                campaign=draft.campaign,
-                username=username,
-            )
-            by_id[str(updated_node.get('id'))] = updated_node
-            if task:
-                tasks.append(task)
+            try:
+                with transaction.atomic():
+                    updated_node, task = run_workflow_node(
+                        node=node,
+                        nodes=nodes,
+                        edges=edges,
+                        brand_context=brand_context,
+                        organization=draft.organization,
+                        project=draft.project,
+                        campaign=draft.campaign,
+                        username=username,
+                    )
+                    by_id[str(updated_node.get('id'))] = updated_node
+                    if task:
+                        tasks.append(task)
+            except Exception as node_exc:
+                node['status'] = 'failed'
+                node['error_message'] = str(node_exc)
+                failed_node_ids.append(str(node.get('id')))
+
         draft.nodes = nodes
-        draft.status = 'completed'
+        all_failed = len(failed_node_ids) == len(order)
+        draft.status = 'failed' if all_failed else 'completed'
         draft.last_run_summary = {
             'task_ids': [task.id for task in tasks],
+            'failed_node_ids': failed_node_ids,
             'node_count': len(nodes),
             'schema_warnings': schema_warnings,
             'completed_at': timezone.now().isoformat(),
@@ -707,38 +743,89 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
         raise
 
 
-@transaction.atomic
 def retry_workspace_node(draft: WorkspaceDraft, node_id: str, feedback: str, username: str | None = None) -> tuple[WorkspaceDraft, GenerationTask | None]:
     nodes = [dict(node) for node in draft.nodes]
+    edges = draft.edges
     target = next((node for node in nodes if str(node.get('id')) == str(node_id)), None)
     if not target:
         raise ValueError('Node not found in workflow draft.')
 
+    brand_context = draft.brand_context or draft.project.brand_context or {}
+    by_id = {str(node.get('id')): node for node in nodes}
+
+    # Retry the target node
     target['status'] = 'running'
     target['feedback'] = feedback
-    updated_node, task = run_workflow_node(
-        node=target,
-        nodes=nodes,
-        edges=draft.edges,
-        brand_context=draft.brand_context or draft.project.brand_context or {},
-        organization=draft.organization,
-        project=draft.project,
-        campaign=draft.campaign,
-        username=username,
-        feedback=feedback,
-    )
-    target.update(updated_node)
+    try:
+        with transaction.atomic():
+            updated_node, task = run_workflow_node(
+                node=target,
+                nodes=nodes,
+                edges=edges,
+                brand_context=brand_context,
+                organization=draft.organization,
+                project=draft.project,
+                campaign=draft.campaign,
+                username=username,
+                feedback=feedback,
+            )
+            target.update(updated_node)
+    except Exception as exc:
+        target['status'] = 'failed'
+        target['error_message'] = str(exc)
+        draft.nodes = nodes
+        draft.status = 'failed'
+        draft.last_run_summary = {
+            **(draft.last_run_summary or {}),
+            'last_retry_node_id': node_id,
+            'last_retry_at': timezone.now().isoformat(),
+            'last_retry_error': str(exc),
+        }
+        draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
+        raise
+
+    # Cascade: re-execute downstream nodes in topological order
+    order = workflow_execution_order(nodes, edges)
+    target_idx = next((i for i, n in enumerate(order) if str(n.get('id')) == str(node_id)), -1)
+    downstream_nodes = order[target_idx + 1:] if target_idx >= 0 else []
+    tasks: list[GenerationTask] = [task] if task else []
+    failed_downstream: list[str] = []
+
+    for ds_node in downstream_nodes:
+        node = by_id[str(ds_node.get('id'))]
+        node['status'] = 'running'
+        try:
+            with transaction.atomic():
+                updated, ds_task = run_workflow_node(
+                    node=node,
+                    nodes=nodes,
+                    edges=edges,
+                    brand_context=brand_context,
+                    organization=draft.organization,
+                    project=draft.project,
+                    campaign=draft.campaign,
+                    username=username,
+                )
+                node.update(updated)
+                if ds_task:
+                    tasks.append(ds_task)
+        except Exception:
+            node['status'] = 'failed'
+            failed_downstream.append(str(node.get('id')))
+
     draft.nodes = nodes
-    draft.status = 'draft'
+    draft.status = 'completed' if not failed_downstream else 'completed'
     draft.last_run_summary = {
         **(draft.last_run_summary or {}),
         'last_retry_node_id': node_id,
         'last_retry_task_id': task.id if task else None,
         'last_retry_at': timezone.now().isoformat(),
+        'cascade_task_ids': [t.id for t in tasks],
+        'cascade_failed_node_ids': failed_downstream,
     }
     draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
     record_audit_log(
-        action='workflow_run',
+        action='workflow_retry',
         organization=draft.organization,
         actor=User.objects.filter(username=username).first() if username else None,
         target_type='workspace_draft',

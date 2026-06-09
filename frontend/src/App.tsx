@@ -269,7 +269,7 @@ export default function App() {
   });
   
   const activeTab = sectionFromPath(location.pathname);
-  const showAppRightPanel = rightPanelOpen;
+  const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
   const [globalSearch, setGlobalSearch] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('mh_onboarding_complete') !== 'true');
@@ -2527,7 +2527,7 @@ export default function App() {
 
           </div>
           {showAppRightPanel && (
-            <aside className={`${activeTab === 'builder' ? 'fixed right-4 top-24 z-40 w-[320px] max-h-[calc(100vh-7rem)] overflow-y-auto' : 'sticky top-6'} bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial-sm p-4 space-y-4`}>
+            <aside className="sticky top-6 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial-sm p-4 space-y-4">
               <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
                 <h3 className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">上下文面板</h3>
                 <button type="button" onClick={() => setRightPanelOpen(false)} className="text-[9px] font-black hover:text-rose-500" aria-label="隐藏上下文面板">隐藏</button>
