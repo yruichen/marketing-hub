@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Sparkles } from 'lucide-react';
+import { PanelLeft, Sparkles } from 'lucide-react';
 import { apiPost } from '../../hooks/useApi';
 import type {
   OrganizationRecord,
@@ -16,6 +16,7 @@ interface BrainstormPageProps {
   username: string;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   onComplete: (draftId: number) => void;
+  onToggleSidebar: () => void;
 }
 
 const TAGLINES = [
@@ -42,7 +43,7 @@ const PROGRESS_STEPS = [
   'Ready to launch!',
 ];
 
-export function BrainstormPage({ triggerToast, onComplete }: BrainstormPageProps) {
+export function BrainstormPage({ triggerToast, onComplete, onToggleSidebar }: BrainstormPageProps) {
   const [tagline] = useState(() => TAGLINES[Math.floor(Math.random() * TAGLINES.length)]);
   const [idea, setIdea] = useState('');
   const [phase, setPhase] = useState<'idle' | 'brainstorming'>('idle');
@@ -103,7 +104,15 @@ export function BrainstormPage({ triggerToast, onComplete }: BrainstormPageProps
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-6 py-12">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)] px-6 py-12 relative">
+      <button
+        onClick={onToggleSidebar}
+        className="absolute top-6 left-6 p-2 border border-[var(--editorial-stroke)]/30 hover:border-[var(--editorial-stroke)] hover:bg-[var(--editorial-paper)] transition-all cursor-pointer"
+        title="Toggle sidebar"
+        aria-label="Toggle sidebar"
+      >
+        <PanelLeft size={16} className="text-[var(--editorial-text-gray)]" />
+      </button>
       <div className="w-full max-w-2xl">
         {phase === 'idle' ? (
           <div className="animate-in fade-in duration-500">

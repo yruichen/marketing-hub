@@ -529,6 +529,61 @@ def build_brainstorm_messages(idea: str, brand_context_hint: dict[str, Any]) -> 
     ]
 
 
+def _layout_brainstorm_nodes(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> None:
+    """Reposition nodes in-place using topological layers to avoid overlap."""
+    if len(nodes) <= 1:
+        if nodes:
+            nodes[0]['x'] = 80
+            nodes[0]['y'] = 120
+        return
+
+    node_ids = {n['id'] for n in nodes}
+    children: dict[str, list[str]] = {nid: [] for nid in node_ids}
+    indegree: dict[str, int] = {nid: 0 for nid in node_ids}
+    for edge in edges:
+        src, tgt = edge.get('source', ''), edge.get('target', '')
+        if src in node_ids and tgt in node_ids:
+            children[src].append(tgt)
+            indegree[tgt] += 1
+
+    # BFS topological layering
+    layers: list[list[str]] = []
+    queue = [nid for nid in node_ids if indegree[nid] == 0]
+    if not queue:
+        queue = [nodes[0]['id']]
+    visited: set[str] = set()
+    while queue:
+        layers.append(list(queue))
+        visited.update(queue)
+        next_queue = []
+        for nid in queue:
+            for child in children[nid]:
+                indegree[child] -= 1
+                if indegree[child] <= 0 and child not in visited:
+                    next_queue.append(child)
+                    visited.add(child)
+        queue = next_queue
+
+    # Any nodes not yet placed (cycles or disconnected) go into final layer
+    remaining = [n['id'] for n in nodes if n['id'] not in visited]
+    if remaining:
+        layers.append(remaining)
+
+    node_map = {n['id']: n for n in nodes}
+    x_gap = 320
+    y_gap = 220
+    x_start = 80
+    y_start = 80
+
+    for layer_idx, layer in enumerate(layers):
+        layer_width = len(layer) * x_gap - (x_gap - 260)
+        offset_x = max(x_start, x_start + (len(layers[0]) * x_gap - layer_width) // 2) if layer_idx > 0 else x_start
+        for node_idx, nid in enumerate(layer):
+            node = node_map[nid]
+            node['x'] = offset_x + node_idx * x_gap
+            node['y'] = y_start + layer_idx * y_gap
+
+
 def normalize_brainstorm_result(result: Any, idea: str) -> dict[str, Any]:
     if isinstance(result, str):
         try:
@@ -568,8 +623,7 @@ def normalize_brainstorm_result(result: Any, idea: str) -> dict[str, Any]:
             'id': node_id,
             'type': node_type,
             'label': str(node.get('label') or node_type.replace('_', ' ').title()).strip(),
-            'x': int(node.get('x') or 80 + len(normalized_nodes) * 300),
-            'y': int(node.get('y') or 120),
+            'x': 0, 'y': 0,
             'width': int(node.get('width') or 260),
             'height': int(node.get('height') or 166),
             'config': node.get('config') if isinstance(node.get('config'), dict) else {},
@@ -579,12 +633,12 @@ def normalize_brainstorm_result(result: Any, idea: str) -> dict[str, Any]:
         normalized_nodes = [
             {
                 'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
-                'x': 80, 'y': 120, 'width': 260, 'height': 166,
+                'x': 0, 'y': 0, 'width': 260, 'height': 166,
                 'config': {'summary': idea[:200]},
             },
             {
                 'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
-                'x': 380, 'y': 120, 'width': 260, 'height': 166,
+                'x': 0, 'y': 0, 'width': 260, 'height': 166,
                 'config': {'tone': brand_context.get('tone', 'Professional'), 'platform': 'Xiaohongshu'},
             },
         ]
@@ -612,6 +666,9 @@ def normalize_brainstorm_result(result: Any, idea: str) -> dict[str, Any]:
             src = normalized_nodes[i]['id']
             tgt = normalized_nodes[i + 1]['id']
             normalized_edges.append({'id': f'edge-{src}-{tgt}', 'source': src, 'target': tgt})
+
+    # Apply topological layer layout to avoid overlap
+    _layout_brainstorm_nodes(normalized_nodes, normalized_edges)
 
     return {
         'workflow_name': workflow_name,

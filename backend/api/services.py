@@ -883,6 +883,8 @@ def brainstorm_workflow(
         brainstorm_result = _fallback_brainstorm(idea)
         nodes = brainstorm_result['nodes']
         edges = brainstorm_result['edges']
+        from ai_gateway.prompts import _layout_brainstorm_nodes
+        _layout_brainstorm_nodes(nodes, edges)
 
     for node in nodes:
         node.setdefault('status', 'idle')
@@ -935,12 +937,12 @@ def _fallback_brainstorm(idea: str) -> dict[str, Any]:
         'nodes': [
             {
                 'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
-                'x': 80, 'y': 120, 'width': 260, 'height': 166,
+                'x': 0, 'y': 0, 'width': 260, 'height': 166,
                 'config': {'summary': idea[:200]},
             },
             {
                 'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
-                'x': 380, 'y': 120, 'width': 260, 'height': 166,
+                'x': 0, 'y': 0, 'width': 260, 'height': 166,
                 'config': {'tone': 'Professional', 'platform': 'Xiaohongshu'},
             },
         ],

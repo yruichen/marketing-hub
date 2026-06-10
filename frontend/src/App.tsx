@@ -262,6 +262,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return storedDarkMode;
   });
+  const [sidebarToggled, setSidebarToggled] = useState(true);
 
   const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
@@ -272,6 +273,7 @@ export default function App() {
   });
   
   const activeTab = sectionFromPath(location.pathname);
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
   const [globalSearch, setGlobalSearch] = useState('');
@@ -1093,7 +1095,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] relative overflow-hidden transition-colors duration-250 font-sans">
+    <div className={`min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
       
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -1117,19 +1119,22 @@ export default function App() {
       )}
 
       {/* 左侧导航 */}
-      <AppSidebar
-        activeTab={activeTab}
-        onNavigate={setActiveTab}
-        darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
-        username={username}
-        onLogout={handleLogout}
-      />
+      {sidebarOpen && (
+        <AppSidebar
+          activeTab={activeTab}
+          onNavigate={setActiveTab}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          username={username}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* 主工作区 */}
-      <main className="min-w-0 flex flex-col p-4 md:p-8 overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250">
-        
+      <main className={`min-w-0 flex flex-col overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'p-4 md:p-8'}`}>
+
         {/* Workspace Title Bar */}
+        {activeTab !== 'brainstorm' && (
         <header className="flex flex-col gap-4 mb-8 pb-4 border-b border-[var(--editorial-stroke)]">
           <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4">
             <div>
@@ -1188,6 +1193,7 @@ export default function App() {
             </div>
           </div>
         </header>
+        )}
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
         <div className={`grid grid-cols-1 ${showInlineRightPanel ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : ''} gap-6 z-0 items-start`}>
@@ -1222,8 +1228,10 @@ export default function App() {
                 username={username || 'ROOT'}
                 triggerToast={triggerToast}
                 onComplete={(draftId) => {
+                  setSidebarToggled(true);
                   navigate(`/workflows?draft=${draftId}`);
                 }}
+                onToggleSidebar={() => setSidebarToggled((prev) => !prev)}
               />
             </Suspense>
           )}
