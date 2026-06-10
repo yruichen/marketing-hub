@@ -116,7 +116,7 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
       <div className="flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
-            <Icon className="h-4 w-4 shrink-0 mt-1 text-[var(--editorial-text-gray)]" title={preset?.label} />
+            <Icon className="h-4 w-4 shrink-0 mt-1 text-[var(--editorial-text-gray)]" aria-label={preset?.label} />
             <h4
               className="text-[20px] leading-[1.15] font-black text-[var(--editorial-text)] line-clamp-2 tracking-tight"
               title={label}

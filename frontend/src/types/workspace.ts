@@ -104,6 +104,13 @@ export interface WorkflowNodeConfig {
   summary?: string;
   input_schema?: Record<string, string>;
   output_schema?: Record<string, string>;
+  // PR#8 added these field references but never extended the type.
+  // Image prompt 节点: 风格 skill 选择
+  style_skill?: string;
+  // 视频节点: 用户可配置的时长上限（与后端 duration 同义但允许用户覆盖）
+  duration_cap?: number;
+  // RAG 检索节点: 检索关键词（与 prompt 不同，是用户输入的搜索 query）
+  query?: string;
 }
 
 export interface WorkflowNode {
