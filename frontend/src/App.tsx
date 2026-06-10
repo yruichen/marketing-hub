@@ -1149,7 +1149,6 @@ export default function App() {
           {activeTab === 'builder' && (
             <Suspense fallback={<div className="p-8 text-sm text-[var(--editorial-text-gray)]">工作流模块加载中…</div>}>
             <WorkflowBuilder
-              organization={workspaceScope?.organization || null}
               project={workspaceScope?.project || null}
               campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
               username={username || 'ROOT'}

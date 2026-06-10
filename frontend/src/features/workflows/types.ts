@@ -1,4 +1,4 @@
-import type { BrandContext, CampaignRecord, OrganizationRecord, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
+import type { BrandContext, CampaignRecord, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
 import type { NodeType, LegacyNodeType } from './constants';
 import { ioSchema, defaultNodeConfig, nodeTypeLabels } from './constants';
 
@@ -9,7 +9,6 @@ export interface ProjectDetail extends ProjectRecord {
 }
 
 export interface WorkflowBuilderProps {
-  organization: OrganizationRecord | null;
   project: Pick<ProjectRecord, 'id' | 'name' | 'slug'> | null;
   campaign: Pick<CampaignRecord, 'id' | 'name'> | null;
   username: string;

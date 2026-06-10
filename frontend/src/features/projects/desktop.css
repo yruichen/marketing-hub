@@ -420,6 +420,7 @@
 /* 检查器（右侧） */
 .desktop-inspector {
   width: 320px;
+  max-height: 80vh;
   border-left: 1.5px solid var(--editorial-stroke);
   background: var(--editorial-paper);
   display: flex;
@@ -725,4 +726,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
 }

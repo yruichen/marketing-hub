@@ -130,6 +130,19 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     [triggerToast],
   );
 
+  // 监听工作流运行事件，刷新当前选中项目的详情（含 assets）。
+  useEffect(() => {
+    const onAssetsUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId: number }>).detail;
+      if (!detail?.projectId) return;
+      if (selectedProject?.id === detail.projectId) {
+        void loadProject(detail.projectId);
+      }
+    };
+    window.addEventListener('mh:assets-updated', onAssetsUpdated);
+    return () => window.removeEventListener('mh:assets-updated', onAssetsUpdated);
+  }, [selectedProject?.id, loadProject]);
+
   // ===== actions =====
   const createFolder = async (name: string) => {
     if (!organization || !name.trim()) return;
