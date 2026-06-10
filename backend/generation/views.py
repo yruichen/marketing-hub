@@ -238,6 +238,46 @@ class AudioVoiceoverView(APIView):
         return finalize_idempotency(idempotency, Response({'task': serialize_task(task), 'result': task.result.get('data', {}), 'logs': task.result.get('logs', [])}), 'generation_task', task.id)
 
 
+class VideoGenerateView(APIView):
+    throttle_classes = [GenerationRateThrottle]
+
+    def post(self, request):
+        user, org, project, campaign = get_scope(request)
+        replay, idempotency = idempotency_response(request, org)
+        if replay:
+            return replay
+        request_username = request.data.get('username') or (user.username if user else None)
+        payload = {
+            'video_topic': request.data.get('video_topic', 'Product launch video'),
+            'scenes': request.data.get('scenes') or [],
+            'audio_url': request.data.get('audio_url', ''),
+            'aspect_ratio': request.data.get('aspect_ratio', '9:16'),
+            'duration': int(request.data.get('duration', 30)),
+            'model': request.data.get('model', ''),
+        }
+        if as_bool(request.data.get('async', False), default=False):
+            task = create_generation_task(
+                task_type='video',
+                payload=payload,
+                username=request_username,
+                organization=org,
+                project=project,
+                campaign=campaign,
+                run_now=False,
+            )
+            queue_generation_task(task)
+            return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
+        task = create_generation_task(
+            task_type='video',
+            payload=payload,
+            username=request_username,
+            organization=org,
+            project=project,
+            campaign=campaign,
+        )
+        return finalize_idempotency(idempotency, Response({'task': serialize_task(task), 'result': task.result.get('data', {}), 'logs': task.result.get('logs', [])}), 'generation_task', task.id)
+
+
 class TaskQueueView(APIView):
     def get(self, request):
         _, org, _, _ = get_scope(request)

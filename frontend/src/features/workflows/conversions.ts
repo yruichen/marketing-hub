@@ -14,11 +14,13 @@ export function wfToRF(node: WorkflowNode): FlowNode {
       config: (node.config || {}) as Record<string, unknown>,
       output: (node.output || {}) as Record<string, unknown>,
       status: node.status || 'idle',
+      errorMessage: node.error_message || '',
+      taskId: node.task_id,
       inputSchema: node.input_schema || {},
       outputSchema: node.output_schema || {},
     },
     width: node.width || 260,
-    height: node.height || 166,
+    height: node.height || 200,
   };
 }
 
@@ -31,10 +33,12 @@ export function rfToWF(node: FlowNode): WorkflowNode {
     x: node.position.x,
     y: node.position.y,
     width: node.width || 260,
-    height: node.height || 166,
+    height: node.height || 200,
     status: node.data.status as WorkflowNode['status'],
     config: node.data.config as WorkflowNode['config'],
     output: node.data.output,
+    error_message: node.data.errorMessage || undefined,
+    task_id: node.data.taskId,
     input_schema: node.data.inputSchema,
     output_schema: node.data.outputSchema,
   };

@@ -143,6 +143,7 @@ class GenerationTask(models.Model):
         ('image', 'Social Media Image'),
         ('storyboard', 'Storyboard Script'),
         ('audio', 'AI Voiceover'),
+        ('video', 'Marketing Video'),
         ('rag_search', 'Semantic Retrieval'),
         ('custom_agent', 'Custom Agent'),
         ('brainstorm', 'Workflow Brainstorm'),

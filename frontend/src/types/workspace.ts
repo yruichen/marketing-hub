@@ -108,7 +108,7 @@ export interface WorkflowNodeConfig {
 
 export interface WorkflowNode {
   id: string;
-  type: 'context' | 'copy' | 'image' | 'image_prompt' | 'image_generation' | 'storyboard' | 'audio' | 'retrieval' | 'review' | 'custom_agent' | 'rag_search' | string;
+  type: 'context' | 'copy' | 'image' | 'image_prompt' | 'image_generation' | 'storyboard' | 'video_generation' | 'audio' | 'retrieval' | 'review' | 'custom_agent' | 'rag_search' | string;
   label: string;
   x: number;
   y: number;
@@ -183,7 +183,7 @@ export interface BillingPlanResponse {
 
 export interface GenerationTaskRecord {
   id: number;
-  task_type: 'copy' | 'image' | 'storyboard' | 'audio' | 'rag_search' | 'custom_agent';
+  task_type: 'copy' | 'image' | 'storyboard' | 'video' | 'audio' | 'rag_search' | 'custom_agent';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   result: {
     data?: unknown;

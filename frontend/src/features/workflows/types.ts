@@ -31,6 +31,7 @@ export type WorkflowSnapshot = {
 export function normalizeNodeType(type: string): LegacyNodeType {
   if (type === 'rag_search') return 'retrieval';
   if (type === 'image') return 'image_generation';
+  if (type === 'video') return 'video_generation';
   return (type as LegacyNodeType) in ioSchema ? (type as LegacyNodeType) : 'custom_agent';
 }
 

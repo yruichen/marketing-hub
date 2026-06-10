@@ -16,6 +16,7 @@ import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, statu
 import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps } from '../features/workflows/types';
 import { nodeStatusDotClass, schemasCompatible } from '../features/workflows/utils';
 import { WorkflowNodeComponent } from '../features/workflows/WorkflowNodeComponent';
+import { NodeConfigPopover } from '../features/workflows/NodeConfigPopover';
 import { PropertyPanel } from '../features/workflows/PropertyPanel';
 import { BottomPanels } from '../features/workflows/BottomPanels';
 import { ContextMenu } from '../features/workflows/ContextMenu';
@@ -326,7 +327,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     const cy = -vp.y / vp.zoom + 300 / vp.zoom;
     const ox = ((idCounterRef.current * 37) % 80) - 40;
     const oy = ((idCounterRef.current * 53) % 80) - 40;
-    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 260, height: preset?.height || 166, status: 'idle', config: { ...defaultNodeConfig(type, brandContext), ...(extraConfig || {}) }, output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
+    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 260, height: preset?.height || 200, status: 'idle', config: { ...defaultNodeConfig(type, brandContext), ...(extraConfig || {}) }, output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
     setRfNodes((prev) => [...prev, wfToRF(wfNode)]);
     setSelectedNodeId(id); setSelectedNodeIds([id]);
   }, [readOnly, brandContext, markHistory, getViewport, setRfNodes]);
@@ -344,16 +345,30 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
         config: patch.config ? { ...old.config, ...patch.config } : old.config,
         output: patch.output ? { ...old.output, ...(patch.output as Record<string, unknown>) } : old.output,
         status: patch.status ?? old.status,
+        errorMessage: patch.error_message ?? old.errorMessage,
+        taskId: patch.task_id ?? old.taskId,
         inputSchema: patch.input_schema ?? old.inputSchema,
         outputSchema: patch.output_schema ?? old.outputSchema,
       }};
     }));
   }, [readOnly, debouncedMarkHistory, setRfNodes]);
 
+  const selectNode = useCallback((id: string) => {
+    setSelectedNodeId(id);
+    setSelectedNodeIds([id]);
+    setRfNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === id })));
+  }, [setRfNodes]);
+
   const updateSelectedConfig = useCallback((key: string, value: string | number) => {
     if (!selectedNode || readOnly) return;
     updateNode(selectedNode.id, { config: { ...selectedNode.config, [key]: value } });
   }, [selectedNode, readOnly, updateNode]);
+
+  const clearNodeSelection = useCallback(() => {
+    setSelectedNodeId('');
+    setSelectedNodeIds([]);
+    setRfNodes((prev) => prev.map((n) => ({ ...n, selected: false })));
+  }, [setRfNodes]);
 
   const removeSelectedNode = useCallback(() => {
     if (!selectedNode || readOnly) return;
@@ -399,7 +414,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   const handleSelectionChange = useCallback(({ nodes: sel }: { nodes: RFNode[] }) => {
     const ids = sel.map((n) => n.id);
     setSelectedNodeIds(ids);
-    if (ids[0]) setSelectedNodeId(ids[0]);
+    setSelectedNodeId(ids[0] || '');
   }, []);
 
   const copySelection = useCallback(() => {
@@ -474,11 +489,15 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
       if (e.key === 'Delete' && selectedNodeId && !readOnly) { e.preventDefault(); removeSelectedNode(); }
-      if (e.key === 'Escape' && connectionSource) { e.preventDefault(); setConnectionSource(''); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (connectionSource) setConnectionSource('');
+        else if (selectedNodeId) clearNodeSelection();
+      }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [connectionSource, copySelection, pasteSelection, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
+  }, [clearNodeSelection, connectionSource, copySelection, pasteSelection, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
 
   // Inject callbacks into RF node data
   const setConnectionSourceRef = useRef(setConnectionSource);
@@ -492,6 +511,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     ...n,
     data: {
       ...n.data,
+      readOnly,
       isConnectionSource: connectionSource === n.id,
       onStartConnect: (id: string) => setConnectionSourceRef.current(id),
       onOpenContextMenu: (id: string, x: number, y: number) => {
@@ -499,7 +519,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
         setContextMenuRef.current({ nodeId: id, x, y });
       },
     },
-  })), [rfNodes, connectionSource]);
+  })), [rfNodes, connectionSource, readOnly]);
 
   if (!project) return <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-8 shadow-editorial text-xs font-mono text-[var(--editorial-text-gray)]">请先在项目库选择当前项目。</div>;
 
@@ -577,8 +597,8 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
               onConnect={handleConnect}
               isValidConnection={isValidConnection}
               onSelectionChange={handleSelectionChange}
-              onNodeClick={(_, node) => { setContextMenu(null); if (connectionSource && connectionSource !== node.id) connectToNode(node.id); else setSelectedNodeId(node.id); }}
-              onPaneClick={() => { setContextMenu(null); setEdgeContextMenu(null); }}
+              onNodeClick={(_, node) => { setContextMenu(null); if (connectionSource && connectionSource !== node.id) connectToNode(node.id); else selectNode(node.id); }}
+              onPaneClick={() => { setContextMenu(null); setEdgeContextMenu(null); clearNodeSelection(); }}
               onEdgeContextMenu={(_, edge) => {
                 _.preventDefault();
                 setEdgeContextMenu({ edgeId: edge.id, x: _.clientX, y: _.clientY });
@@ -605,19 +625,30 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
               <Background color="var(--editorial-dot-color)" gap={16} size={1.2} variant={BackgroundVariant.Dots} />
               <MiniMap pannable zoomable nodeStrokeColor="var(--editorial-stroke)" nodeColor="var(--editorial-paper)" />
               <Controls showInteractive={false} />
+              <NodeConfigPopover
+                node={selectedNode}
+                readOnly={readOnly}
+                feedback={feedback}
+                loadingState={loadingState}
+                onUpdateNode={updateNode}
+                onUpdateConfig={updateSelectedConfig}
+                onSetFeedback={setFeedback}
+                onRetryNode={retryNode}
+                onRemoveNode={removeSelectedNode}
+                onClose={clearNodeSelection}
+              />
             </ReactFlow>
           </div>
           {propertyPanelOpen && (
             <PropertyPanel
-              nodes={nodes} edges={edges} selectedNode={selectedNode} brandContext={brandContext}
-              feedback={feedback} loadingState={loadingState} connectionSource={connectionSource}
-              readOnly={readOnly} runPreview={runPreview}
-              onUpdateNode={updateNode} onUpdateConfig={updateSelectedConfig}
-              onSetBrandContext={setBrandContext} onSetFeedback={setFeedback}
-              onRemoveNode={removeSelectedNode} onRetryNode={retryNode}
-              onDeleteEdge={(id) => { markHistory('删除连线'); setRfEdges((prev) => prev.filter((e) => e.id !== id)); }}
-              onCancelConnection={() => setConnectionSource('')}
-              markHistory={markHistory}
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              loadingState={loadingState}
+              draftStatus={draft?.status}
+              runPreview={runPreview}
+              lastTasks={lastTasks}
+              onSelectNode={selectNode}
             />
           )}
         </div>
@@ -645,7 +676,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
             setRfNodes((prev) => [...prev, wfToRF(nn)]);
             setSelectedNodeId(newId);
           }}
-          onConfigure={(id) => { setSelectedNodeId(id); setPropertyPanelOpen(true); }}
+          onConfigure={(id) => { selectNode(id); setPropertyPanelOpen(true); }}
           onDelete={(id) => {
             if (readOnly) return;
             markHistory('删除节点');

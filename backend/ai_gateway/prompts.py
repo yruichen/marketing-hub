@@ -361,6 +361,40 @@ def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, An
     }
 
 
+MOCK_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+MOCK_VIDEO_THUMBNAIL = 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=640&q=80'
+
+
+def normalize_video_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        result = {}
+
+    scenes = payload.get('scenes') or result.get('scenes') or []
+    if not isinstance(scenes, list):
+        scenes = []
+
+    try:
+        duration = int(payload.get('duration') or result.get('duration_seconds') or 30)
+    except (TypeError, ValueError):
+        duration = 30
+
+    video_topic = str(payload.get('video_topic') or result.get('video_topic') or 'Marketing video').strip()
+    aspect_ratio = str(payload.get('aspect_ratio') or result.get('aspect_ratio') or '9:16').strip()
+    video_url = str(result.get('video_url') or result.get('url') or MOCK_VIDEO_URL).strip()
+    thumbnail_url = str(result.get('thumbnail_url') or result.get('poster_url') or MOCK_VIDEO_THUMBNAIL).strip()
+
+    return {
+        'video_topic': video_topic,
+        'aspect_ratio': aspect_ratio,
+        'video_url': video_url,
+        'thumbnail_url': thumbnail_url,
+        'duration_seconds': int(result.get('duration_seconds') or duration),
+        'scenes_count': len(scenes),
+        'has_audio': bool(str(payload.get('audio_url') or '').strip()),
+        'model': str(payload.get('model') or result.get('model') or 'video-default'),
+    }
+
+
 CUSTOM_AGENT_SYSTEM_PROMPT = (
     'You are a customizable marketing AI agent. '
     'Execute the user-defined task using the provided context and upstream data. '
@@ -435,6 +469,7 @@ BRAINSTORM_SYSTEM_PROMPT = (
     '- "image_prompt" for crafting image prompts from text\n'
     '- "image_generation" for actual image creation\n'
     '- "storyboard" for video storyboard/scene planning\n'
+    '- "video_generation" for turning storyboard/audio into a marketing video\n'
     '- "audio" for voiceover/audio generation\n'
     '- "retrieval" for research and reference gathering\n'
     '- "review" for content review and compliance checking\n'
@@ -489,6 +524,7 @@ _BRAINSTORM_NODE_CONFIG_HINTS = {
     'image_prompt': 'config.tone (string), config.platform (string)',
     'image_generation': 'config.style (string), config.aspect_ratio (string)',
     'storyboard': 'config.video_topic (string), config.duration (number, seconds), config.target_audience (string)',
+    'video_generation': 'config.aspect_ratio (string, e.g. "9:16"), config.duration_cap (number, seconds), config.model (string)',
     'audio': 'config.text (string), config.voice_id (string), config.speed (number)',
     'retrieval': 'config.query (string)',
     'review': 'config.forbidden_words (string), config.channel_rules (string)',
