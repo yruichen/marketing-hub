@@ -80,17 +80,29 @@ export function BottomPanels({
       {/* Run Records */}
       <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase border-b border-[var(--editorial-stroke)] pb-3 mb-4">运行记录</h3>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
           {lastTasks.length === 0 ? (
-            <p className="text-[10px] text-[var(--editorial-text-gray)]">暂无执行记录</p>
+            <p className="text-[10px] text-[var(--editorial-text-gray)]">暂无执行记录。运行工作流后结果将显示在此处。</p>
           ) : (
-            lastTasks.map((task) => (
-              <div key={task.id} className="border-b border-dashed border-[var(--editorial-stroke)]/40 pb-2 text-[10px]">
-                <span className="font-black">#{task.id}</span>
-                <span className="mx-2">{task.task_type}</span>
-                <span className="text-[var(--editorial-text-gray)]">{task.status}</span>
-              </div>
-            ))
+            lastTasks.map((task) => {
+              const statusColor = task.status === 'succeeded' ? 'bg-emerald-500' : task.status === 'failed' ? 'bg-rose-500' : task.status === 'running' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500';
+              const resultPreview = task.result?.data ? JSON.stringify(task.result.data).slice(0, 80) : '';
+              return (
+                <div key={task.id} className="border border-[var(--editorial-stroke)]/50 p-3 text-[10px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full ${statusColor}`} />
+                      <span className="font-black">#{task.id}</span>
+                      <span className="text-[var(--editorial-text-gray)]">{task.task_type}</span>
+                    </div>
+                    <span className="text-[8px] text-[var(--editorial-text-gray)]">{task.status}</span>
+                  </div>
+                  {resultPreview && (
+                    <pre className="mt-2 text-[9px] text-[var(--editorial-text-gray)] font-mono truncate">{resultPreview}…</pre>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>

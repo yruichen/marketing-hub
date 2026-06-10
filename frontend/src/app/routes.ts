@@ -1,7 +1,8 @@
 import type { AppSection } from '../shared/stores/uiStore';
 
 const sectionToPath: Record<AppSection, string> = {
-  dashboard: '/',
+  brainstorm: '/',
+  dashboard: '/dashboard',
   projects: '/projects',
   content: '/generation',
   builder: '/workflows',
@@ -21,6 +22,7 @@ export function pathForSection(section: AppSection) {
 }
 
 export function sectionFromPath(pathname: string): AppSection {
+  if (pathname === '/dashboard') return 'dashboard';
   if (pathname.startsWith('/projects')) return 'projects';
   if (pathname.startsWith('/workflows')) return 'builder';
   if (pathname.startsWith('/assets')) return 'assets';
@@ -33,5 +35,5 @@ export function sectionFromPath(pathname: string): AppSection {
   if (pathname.startsWith('/generation/storyboard')) return 'storyboard';
   if (pathname.startsWith('/generation/audio')) return 'audio';
   if (pathname.startsWith('/generation')) return 'content';
-  return 'dashboard';
+  return 'brainstorm';
 }

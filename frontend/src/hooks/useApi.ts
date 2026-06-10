@@ -86,41 +86,66 @@ export function useCopyClipboard(triggerToast: (text: string, type: 'success' | 
   return handleCopyClipboard;
 }
 
+const REQUEST_TIMEOUT_MS = 120_000;
+
+async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fn(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await apiFetch(path);
   if (!response.ok) {
-    throw new Error(`GET ${path} failed with ${response.status}`);
+    const body = await response.text().catch(() => '');
+    throw new Error(`GET ${path} failed (${response.status}): ${body.slice(0, 200) || 'no details'}`);
   }
   return response.json() as Promise<T>;
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await apiFetch(path, {
-    method: 'POST',
-    body: JSON.stringify(body),
+  return withTimeout(async (signal) => {
+    const response = await apiFetch(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`POST ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+    }
+    return response.json() as Promise<T>;
   });
-  if (!response.ok) {
-    throw new Error(`POST ${path} failed with ${response.status}`);
-  }
-  return response.json() as Promise<T>;
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const response = await apiFetch(path, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
+  return withTimeout(async (signal) => {
+    const response = await apiFetch(path, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`PATCH ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+    }
+    return response.json() as Promise<T>;
   });
-  if (!response.ok) {
-    throw new Error(`PATCH ${path} failed with ${response.status}`);
-  }
-  return response.json() as Promise<T>;
 }
 
 export async function apiDelete(path: string): Promise<void> {
-  const response = await apiFetch(path, {
-    method: 'DELETE',
+  return withTimeout(async (signal) => {
+    const response = await apiFetch(path, {
+      method: 'DELETE',
+      signal,
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`DELETE ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+    }
   });
-  if (!response.ok) {
-    throw new Error(`DELETE ${path} failed with ${response.status}`);
-  }
 }

@@ -1,4 +1,4 @@
-import { Play, RotateCcw, Save } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import type { WorkflowNode, WorkflowEdge, BrandContext } from '../../types/workspace';
 import { ioSchema } from './constants';
 
@@ -18,8 +18,6 @@ interface PropertyPanelProps {
   onSetFeedback: (value: string) => void;
   onRemoveNode: () => void;
   onRetryNode: () => void;
-  onSave: () => void;
-  onRun: () => void;
   onDeleteEdge: (edgeId: string) => void;
   onCancelConnection: () => void;
   markHistory: (label: string) => void;
@@ -29,7 +27,7 @@ export function PropertyPanel({
   nodes, edges, selectedNode, brandContext, feedback, loadingState, connectionSource,
   readOnly, runPreview,
   onUpdateNode, onUpdateConfig, onSetBrandContext, onSetFeedback,
-  onRemoveNode, onRetryNode, onSave, onRun, onDeleteEdge, onCancelConnection, markHistory,
+  onRemoveNode, onRetryNode, onDeleteEdge, onCancelConnection, markHistory,
 }: PropertyPanelProps) {
   const schemaWarnings = (() => {
     const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -49,16 +47,7 @@ export function PropertyPanel({
 
   return (
     <aside className="border-l border-[var(--editorial-stroke)] p-4 space-y-4 bg-[var(--editorial-paper)] min-w-0 max-h-[calc(100vh-260px)] min-h-[400px] overflow-y-auto">
-      {/* Save / Run */}
-      <div className="flex gap-2">
-        <button onClick={onSave} disabled={readOnly} className="btn-editorial-secondary px-3 py-2 text-[9px] font-black uppercase flex items-center gap-1.5 disabled:opacity-45" type="button">
-          <Save className="h-3.5 w-3.5" /> 保存
-        </button>
-        <button onClick={onRun} disabled={loadingState !== 'idle' || readOnly} className="btn-editorial-primary px-3 py-2 text-[9px] font-black uppercase flex items-center gap-1.5 disabled:opacity-45" type="button">
-          <Play className="h-3.5 w-3.5" />
-          {loadingState === 'running' ? '执行中…' : loadingState === 'retrying' ? '重试中…' : '运行'}
-        </button>
-      </div>
+      {/* Run Status */}
       {loadingState !== 'idle' && (
         <div className="flex items-center gap-2 text-[9px] text-blue-600 font-bold mt-1">
           <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
@@ -125,7 +114,17 @@ export function PropertyPanel({
       {/* Node Output */}
       {selectedNode && selectedNode.output && Object.keys(selectedNode.output).length > 0 && (
         <div className="border border-[var(--editorial-stroke)] p-3">
-          <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase mb-2">节点输出</h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">节点输出</h4>
+            <button
+              type="button"
+              onClick={() => {
+                const allOutput = Object.fromEntries(nodes.filter((n) => n.output && Object.keys(n.output).length > 0).map((n) => [n.id, { label: n.label, type: n.type, output: n.output }]));
+                navigator.clipboard?.writeText(JSON.stringify(allOutput, null, 2)).catch(() => {});
+              }}
+              className="text-[9px] font-black hover:text-emerald-600"
+            >导出全部</button>
+          </div>
           <div className="text-[10px] space-y-1">
             {selectedNode.status && (
               <div className="flex items-center gap-2 mb-2">

@@ -2,6 +2,7 @@ from django.urls import path
 
 from generation.views import (
     AudioVoiceoverView,
+    BrainstormView,
     ContentPackageView,
     ImageGenerateView,
     MarketingCopyView,
@@ -14,6 +15,7 @@ from generation.views import (
 
 
 urlpatterns = [
+    path('brainstorm/', BrainstormView.as_view(), name='brainstorm'),
     path('generate/content-package/', ContentPackageView.as_view(), name='generate_content_package'),
     path('generate/copy/', MarketingCopyView.as_view(), name='generate_copy'),
     path('generate/image/', ImageGenerateView.as_view(), name='generate_image'),

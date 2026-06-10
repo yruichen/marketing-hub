@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
-from api.contracts import NODE_IO_SCHEMAS, PLAN_LIMITS, normalize_schema
+from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
 from ai_gateway.services import AIModelGateway
 from api.audit import record_audit_log
 from api.serializers import (
@@ -250,6 +250,17 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
                 results.sort(key=lambda item: item['similarity_score'], reverse=True)
             result = {'query': query, 'results': results, 'rag_logs': ['Semantic retrieval used local keyword fallback because no vector backend is configured.']}
             logs = result['rag_logs']
+        elif task.task_type == 'custom_agent':
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='custom_agent',
+                payload=payload,
+                prompt_key='marketing.custom_agent.system',
+            )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         else:
             raise ValueError(f'Unsupported task type: {task.task_type}')
 
@@ -574,6 +585,36 @@ def build_payload_for_node(
         return {
             'query': config.get('query') or upstream_text or '',
         }
+    if node_type == 'retrieval':
+        return {
+            'query': config.get('query') or upstream_text or '',
+        }
+    if node_type == 'image_prompt':
+        return {
+            'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
+            'product_description': upstream_text or brand_context.get('selling_points') or '',
+            'tone': f"视觉风格: {config.get('style', 'editorial')}, 比例: {config.get('aspect_ratio', '1:1')}",
+            'platform': 'image_prompt',
+            'workflow_context': context_text,
+            'feedback': feedback,
+        }
+    if node_type == 'image_generation':
+        prompt = upstream_text or config.get('prompt') or brand_context.get('visual_style') or 'A creative marketing campaign visual'
+        return {
+            'prompt': f'{prompt}{feedback_text}',
+            'style': config.get('style') or brand_context.get('visual_style') or 'minimalist',
+            'aspect_ratio': config.get('aspect_ratio') or '1:1',
+            'workflow_context': context_text,
+        }
+    if node_type == 'review':
+        return {
+            'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
+            'product_description': upstream_text or '',
+            'tone': f"审核模式: 检查违禁词({config.get('forbidden_words', '')}), 频道规则({config.get('channel_rules', '')})",
+            'platform': 'review',
+            'workflow_context': context_text,
+            'feedback': feedback,
+        }
     if node_type == 'custom_agent':
         return {
             'name': config.get('name') or node.get('label') or '自定义智能体',
@@ -582,6 +623,8 @@ def build_payload_for_node(
             'temperature': float(config.get('temperature') or 0.7),
             'workflow_context': context_text,
             'upstream': upstream,
+            'upstream_text': upstream_text,
+            'brand_context': context_text,
             'feedback': feedback,
         }
     return {
@@ -605,6 +648,7 @@ def run_workflow_node(
     feedback: str = '',
 ) -> tuple[dict[str, Any], GenerationTask | None]:
     node_type = node.get('type')
+    task_type = NODE_TYPE_ALIASES.get(node_type, node_type)
     node_id = str(node.get('id'))
     if node_type == 'context':
         output = {
@@ -617,31 +661,7 @@ def run_workflow_node(
         node['output_schema'] = node_io_schema(node)['output']
         return node, None
 
-    if node_type == 'custom_agent':
-        payload = build_payload_for_node(
-            node,
-            brand_context=brand_context,
-            upstream=upstream_outputs(node_id, nodes, edges),
-            feedback=feedback,
-        )
-        output = {
-            'response': (
-                f"{payload['name']} 已基于上游内容完成处理。"
-                f" Prompt: {str(payload['prompt'])[:180] or '未填写'}"
-            ),
-            'metadata': {
-                'temperature': payload['temperature'],
-                'upstream_count': len(payload['upstream']),
-                'schema': node_io_schema(node),
-            },
-        }
-        node['output'] = output
-        node['status'] = 'succeeded'
-        node['input_schema'] = node_io_schema(node)['input']
-        node['output_schema'] = node_io_schema(node)['output']
-        return node, None
-
-    if node_type not in dict(GenerationTask.TASK_TYPES):
+    if task_type not in dict(GenerationTask.TASK_TYPES):
         output = {
             'message': f'Node type {node_type} is a configuration/pass-through node.',
             'upstream': upstream_outputs(node_id, nodes, edges),
@@ -659,7 +679,7 @@ def run_workflow_node(
         feedback=feedback,
     )
     task = create_generation_task(
-        task_type=node_type,
+        task_type=task_type,
         payload=payload,
         username=username,
         organization=organization,
@@ -814,7 +834,7 @@ def retry_workspace_node(draft: WorkspaceDraft, node_id: str, feedback: str, use
             failed_downstream.append(str(node.get('id')))
 
     draft.nodes = nodes
-    draft.status = 'completed' if not failed_downstream else 'completed'
+    draft.status = 'completed' if not failed_downstream else 'failed'
     draft.last_run_summary = {
         **(draft.last_run_summary or {}),
         'last_retry_node_id': node_id,
@@ -833,3 +853,97 @@ def retry_workspace_node(draft: WorkspaceDraft, node_id: str, feedback: str, use
         metadata={'last_retry_node_id': node_id, 'task_id': task.id if task else None},
     )
     return draft, task
+
+
+def brainstorm_workflow(
+    idea: str,
+    *,
+    organization: Organization,
+    project: Project,
+    campaign: Campaign | None = None,
+    username: str | None = None,
+) -> tuple[WorkspaceDraft, dict[str, Any]]:
+    role = membership_role(
+        User.objects.filter(username=username).first() if username else None,
+        organization,
+    )
+    gateway = AIModelGateway.execute(
+        organization=organization,
+        role=role,
+        task_type='brainstorm',
+        payload={'idea': idea, 'brand_context_hint': project.brand_context or {}},
+        prompt_key='marketing.brainstorm.system',
+    )
+    brainstorm_result = gateway.payload
+
+    nodes = brainstorm_result.get('nodes', [])
+    edges = brainstorm_result.get('edges', [])
+    errors = validate_workflow_graph(nodes, edges)
+    if errors:
+        brainstorm_result = _fallback_brainstorm(idea)
+        nodes = brainstorm_result['nodes']
+        edges = brainstorm_result['edges']
+
+    for node in nodes:
+        node.setdefault('status', 'idle')
+        node_type = node.get('type', 'context')
+        io = NODE_IO_SCHEMAS.get(node_type, {'input': {}, 'output': {}})
+        node.setdefault('input_schema', io.get('input', {}))
+        node.setdefault('output_schema', io.get('output', {}))
+
+    workflow_name = brainstorm_result.get('workflow_name', idea[:40])
+    base_name = workflow_name[:120]
+    existing = WorkspaceDraft.objects.filter(
+        project=project, campaign=campaign, name=base_name,
+    ).exists()
+    if existing:
+        workflow_name = f'{base_name} - {timezone.now().strftime("%H%M%S")}'
+
+    draft = WorkspaceDraft.objects.create(
+        organization=organization,
+        project=project,
+        campaign=campaign,
+        name=workflow_name,
+        brand_context=brainstorm_result.get('brand_context', {}),
+        nodes=nodes,
+        edges=edges,
+        viewport={'x': 0, 'y': 0, 'zoom': 1},
+        status='draft',
+    )
+    record_audit_log(
+        action='brainstorm',
+        actor=User.objects.filter(username=username).first() if username else None,
+        organization=organization,
+        target_type='workspace_draft',
+        target_id=str(draft.id),
+        metadata={'idea': idea[:200], 'node_count': len(nodes)},
+    )
+    return draft, brainstorm_result
+
+
+def _fallback_brainstorm(idea: str) -> dict[str, Any]:
+    return {
+        'workflow_name': f'Campaign: {idea[:40]}',
+        'brand_context': {
+            'brand_name': idea.split()[0] if idea.split() else 'Brand',
+            'audience': 'General audience',
+            'tone': 'Professional',
+            'selling_points': idea[:100],
+            'visual_style': 'modern',
+            'campaign_goal': idea[:80],
+        },
+        'nodes': [
+            {
+                'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
+                'x': 80, 'y': 120, 'width': 260, 'height': 166,
+                'config': {'summary': idea[:200]},
+            },
+            {
+                'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
+                'x': 380, 'y': 120, 'width': 260, 'height': 166,
+                'config': {'tone': 'Professional', 'platform': 'Xiaohongshu'},
+            },
+        ],
+        'edges': [{'id': 'edge-ctx-copy', 'source': 'context-1', 'target': 'copy-1'}],
+        'summary': f'Fallback workflow for: {idea[:80]}',
+    }

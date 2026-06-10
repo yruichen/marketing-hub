@@ -13,10 +13,14 @@ from django.db.models import Q
 
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
+    build_brainstorm_messages,
     build_copy_messages,
+    build_custom_agent_messages,
     build_image_generation_prompt,
     build_storyboard_messages,
+    normalize_brainstorm_result,
     normalize_copy_result,
+    normalize_custom_agent_result,
     normalize_image_result,
     normalize_storyboard_result,
 )
@@ -51,6 +55,7 @@ PROMPT_REGISTRY = {
     'marketing.storyboard.system': {'version': '2026-05-31', 'template': 'You are a storyboard director.'},
     'marketing.image.system': {'version': '2026-05-31', 'template': 'You are an art director.'},
     'marketing.audio.system': {'version': '2026-05-31', 'template': 'You are a voiceover director.'},
+    'marketing.brainstorm.system': {'version': '2026-06-10', 'template': 'You are a marketing workflow architect.'},
 }
 
 SAFETY_BLOCKLIST = {'illegal', 'copyright infringement', 'weapon instruction'}
@@ -241,6 +246,44 @@ class MockProviderAdapter(ProviderAdapter):
                 'text_length': len(payload.get('text', '')),
                 'estimated_audio_duration_seconds': 10,
             }
+        if task_type == 'brainstorm':
+            idea = str(payload.get('idea', 'Marketing campaign'))
+            return normalize_brainstorm_result(
+                {
+                    'workflow_name': f'Campaign: {idea[:40]}',
+                    'brand_context': {
+                        'brand_name': idea.split()[0] if idea.split() else 'Brand',
+                        'audience': 'Digital creators and marketers',
+                        'tone': 'Professional yet approachable',
+                        'selling_points': idea[:100],
+                        'visual_style': 'minimalist',
+                        'campaign_goal': f'Execute marketing idea: {idea[:60]}',
+                    },
+                    'nodes': [
+                        {
+                            'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
+                            'x': 80, 'y': 120, 'width': 260, 'height': 166,
+                            'config': {'summary': f'Campaign brief: {idea[:100]}'},
+                        },
+                        {
+                            'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
+                            'x': 400, 'y': 120, 'width': 260, 'height': 166,
+                            'config': {'tone': 'Professional yet approachable', 'platform': 'Xiaohongshu'},
+                        },
+                        {
+                            'id': 'image-1', 'type': 'image', 'label': 'Campaign Visual',
+                            'x': 720, 'y': 120, 'width': 260, 'height': 166,
+                            'config': {'style': 'minimalist', 'aspect_ratio': '1:1'},
+                        },
+                    ],
+                    'edges': [
+                        {'id': 'edge-context-copy', 'source': 'context-1', 'target': 'copy-1'},
+                        {'id': 'edge-copy-image', 'source': 'copy-1', 'target': 'image-1'},
+                    ],
+                    'summary': f'Generated a 3-step marketing workflow for: {idea[:80]}',
+                },
+                idea,
+            )
         return {'response': prompt, 'metadata': {'model_name': model_name, 'task_type': task_type}}
 
 
@@ -538,6 +581,10 @@ class AIModelGateway:
             return build_copy_messages(payload)
         if task_type == 'storyboard' and prompt_key == 'marketing.storyboard.system':
             return build_storyboard_messages(payload)
+        if task_type == 'custom_agent' and prompt_key == 'marketing.custom_agent.system':
+            return build_custom_agent_messages(payload)
+        if task_type == 'brainstorm' and prompt_key == 'marketing.brainstorm.system':
+            return build_brainstorm_messages(payload.get('idea', ''), payload.get('brand_context_hint', {}))
         return None
 
     @classmethod
@@ -548,6 +595,10 @@ class AIModelGateway:
             return normalize_storyboard_result(result, payload)
         if task_type == 'image':
             return normalize_image_result(result, payload)
+        if task_type == 'custom_agent':
+            return normalize_custom_agent_result(result, payload)
+        if task_type == 'brainstorm':
+            return normalize_brainstorm_result(result, payload.get('idea', ''))
         return result
 
     @classmethod

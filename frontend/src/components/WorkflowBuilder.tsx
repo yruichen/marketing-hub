@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, Lock, PanelRightClose, PanelRightOpen, Plus, Redo2, Undo2 } from 'lucide-react';
+import { Eye, Lock, PanelRightClose, PanelRightOpen, Play, Plus, Redo2, Save, Undo2 } from 'lucide-react';
 import {
   Background, BackgroundVariant, Controls, MarkerType, MiniMap,
   ReactFlow, useReactFlow, addEdge,
@@ -163,6 +163,31 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     if (!project) return;
     setLoadingState('loading');
     try {
+      // Check for draft ID from brainstorm navigation
+      const urlDraftId = new URLSearchParams(window.location.search).get('draft');
+      if (urlDraftId) {
+        const d = await apiGet<WorkspaceDraftRecord>(`/drafts/${urlDraftId}/`);
+        const bc = d.brand_context || {};
+        const wfNodes = d.nodes?.length ? d.nodes.map((n) => normalizeWorkflowNode(n, bc)) : defaultNodes(project.name);
+        const wfEdges = d.edges?.length ? d.edges : defaultEdges;
+        setDraft(d);
+        setRfNodes(wfNodes.map(wfToRF));
+        setRfEdges(wfEdges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
+        setBrandContext(bc);
+        setSelectedNodeId(wfNodes[0]?.id || '');
+        setSelectedNodeIds(wfNodes[0]?.id ? [wfNodes[0].id] : []);
+        const snap: WorkflowSnapshot = { id: `draft-${d.id}`, label: d.name || '灵感风暴工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: wfNodes[0]?.id || '' };
+        setHistory([snap]); setFuture([]); setVersions([snap]);
+        const taskIds = d.last_run_summary?.task_ids as number[] | undefined;
+        if (taskIds?.length) {
+          const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
+          setLastTasks(restored.filter(Boolean) as GenerationTaskRecord[]);
+        }
+        window.history.replaceState({}, '', window.location.pathname);
+        setLoadingState('idle');
+        return;
+      }
+
       const detail = await apiGet<ProjectDetail>(`/projects/${project.id}/`);
       setProjectDetail(detail);
       const d = detail.drafts.find((item) => item.campaign_id === campaign?.id) || detail.drafts[0] || null;
@@ -177,7 +202,13 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       setSelectedNodeIds(wfNodes[0]?.id ? [wfNodes[0].id] : []);
       const snap: WorkflowSnapshot = { id: `${detail.id}-${d?.id || 'init'}`, label: d ? '加载草稿' : '默认工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: wfNodes[0]?.id || '' };
       setHistory([snap]); setFuture([]); setVersions([snap]);
-    } catch { triggerToast('工作流草稿加载失败', 'error'); }
+      // Restore run history from persisted last_run_summary
+      const taskIds = d?.last_run_summary?.task_ids as number[] | undefined;
+      if (taskIds?.length) {
+        const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
+        setLastTasks(restored.filter(Boolean) as GenerationTaskRecord[]);
+      }
+    } catch (err) { triggerToast(`工作流草稿加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
   }, [campaign?.id, project, triggerToast, setRfNodes, setRfEdges]);
 
@@ -215,7 +246,8 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   }, [nodes, edges, brandContext]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const runWorkflow = async () => {
-    if (!project || readOnly) return;
+    if (!project) { triggerToast('请先选择项目', 'error'); return; }
+    if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
     if (nodes.length === 0) { triggerToast('请先添加节点', 'error'); return; }
     const adj = new Map(nodes.map((n) => [n.id, [] as string[]]));
     for (const e of edges) adj.get(e.source)?.push(e.target);
@@ -236,13 +268,13 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       setLastTasks(data.tasks);
       setVersions((prev) => [{ id: `${data.draft.id}-${Date.now()}`, label: '运行版本', createdAt: new Date().toISOString(), nodes: sn, edges: data.draft.edges, brandContext: data.draft.brand_context, selectedNodeId: data.draft.selected_node_id }, ...prev].slice(0, 12));
       triggerToast('画布工作流执行完毕', 'success');
-    } catch { triggerToast('工作流执行失败', 'error'); }
+    } catch (err) { triggerToast(`工作流执行失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
   };
 
   const retryNode = async () => {
     if (!selectedNode || !feedback.trim()) { if (!feedback.trim()) triggerToast('请输入修改意见', 'info'); return; }
-    if (readOnly) return;
+    if (readOnly) { triggerToast('只读模式下无法重试', 'error'); return; }
     setLoadingState('retrying');
     try {
       markHistory(`节点重试 ${selectedNode.id}`);
@@ -254,7 +286,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       setRfEdges(data.draft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
       setLastTasks(data.task ? [data.task] : []); setFeedback('');
       triggerToast('节点已按修改意见重试', 'success');
-    } catch { triggerToast('节点重试失败', 'error'); }
+    } catch (err) { triggerToast(`节点重试失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
   };
 
@@ -283,7 +315,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
 
   // --- UI Event Handlers ---
 
-  const addNode = useCallback((type: NodeType, label: string) => {
+  const addNode = useCallback((type: NodeType, label: string, extraConfig?: Record<string, unknown>) => {
     if (readOnly) return;
     markHistory('新增节点');
     idCounterRef.current += 1;
@@ -294,8 +326,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     const cy = -vp.y / vp.zoom + 300 / vp.zoom;
     const ox = ((idCounterRef.current * 37) % 80) - 40;
     const oy = ((idCounterRef.current * 53) % 80) - 40;
-    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 260, height: preset?.height || 166, status: 'idle', config: defaultNodeConfig(type, brandContext), output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
-    if (type === 'custom_agent') wfNode.config = { ...wfNode.config, ...(({} as Record<string, unknown>)) };
+    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 260, height: preset?.height || 166, status: 'idle', config: { ...defaultNodeConfig(type, brandContext), ...(extraConfig || {}) }, output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
     setRfNodes((prev) => [...prev, wfToRF(wfNode)]);
     setSelectedNodeId(id); setSelectedNodeIds([id]);
   }, [readOnly, brandContext, markHistory, getViewport, setRfNodes]);
@@ -419,7 +450,16 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   }, [triggerToast]);
 
   const saveCustomAgent = useCallback((form: CustomAgentForm) => {
-    addNode('custom_agent', form.name.trim());
+    const { name, ...rest } = form;
+    addNode('custom_agent', name.trim(), {
+      icon: rest.icon,
+      prompt: rest.prompt,
+      input_fields: rest.input_fields,
+      output_schema_text: rest.output_schema_text,
+      model: rest.model,
+      temperature: rest.temperature,
+      failure_strategy: rest.failure_strategy,
+    });
     setShowCustomAgent(false);
   }, [addNode]);
 
@@ -500,6 +540,17 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
             <button type="button" onClick={() => fitView({ padding: 0.18, duration: 180 })} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">适配视图</button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => persistDraft(nodes, edges, true)} disabled={readOnly} className="btn-editorial-secondary px-3 py-2 text-[9px] font-black uppercase flex items-center gap-1.5 disabled:opacity-45">
+              <Save className="h-3.5 w-3.5" /> 保存
+            </button>
+            <button type="button" onClick={runWorkflow} disabled={loadingState !== 'idle' || readOnly} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase flex items-center gap-2 disabled:opacity-45">
+              <Play className="h-4 w-4" />
+              {loadingState === 'running' ? '执行中…' : loadingState === 'retrying' ? '重试中…' : '运行工作流'}
+            </button>
+            <span className="flex items-center gap-1.5 text-[9px] text-[var(--editorial-text-gray)] border border-[var(--editorial-stroke)] px-2 py-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${draft?.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              {draft?.status || 'draft'}
+            </span>
             {Object.entries(statusLabels).map(([key, label]) => (
               <span key={key} className="flex items-center gap-1 text-[9px] text-[var(--editorial-text-gray)]"><span className={`h-1.5 w-1.5 rounded-full ${nodeStatusDotClass(key)}`} />{label}</span>
             ))}
@@ -564,7 +615,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
               onUpdateNode={updateNode} onUpdateConfig={updateSelectedConfig}
               onSetBrandContext={setBrandContext} onSetFeedback={setFeedback}
               onRemoveNode={removeSelectedNode} onRetryNode={retryNode}
-              onSave={() => persistDraft()} onRun={runWorkflow}
               onDeleteEdge={(id) => { markHistory('删除连线'); setRfEdges((prev) => prev.filter((e) => e.id !== id)); }}
               onCancelConnection={() => setConnectionSource('')}
               markHistory={markHistory}

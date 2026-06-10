@@ -25,6 +25,9 @@ import { ProjectManager } from './features/projects';
 const WorkflowBuilder = lazy(() =>
   import('./features/workflows').then((module) => ({ default: module.WorkflowBuilder })),
 );
+const BrainstormPage = lazy(() =>
+  import('./features/brainstorm').then((module) => ({ default: module.BrainstormPage })),
+);
 import { useUiStore, type AppSection } from './shared/stores/uiStore';
 import type { BrandContext, BillingPlanResponse, CampaignRecord, ProjectRecord } from './types/workspace';
 
@@ -1207,6 +1210,21 @@ export default function App() {
               username={username || 'ROOT'}
               triggerToast={triggerToast}
             />
+            </Suspense>
+          )}
+
+          {activeTab === 'brainstorm' && (
+            <Suspense fallback={<div className="p-8 text-sm text-[var(--editorial-text-gray)]">Loading brainstorm...</div>}>
+              <BrainstormPage
+                organization={workspaceScope?.organization || null}
+                project={workspaceScope?.project || null}
+                campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
+                username={username || 'ROOT'}
+                triggerToast={triggerToast}
+                onComplete={(draftId) => {
+                  navigate(`/workflows?draft=${draftId}`);
+                }}
+              />
             </Suspense>
           )}
 
