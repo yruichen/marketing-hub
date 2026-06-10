@@ -1,0 +1,99 @@
+/* ==================== features/auth/journal.css ====================
+   翻开手帐视觉：3D 翻页 + 书脊高亮线。
+   改这里只影响 features/auth/ 模块，不污染 index.css 的全局样式。
+   ================================================================ */
+
+.journal-stage {
+  /* 给 max-w-md 留 3D 透视空间，纸页不会"飞出去" */
+  perspective: 1600px;
+}
+
+.journal-book {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  transform-style: preserve-3d;
+}
+
+/* 封面与内页共用基础卡面 */
+.journal-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 封面在顶面，沿左侧书脊翻起 */
+.journal-flip {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transition:
+    transform 0.65s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease 0.55s;
+  will-change: transform;
+  z-index: 2;
+}
+
+.journal-flip--open {
+  transform: rotateY(-180deg);
+  /* 翻完后让它彻底从布局消失（避免挡住内页点击） */
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 内页放在底层，不参与翻页 */
+.journal-page-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* 书脊高亮线：4px 主体 + 2px 内阴影，亮/暗模式都靠 --editorial-accent-yellow */
+.journal-spine {
+  background:
+    linear-gradient(
+      to right,
+      transparent 0%,
+      var(--editorial-accent-yellow) 30%,
+      var(--editorial-accent-yellow) 70%,
+      transparent 100%
+    );
+  box-shadow:
+    inset 0 0 0 1px var(--editorial-stroke),
+    0 0 6px rgba(0, 0, 0, 0.12);
+  z-index: 3;
+  border-radius: 2px;
+}
+
+.dark .journal-spine {
+  box-shadow:
+    inset 0 0 0 1px var(--editorial-stroke),
+    0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+/* 入场小动效：避免页面刚挂载时封面"砰"地出现 */
+@keyframes journalFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.journal-stage {
+  animation: journalFadeIn 0.35s ease-out;
+}
+
+/* 尊重用户的减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .journal-flip {
+    transition: none;
+  }
+  .journal-flip--open {
+    transform: none;
+    opacity: 0;
+  }
+  .journal-stage {
+    animation: none;
+  }
+}

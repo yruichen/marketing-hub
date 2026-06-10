@@ -19,7 +19,7 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   return (
-    <aside className="w-full xl:w-auto flex flex-col justify-between shrink-0 p-4 xl:p-6 z-10 xl:my-6 xl:ml-6 xl:mr-2 border-b xl:border-b-0 border-[var(--editorial-stroke)]/20">
+    <aside className="w-full xl:w-auto xl:h-full xl:overflow-y-auto flex flex-col justify-between shrink-0 p-4 xl:p-6 z-10 xl:my-6 xl:ml-6 xl:mr-2 border-b xl:border-b-0 border-[var(--editorial-stroke)]/20">
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-1 select-none">
           <h1 className="serif-header text-xl font-bold tracking-tight text-[var(--editorial-text)]">
@@ -30,7 +30,7 @@ export function AppSidebar({
           </p>
         </div>
 
-        <nav className="flex flex-col gap-5 font-mono max-h-[calc(100vh-12rem)] overflow-y-auto pr-1">
+        <nav className="flex flex-col gap-5 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               <p className="text-[9px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)] mb-2 px-1">

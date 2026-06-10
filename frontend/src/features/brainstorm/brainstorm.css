@@ -1,0 +1,85 @@
+/* ==================== features/brainstorm/brainstorm.css ====================
+   只影响 features/brainstorm/ 内的样式，不污染全局 index.css。
+   改这里只改 Brainstorm 模块。
+   ======================================================================== */
+
+/* 背景闪烁粒子：active 状态才显示 + 动效 */
+.brainstorm-sparkles {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.brainstorm-sparkles.is-active {
+  opacity: 1;
+}
+
+.brainstorm-sparkles__dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--editorial-accent-yellow);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  filter: blur(1px);
+}
+
+.brainstorm-sparkles.is-active .brainstorm-sparkles__dot {
+  animation: brainstorm-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes brainstorm-pulse {
+  0%, 100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+  50% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+}
+
+/* 输入框下划线进度条：0/30/100 三态过渡 */
+.brainstorm-underline {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--editorial-accent-yellow);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  /* 落到 input 自带 border-b-2 下方，100% 时也不会视觉上"撞"到 Ignite */
+  z-index: -1;
+}
+
+/* 欢迎语小入场 */
+.brainstorm-welcome {
+  animation: brainstorm-fade-up 0.6s ease-out 0.15s both;
+}
+
+@keyframes brainstorm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .brainstorm-sparkles.is-active .brainstorm-sparkles__dot {
+    animation: none;
+    opacity: 0.4;
+  }
+  .brainstorm-welcome {
+    animation: none;
+  }
+  .brainstorm-underline {
+    transition: none;
+  }
+}
