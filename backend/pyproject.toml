@@ -11,4 +11,5 @@ dependencies = [
     "djangorestframework>=3.17.1",
     "psycopg[binary]>=3.2.0",
     "redis>=5.2.0",
+    "pydantic>=2.6.0",
 ]

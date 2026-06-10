@@ -1,10 +1,13 @@
+import asyncio
+import json
+
 from django.contrib.auth.models import User
 from django.test import Client, SimpleTestCase
 from rest_framework.test import APITestCase
 
 from ai_gateway.content_package import assemble_content_package
 from ai_gateway.services import ModelPolicy
-from api.models import AIConfiguration
+from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
     build_copy_messages,
@@ -174,3 +177,347 @@ class AIConfigPermissionTests(APITestCase):
             HTTP_X_CSRFTOKEN=csrf_token,
         )
         self.assertEqual(response.status_code, 200, response.content)
+
+
+class AssistantAgentTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.get(username='ROOT')
+        self.organization = Organization.objects.create(
+            name='Agent Test Org', slug='agent-test-org'
+        )
+        Membership.objects.create(user=self.user, organization=self.organization, role='admin')
+        self.project = Project.objects.create(
+            organization=self.organization,
+            name='Agent Test Project',
+            slug='agent-test-project',
+        )
+        from ai_gateway.tools import ToolContext
+        self.ctx = ToolContext(organization=self.organization, user=self.user, session_id=1)
+
+    def _collect(self, agent, messages):
+        async def _run():
+            out = []
+            async for step in agent.run_streaming(messages=messages, ctx=self.ctx):
+                out.append(step)
+            return out
+        return asyncio.run(_run())
+
+    def test_plain_text_terminates_with_done(self):
+        from ai_gateway.agent import AssistantAgent
+        agent = AssistantAgent(llm=_PlainEchoLlm())
+        msgs = agent.build_messages(
+            history=[], page_context=None, user_message='hello'
+        )
+        steps = self._collect(agent, msgs)
+        self.assertEqual(steps[-1].type, 'done')
+        self.assertTrue(any(s.type == 'text' for s in steps))
+
+    def test_tool_call_round_trip_executes_and_appends(self):
+        from ai_gateway.agent import AssistantAgent
+        from ai_gateway.tools import ToolRegistry, ToolSpec, ToolContext
+        # Register a single in-memory tool that doesn't touch the DB.
+        # Avoids SQLite-threading issues with sync_to_async under tests.
+        async def _echo(ctx, args):
+            return {'echoed': args}
+
+        registry = ToolRegistry()
+        registry.register(ToolSpec(
+            name='list_projects',
+            description='test stub',
+            parameters={'type': 'object', 'properties': {}},
+            handler=_echo,
+        ))
+        agent = AssistantAgent(registry=registry, llm=_ToolCallLlm(tool_name='list_projects'))
+        msgs = agent.build_messages(
+            history=[], page_context=None, user_message='列出我最近的项目'
+        )
+        steps = self._collect(agent, msgs)
+        types = [s.type for s in steps]
+        self.assertIn('tool_call', types)
+        self.assertIn('tool_result', types)
+        self.assertEqual(steps[-1].type, 'done')
+        # The stub echoed the args we passed (empty dict).
+        result_step = next(s for s in steps if s.type == 'tool_result')
+        self.assertEqual(result_step.name, 'list_projects')
+        self.assertEqual(result_step.result, {'echoed': {}})
+
+    def test_max_steps_caps_loop(self):
+        from ai_gateway.agent import AssistantAgent
+        # LLM that always wants a different tool, never converging
+        agent = AssistantAgent(
+            llm=_ToolCallLlm(tool_name='list_projects'), max_steps=2
+        )
+        msgs = agent.build_messages(
+            history=[], page_context=None, user_message='ping'
+        )
+        steps = self._collect(agent, msgs)
+        # 2 steps → 2 tool_call + 2 tool_result + final 'done'
+        self.assertEqual(steps[-1].type, 'done')
+        self.assertLessEqual(
+            sum(1 for s in steps if s.type == 'tool_call'),
+            2,
+        )
+
+    def test_history_messages_pass_through(self):
+        from ai_gateway.agent import AssistantAgent
+        agent = AssistantAgent(llm=_PlainEchoLlm())
+        history = [
+            {'role': 'user', 'content': 'first'},
+            {'role': 'assistant', 'content': 'hi'},
+        ]
+        msgs = agent.build_messages(
+            history=history, page_context={'tab': 'projects'}, user_message='second'
+        )
+        # system + page context + history × 2 + new user
+        self.assertEqual(msgs[0]['role'], 'system')
+        self.assertEqual(msgs[1]['role'], 'system')
+        self.assertEqual(msgs[2]['content'], 'first')
+        self.assertEqual(msgs[-1]['content'], 'second')
+
+
+class _PlainEchoLlm:
+    """Test LLM that returns plain text only."""
+
+    async def chat(self, *, messages, tools=None, tool_choice='auto'):
+        user_msg = next(
+            (m['content'] for m in reversed(messages) if m.get('role') == 'user'),
+            '',
+        )
+        return {
+            'choices': [{'message': {'role': 'assistant', 'content': f'echo: {user_msg}'}}],
+            'usage': {'prompt_tokens': 5, 'completion_tokens': 5},
+        }
+
+
+class _ToolCallLlm:
+    """Test LLM that always emits a single tool_call to the given name."""
+
+    def __init__(self, tool_name: str) -> None:
+        self.tool_name = tool_name
+
+    async def chat(self, *, messages, tools=None, tool_choice='auto'):
+        return {
+            'choices': [
+                {
+                    'message': {
+                        'role': 'assistant',
+                        'content': None,
+                        'tool_calls': [
+                            {
+                                'id': 'call_test_1',
+                                'type': 'function',
+                                'function': {
+                                    'name': self.tool_name,
+                                    'arguments': '{}',
+                                },
+                            }
+                        ],
+                    }
+                }
+            ],
+            'usage': {'prompt_tokens': 10, 'completion_tokens': 5},
+        }
+
+
+def _parse_sse(body: str) -> list[dict]:
+    """Tiny SSE parser for tests. Each `data: {...}` line → one dict."""
+    out = []
+    for line in body.splitlines():
+        line = line.strip()
+        if line.startswith('data: '):
+            try:
+                out.append(json.loads(line[len('data: '):]))
+            except json.JSONDecodeError:
+                pass
+    return out
+
+
+class AssistantSessionCrudTests(APITestCase):
+    def setUp(self):
+        self.client_ = Client(enforce_csrf_checks=True)
+        self.user = User.objects.get(username='ROOT')
+        self.organization = Organization.objects.create(
+            name='Assistant View Test', slug='asst-view-test'
+        )
+        Membership.objects.create(
+            user=self.user, organization=self.organization, role='admin'
+        )
+        # Authenticate via demo session cookie
+        self.client_.login(username='ROOT', password='123')
+
+    def _csrf(self):
+        resp = self.client_.get('/api/ai/config/')
+        return resp.headers.get('X-CSRFToken') or self.client_.cookies['csrftoken'].value
+
+    def test_create_session_returns_serialized_payload(self):
+        csrf = self._csrf()
+        resp = self.client_.post(
+            '/api/assistant/sessions',
+            {'title': '我的第一个会话'},
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        body = resp.json()
+        self.assertEqual(body['title'], '我的第一个会话')
+        self.assertIn('id', body)
+
+    def test_list_sessions_returns_recent(self):
+        for i in range(3):
+            AssistantSession.objects.create(
+                organization=self.organization, user=self.user,
+                title=f'session {i}',
+            )
+        csrf = self._csrf()
+        resp = self.client_.get(
+            '/api/assistant/sessions',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(len(body['sessions']), 3)
+
+    def test_patch_renames_session(self):
+        session = AssistantSession.objects.create(
+            organization=self.organization, user=self.user,
+        )
+        csrf = self._csrf()
+        resp = self.client_.patch(
+            f'/api/assistant/sessions/{session.id}',
+            {'title': '重命名后的会话'},
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 200)
+        session.refresh_from_db()
+        self.assertEqual(session.title, '重命名后的会话')
+
+    def test_delete_removes_session(self):
+        session = AssistantSession.objects.create(
+            organization=self.organization, user=self.user,
+        )
+        csrf = self._csrf()
+        resp = self.client_.delete(
+            f'/api/assistant/sessions/{session.id}',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(
+            AssistantSession.objects.filter(pk=session.id).exists()
+        )
+
+    def test_get_messages_returns_history(self):
+        session = AssistantSession.objects.create(
+            organization=self.organization, user=self.user,
+        )
+        AssistantMessage.objects.create(
+            session=session, role='user', content='hi'
+        )
+        AssistantMessage.objects.create(
+            session=session, role='assistant', content='hello'
+        )
+        csrf = self._csrf()
+        resp = self.client_.get(
+            f'/api/assistant/sessions/{session.id}/messages',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(len(body['messages']), 2)
+
+    def test_sessions_isolated_by_organization(self):
+        # Other org session must not be visible
+        other = Organization.objects.create(name='Other', slug='other-org-1')
+        other_session = AssistantSession.objects.create(
+            organization=other, user=self.user, title='foreign'
+        )
+        csrf = self._csrf()
+        resp = self.client_.patch(
+            f'/api/assistant/sessions/{other_session.id}',
+            {'title': 'hack'},
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class AssistantChatStreamingTests(APITestCase):
+    def setUp(self):
+        from ai_gateway.agent import AssistantAgent
+        self.user = User.objects.get(username='ROOT')
+        self.organization = Organization.objects.create(
+            name='Chat Stream Test', slug='chat-stream-test'
+        )
+        Membership.objects.create(
+            user=self.user, organization=self.organization, role='admin'
+        )
+        # Monkey-patch the default agent with a plain-text LLM.
+        from ai_gateway import agent as agent_mod
+        from ai_gateway.tests import _PlainEchoLlm
+        self._orig_agent_cls = agent_mod.AssistantAgent
+        agent_mod.AssistantAgent = lambda **kw: AssistantAgent(llm=_PlainEchoLlm())
+        self.addCleanup(lambda: setattr(agent_mod, 'AssistantAgent', self._orig_agent_cls))
+        self.client_ = Client(enforce_csrf_checks=True)
+        self.client_.login(username='ROOT', password='123')
+
+    def _csrf(self):
+        resp = self.client_.get('/api/ai/config/')
+        return resp.headers.get('X-CSRFToken') or self.client_.cookies['csrftoken'].value
+
+    def _body(self, resp) -> str:
+        """Streaming responses need streaming_content; concat into a string."""
+        return b''.join(resp.streaming_content).decode('utf-8')
+
+    def test_chat_stream_emits_text_then_done(self):
+        from ai_gateway.views import AssistantChatView
+        from django.test import RequestFactory
+        rf = RequestFactory()
+        factory_req = rf.post(
+            '/api/assistant/chat',
+            {'message': '你好助手', 'page_context': {'tab': 'projects'}},
+            content_type='application/json',
+        )
+        factory_req.session = self.client_.session
+        view = AssistantChatView.as_view()
+        view_resp = view(factory_req)
+        # Django's StreamingHttpResponse: drain by iterating streaming_content
+        body = b''.join(chunk for chunk in view_resp.streaming_content).decode('utf-8')
+        self.assertEqual(view_resp['Content-Type'], 'text/event-stream')
+        events = _parse_sse(body)
+        types = [e['type'] for e in events]
+        self.assertIn('text', types, f'no text event in: {events}')
+        self.assertEqual(types[-1], 'done')
+        self.assertIn('session_id', events[-1])
+
+    def test_chat_persists_user_and_assistant_messages(self):
+        from ai_gateway.views import AssistantChatView
+        from django.test import RequestFactory
+        rf = RequestFactory()
+        factory_req = rf.post(
+            '/api/assistant/chat',
+            {'message': '测试持久化'},
+            content_type='application/json',
+        )
+        factory_req.session = self.client_.session
+        view = AssistantChatView.as_view()
+        view_resp = view(factory_req)
+        body = b''.join(chunk for chunk in view_resp.streaming_content).decode('utf-8')
+        events = _parse_sse(body)
+        done = events[-1]
+        session_id = done['session_id']
+        session = AssistantSession.objects.get(pk=session_id)
+        roles = list(session.messages.values_list('role', flat=True))
+        self.assertEqual(roles[0], 'user')
+        self.assertIn('assistant', roles)
+        user_msg = session.messages.filter(role='user').first()
+        self.assertEqual(user_msg.content, '测试持久化')
+
+    def test_chat_rejects_empty_message(self):
+        csrf = self._csrf()
+        resp = self.client_.post(
+            '/api/assistant/chat',
+            {'message': '   '},
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(resp.status_code, 400)

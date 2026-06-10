@@ -3,6 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { AssistantProvider } from '../features/assistant';
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -25,7 +26,9 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <ReactFlowProvider>
-          <Tooltip.Provider delayDuration={250}>{children}</Tooltip.Provider>
+          <Tooltip.Provider delayDuration={250}>
+            <AssistantProvider>{children}</AssistantProvider>
+          </Tooltip.Provider>
         </ReactFlowProvider>
       </QueryClientProvider>
     </BrowserRouter>

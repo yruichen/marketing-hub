@@ -2,6 +2,8 @@ from rest_framework import serializers
 
 from api.models import (
     AIConfiguration,
+    AssistantMessage,
+    AssistantSession,
     AuditLog,
     Asset,
     Campaign,
@@ -336,4 +338,43 @@ class IdempotencyKeySerializer(serializers.ModelSerializer):
             'resource_id',
             'created_at',
             'updated_at',
+        )
+
+
+class AssistantSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssistantSession
+        fields = (
+            'id',
+            'title',
+            'context_snapshot',
+            'is_archived',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
+class AssistantMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssistantMessage
+        fields = (
+            'id',
+            'role',
+            'content',
+            'tool_calls',
+            'tool_name',
+            'prompt_tokens',
+            'completion_tokens',
+            'cost_usd',
+            'metadata',
+            'created_at',
+        )
+        read_only_fields = (
+            'id',
+            'prompt_tokens',
+            'completion_tokens',
+            'cost_usd',
+            'metadata',
+            'created_at',
         )

@@ -31,6 +31,15 @@ export async function ensureCsrfToken() {
   return cachedCsrfToken;
 }
 
+/**
+ * Synchronous read of the cached CSRF token. Returns null if it has
+ * not been fetched yet — callers in async code paths should
+ * `await ensureCsrfToken()` first.
+ */
+export function getCsrfToken(): string | null {
+  return cachedCsrfToken;
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || 'GET').toUpperCase();
   const headers = new Headers(init.headers || {});
