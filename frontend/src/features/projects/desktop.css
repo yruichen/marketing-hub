@@ -1,0 +1,728 @@
+/* ==================== features/projects/desktop.css ====================
+   macOS Finder 风格的"桌面文件管理"视觉系统。
+   改这里只影响 features/projects/ 模块，不污染 index.css。
+   ==================================================================== */
+
+/* 三栏 grid（mobile 单列堆叠） */
+.desktop-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  min-height: 0;
+  font-family: var(--mono-font);
+}
+
+@media (min-width: 1280px) {
+  .desktop-shell {
+    grid-template-columns: 220px minmax(0, 1fr) auto;
+    gap: 0;
+  }
+  .desktop-shell--no-inspector {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+}
+
+/* 左侧 sidebar */
+.desktop-sidebar {
+  border-right: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-desk);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.desktop-sidebar__section-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--editorial-text-gray);
+  padding: 12px 14px 4px;
+}
+
+.desktop-sidebar__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 18px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--editorial-text);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  transition: background 0.1s ease, color 0.1s ease;
+  height: 32px;
+  white-space: nowrap;
+}
+
+.desktop-sidebar__item svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.desktop-sidebar__item:hover {
+  background: var(--editorial-unselected);
+}
+
+.desktop-sidebar__item--active {
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+}
+
+.desktop-sidebar__item--active::before {
+  /* 左标志 ▌ */
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--editorial-accent-yellow);
+}
+
+.desktop-sidebar__item--drop-target {
+  background: var(--editorial-accent-yellow);
+  color: var(--editorial-text);
+}
+
+.desktop-sidebar__item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 中央桌面 */
+.desktop-canvas {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--editorial-bg);
+  /* macOS 桌面点阵 + 浅纸纹理 */
+  background-image:
+    radial-gradient(var(--editorial-dot-color) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.desktop-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  flex-shrink: 0;
+}
+
+.desktop-toolbar__search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--editorial-stroke);
+  padding: 4px 10px;
+  max-width: 320px;
+}
+
+.desktop-toolbar__search input {
+  flex: 1;
+  background: transparent;
+  font-size: 11px;
+  outline: none;
+  font-family: inherit;
+}
+
+.desktop-toolbar__select {
+  border: 1px solid var(--editorial-stroke);
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--editorial-text);
+}
+
+.desktop-toolbar__btn {
+  border: 1px solid var(--editorial-stroke);
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  background: var(--editorial-paper);
+  color: var(--editorial-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.1s ease;
+  font-family: inherit;
+}
+
+.desktop-toolbar__btn:hover {
+  background: var(--editorial-unselected);
+}
+
+.desktop-toolbar__btn--primary {
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+}
+
+.desktop-toolbar__btn--primary:hover {
+  background: var(--editorial-stroke);
+  opacity: 0.9;
+}
+
+.desktop-toolbar__btn--active {
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+}
+
+.desktop-toolbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--editorial-stroke);
+  opacity: 0.3;
+}
+
+/* 带图标+文字前缀的筛选下拉：一眼能看出筛什么 */
+.desktop-toolbar__labeled-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--editorial-stroke);
+  padding: 4px 8px 4px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  background: var(--editorial-paper);
+  color: var(--editorial-text);
+  height: 28px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.desktop-toolbar__labeled-select:hover {
+  background: var(--editorial-unselected);
+}
+
+.desktop-toolbar__labeled-select--active {
+  border-color: var(--editorial-accent-blue);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.desktop-toolbar__labeled-select__label {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--editorial-text-gray);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.desktop-toolbar__labeled-select--active .desktop-toolbar__labeled-select__label {
+  color: var(--editorial-accent-blue);
+}
+
+.desktop-toolbar__labeled-select__value {
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--editorial-text);
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 真正的 select 覆盖在视觉层之上（透明） */
+.desktop-toolbar__labeled-select__native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* 桌面图标网格 */
+.desktop-icons {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+  min-height: 0;
+}
+
+.desktop-icons__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.desktop-icons__empty {
+  border: 1.5px dashed var(--editorial-stroke);
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--editorial-text-gray);
+}
+
+/* 单个图标 */
+.desktop-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  cursor: pointer;
+  user-select: none;
+  border: 1.5px solid transparent;
+  background: transparent;
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.desktop-icon:hover {
+  background: rgba(254, 240, 138, 0.18);
+}
+
+.desktop-icon--selected {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: var(--editorial-accent-blue);
+}
+
+.desktop-icon--drop-target {
+  background: var(--editorial-accent-yellow);
+}
+
+.desktop-icon__check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  background: var(--editorial-accent-blue);
+  color: white;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.desktop-icon__glyph {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--editorial-text);
+  filter: drop-shadow(2px 2px 0 var(--editorial-stroke));
+}
+
+.desktop-icon__name {
+  font-size: 10px;
+  text-align: center;
+  word-break: break-word;
+  line-height: 1.3;
+  color: var(--editorial-text);
+  max-width: 100%;
+}
+
+.desktop-icon__name--selected {
+  background: var(--editorial-accent-blue);
+  color: white;
+  padding: 1px 4px;
+}
+
+/* 列表视图 */
+.desktop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.desktop-list__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  font-size: 11px;
+}
+
+.desktop-list__row:hover {
+  background: var(--editorial-unselected);
+}
+
+.desktop-list__row--selected {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: var(--editorial-accent-blue);
+}
+
+.desktop-list__row__name {
+  flex: 1;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 看板视图（按文件夹分组拖放） */
+.desktop-board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.desktop-board__column {
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  padding: 10px 12px;
+  transition: background 0.1s ease;
+}
+
+.desktop-board__column--drop {
+  background: var(--editorial-accent-yellow);
+}
+
+.desktop-board__column__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  letter-spacing: 0.08em;
+}
+
+.desktop-board__column__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.desktop-board__empty {
+  border: 1px dashed var(--editorial-stroke);
+  padding: 12px;
+  font-size: 10px;
+  color: var(--editorial-text-gray);
+  text-align: center;
+}
+
+/* 检查器（右侧） */
+.desktop-inspector {
+  width: 320px;
+  border-left: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.desktop-inspector--open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* mobile (<xl)：inspector 改成底部抽屉，覆盖桌面但不挡 toolbar */
+@media (max-width: 1279px) {
+  .desktop-inspector {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    height: 80vh;
+    max-height: 80vh;
+    border-left: none;
+    border-top: 1.5px solid var(--editorial-stroke);
+    border-radius: 12px 12px 0 0;
+    z-index: 40;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(100%);
+  }
+
+  .desktop-inspector--open {
+    transform: translateY(0);
+  }
+
+  /* 抽屉拉手 */
+  .desktop-inspector__header::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--editorial-unselected);
+  }
+}
+
+.desktop-inspector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1.5px solid var(--editorial-stroke);
+}
+
+.desktop-inspector__title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--editorial-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-inspector__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.desktop-inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.desktop-inspector__label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--editorial-text-gray);
+}
+
+.desktop-inspector__input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--editorial-stroke);
+  padding: 5px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--editorial-text);
+  outline: none;
+}
+
+.desktop-inspector__input:focus {
+  border-color: var(--editorial-accent-blue);
+}
+
+.desktop-inspector__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.desktop-inspector__chip {
+  font-size: 9px;
+  padding: 3px 7px;
+  border: 1px solid var(--editorial-stroke);
+  cursor: pointer;
+  background: var(--editorial-paper);
+  color: var(--editorial-text);
+  font-family: inherit;
+  font-weight: 700;
+  transition: all 0.1s ease;
+}
+
+.desktop-inspector__chip--active {
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+}
+
+/* 状态栏 */
+.desktop-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  border-top: 1px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  font-size: 10px;
+  color: var(--editorial-text-gray);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.desktop-statusbar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.desktop-statusbar__action {
+  font-size: 9px;
+  border: 1px solid var(--editorial-stroke);
+  padding: 2px 8px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--editorial-text);
+  font-family: inherit;
+  font-weight: 700;
+}
+
+.desktop-statusbar__action:hover {
+  background: var(--editorial-unselected);
+}
+
+/* 右键菜单 */
+.desktop-context-menu {
+  position: fixed;
+  z-index: 50;
+  background: var(--editorial-paper);
+  border: 1.5px solid var(--editorial-stroke);
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
+  min-width: 180px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.desktop-context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--editorial-text);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.desktop-context-menu__item:hover {
+  background: var(--editorial-accent-blue);
+  color: white;
+}
+
+.desktop-context-menu__item--danger {
+  color: rgb(244, 63, 94);
+}
+
+.desktop-context-menu__item--danger:hover {
+  background: rgb(244, 63, 94);
+  color: white;
+}
+
+.desktop-context-menu__divider {
+  height: 1px;
+  background: var(--editorial-stroke);
+  opacity: 0.3;
+  margin: 4px 0;
+}
+
+/* 复选标记 */
+.desktop-icon__checkbox {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: white;
+  cursor: pointer;
+}
+
+.desktop-icon__checkbox--checked {
+  background: var(--editorial-accent-blue);
+  border-color: var(--editorial-accent-blue);
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .desktop-inspector {
+    transition: none;
+  }
+  .desktop-icon {
+    transition: none;
+  }
+}
+
+/* 折叠区段（inspector 内部用） */
+.desktop-collapsible {
+  border-top: 1px dashed var(--editorial-stroke);
+  padding-top: 8px;
+}
+
+.desktop-collapsible:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.desktop-collapsible__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--editorial-text);
+  text-align: left;
+}
+
+.desktop-collapsible__header:hover {
+  color: var(--editorial-accent-blue);
+}
+
+.desktop-collapsible__title {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  flex: 1;
+  color: var(--editorial-text-gray);
+}
+
+.desktop-collapsible.is-open .desktop-collapsible__title {
+  color: var(--editorial-text);
+}
+
+.desktop-collapsible__badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border: 1px solid var(--editorial-stroke);
+  background: var(--editorial-unselected);
+  color: var(--editorial-text);
+}
+
+.desktop-collapsible__body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
