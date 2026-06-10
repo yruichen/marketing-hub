@@ -391,3 +391,90 @@ class CommunityCreation(models.Model):
             return json.loads(self.content)
         except Exception:
             return {}
+
+
+# ================================================================
+# Global Assistant: persistent multi-turn chat sessions
+# ================================================================
+
+
+class AssistantSession(models.Model):
+    """
+    A persistent chat session owned by a user within an organization.
+    `context_snapshot` records the page state when the session was last opened
+    so the assistant can re-attach to "where you were" when you resume it.
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='assistant_sessions',
+    )
+    user = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assistant_sessions',
+    )
+    title = models.CharField(max_length=200, default='新对话')
+    context_snapshot = models.JSONField(default=dict, blank=True)
+    is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['organization', '-updated_at']),
+            models.Index(fields=['organization', 'is_archived']),
+        ]
+
+    def __str__(self) -> str:
+        return f'AssistantSession({self.id}, {self.title})'
+
+
+class AssistantMessage(models.Model):
+    """
+    One turn in an AssistantSession. Role mirrors OpenAI's chat roles.
+    `tool_calls` stores the structured tool call list when role='assistant'
+    so the UI can re-render tool cards deterministically.
+    `metadata` carries audit / cost / error info.
+    """
+
+    ROLE_USER = 'user'
+    ROLE_ASSISTANT = 'assistant'
+    ROLE_TOOL = 'tool'
+    ROLE_SYSTEM = 'system'
+    ROLE_CHOICES = [
+        (ROLE_USER, 'User'),
+        (ROLE_ASSISTANT, 'Assistant'),
+        (ROLE_TOOL, 'Tool'),
+        (ROLE_SYSTEM, 'System'),
+    ]
+
+    session = models.ForeignKey(
+        AssistantSession,
+        on_delete=models.CASCADE,
+        related_name='messages',
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField(blank=True, default='')
+    tool_calls = models.JSONField(default=list, blank=True)
+    tool_call_id = models.CharField(max_length=100, blank=True, default='')
+    tool_name = models.CharField(max_length=100, blank=True, default='')
+    prompt_tokens = models.IntegerField(default=0)
+    completion_tokens = models.IntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['session', 'created_at']),
+        ]
+
+    def __str__(self) -> str:
+        snippet = (self.content or '')[:40]
+        return f'AssistantMessage({self.role}, {snippet!r})'
