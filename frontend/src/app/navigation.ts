@@ -34,6 +34,12 @@ export const NAV_SECTIONS: NavSection[] = [
     title: '开始',
     items: [
       {
+        id: 'brainstorm',
+        label: '灵感风暴',
+        hint: '一句话，AI 自动生成工作流',
+        icon: Sparkles,
+      },
+      {
         id: 'dashboard',
         label: '首页',
         hint: '总览数据与快捷入口',
@@ -134,6 +140,10 @@ export const TAB_META: Record<
   AppSection,
   { title: string; subtitle: string; primaryAction?: string }
 > = {
+  brainstorm: {
+    title: '灵感风暴',
+    subtitle: '输入创意想法，AI 自动生成完整工作流',
+  },
   dashboard: {
     title: '首页',
     subtitle: '查看任务进度、费用，并从下面卡片进入常用功能',

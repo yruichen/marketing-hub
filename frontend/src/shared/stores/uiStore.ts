@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export type AppSection =
+  | 'brainstorm'
   | 'dashboard'
   | 'projects'
   | 'content'

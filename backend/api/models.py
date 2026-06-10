@@ -144,6 +144,8 @@ class GenerationTask(models.Model):
         ('storyboard', 'Storyboard Script'),
         ('audio', 'AI Voiceover'),
         ('rag_search', 'Semantic Retrieval'),
+        ('custom_agent', 'Custom Agent'),
+        ('brainstorm', 'Workflow Brainstorm'),
     ]
 
     STATUS_CHOICES = [
@@ -334,6 +336,8 @@ class AuditLog(models.Model):
         ('billing_change', 'Billing Change'),
         ('generation_create', 'Generation Create'),
         ('workflow_run', 'Workflow Run'),
+        ('workflow_retry', 'Workflow Retry'),
+        ('brainstorm', 'Brainstorm'),
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')

@@ -359,3 +359,264 @@ def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, An
         'revised_prompt': revised_prompt,
         'generated_images': int(result.get('generated_images') or (1 if image_url else 0)),
     }
+
+
+CUSTOM_AGENT_SYSTEM_PROMPT = (
+    'You are a customizable marketing AI agent. '
+    'Execute the user-defined task using the provided context and upstream data. '
+    'Respond ONLY with valid JSON. Do not wrap the JSON in markdown code fences.'
+)
+
+CUSTOM_AGENT_JSON_SCHEMA_HINT = """{
+  "response": "Your task output as structured text or data",
+  "metadata": {"notes": "Any relevant metadata about the execution"}
+}"""
+
+
+def build_custom_agent_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
+    custom_prompt = str(payload.get('prompt') or '').strip()
+    upstream_text = str(payload.get('upstream_text') or '').strip()
+    brand_context = str(payload.get('brand_context') or '').strip()
+    feedback = str(payload.get('feedback') or '').strip()
+    name = str(payload.get('name') or '自定义智能体').strip()
+
+    user_lines = [
+        f'Agent name: {name}',
+        f'Agent task definition:\n{custom_prompt or "No custom prompt provided — use upstream context to generate marketing content."}',
+        f'- Required JSON schema:\n{CUSTOM_AGENT_JSON_SCHEMA_HINT}',
+    ]
+    if upstream_text:
+        user_lines.append(f'- Upstream node outputs:\n{upstream_text}')
+    if brand_context:
+        user_lines.append(f'- Brand context:\n{brand_context}')
+    if feedback:
+        user_lines.append(f'- Revision feedback (apply strictly): {feedback}')
+
+    return [
+        {'role': 'system', 'content': CUSTOM_AGENT_SYSTEM_PROMPT},
+        {'role': 'user', 'content': '\n'.join(user_lines)},
+    ]
+
+
+def normalize_custom_agent_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result, str):
+        try:
+            result = json.loads(_strip_json_fence(result))
+        except json.JSONDecodeError:
+            result = {'response': result, 'metadata': {}}
+    if not isinstance(result, dict):
+        result = {}
+
+    response = str(result.get('response') or result.get('content') or result.get('text') or '').strip()
+    metadata = result.get('metadata') if isinstance(result.get('metadata'), dict) else {}
+
+    if not response:
+        response = f"{payload.get('name', '自定义智能体')} 已完成处理。"
+
+    return {
+        'response': response,
+        'metadata': {
+            'model_used': metadata.get('model_used', ''),
+            'upstream_count': len(payload.get('upstream', [])),
+            **metadata,
+        },
+    }
+
+
+BRAINSTORM_SYSTEM_PROMPT = (
+    'You are a marketing workflow architect AI. '
+    'Given a creative marketing idea from the user, you design a complete marketing workflow '
+    'consisting of interconnected AI processing nodes that form a DAG (directed acyclic graph). '
+    'Analyze the idea to infer brand context (brand name, audience, tone, selling points, visual style, campaign goal). '
+    'Choose appropriate node types based on the idea:\n'
+    '- "context" for brand/audience setup (always include at least one as the starting node)\n'
+    '- "copy" for text/social media/marketing copy generation\n'
+    '- "image" for visual/image generation\n'
+    '- "image_prompt" for crafting image prompts from text\n'
+    '- "image_generation" for actual image creation\n'
+    '- "storyboard" for video storyboard/scene planning\n'
+    '- "audio" for voiceover/audio generation\n'
+    '- "retrieval" for research and reference gathering\n'
+    '- "review" for content review and compliance checking\n'
+    '- "custom_agent" for specialized custom tasks\n'
+    '- "rag_search" for semantic retrieval\n'
+    'Position nodes horizontally with 300px spacing (x starts at 80, y around 120). '
+    'Each node must have width=260, height=166. '
+    'Create edges that form a valid DAG with no cycles. '
+    'Set sensible default config values for each node based on the inferred brand context. '
+    'Respond ONLY with valid JSON matching the required schema. '
+    'Do not wrap the JSON in markdown code fences.'
+)
+
+BRAINSTORM_JSON_SCHEMA_HINT = """{
+  "workflow_name": "Short descriptive name for the workflow",
+  "brand_context": {
+    "brand_name": "Inferred brand or product name",
+    "audience": "Target audience description",
+    "tone": "Communication tone (e.g., playful, professional, bold)",
+    "selling_points": "Key selling points or value proposition",
+    "visual_style": "Visual style preference (e.g., minimalist, vibrant, editorial)",
+    "campaign_goal": "Overall campaign objective"
+  },
+  "nodes": [
+    {
+      "id": "context-1",
+      "type": "context",
+      "label": "Brand Context",
+      "x": 80,
+      "y": 120,
+      "width": 260,
+      "height": 166,
+      "config": {
+        "summary": "Brand and campaign brief"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-context-1-copy-1",
+      "source": "context-1",
+      "target": "copy-1"
+    }
+  ],
+  "summary": "Brief explanation of the workflow plan and what each node does"
+}"""
+
+_BRAINSTORM_NODE_CONFIG_HINTS = {
+    'context': 'config.summary (string): brand/campaign brief',
+    'copy': 'config.tone (string), config.platform (string), config.product_description (string)',
+    'image': 'config.style (string), config.aspect_ratio (string, e.g. "1:1"), config.prompt (string)',
+    'image_prompt': 'config.tone (string), config.platform (string)',
+    'image_generation': 'config.style (string), config.aspect_ratio (string)',
+    'storyboard': 'config.video_topic (string), config.duration (number, seconds), config.target_audience (string)',
+    'audio': 'config.text (string), config.voice_id (string), config.speed (number)',
+    'retrieval': 'config.query (string)',
+    'review': 'config.forbidden_words (string), config.channel_rules (string)',
+    'custom_agent': 'config.name (string), config.icon (string), config.prompt (string), config.temperature (number 0-1)',
+    'rag_search': 'config.query (string), config.scope (string)',
+}
+
+
+def build_brainstorm_messages(idea: str, brand_context_hint: dict[str, Any]) -> list[dict[str, str]]:
+    from api.contracts import NODE_IO_SCHEMAS
+
+    io_lines = []
+    for node_type, schema in NODE_IO_SCHEMAS.items():
+        inputs = ', '.join(f'{k}({v})' for k, v in schema.get('input', {}).items()) or 'none'
+        outputs = ', '.join(f'{k}({v})' for k, v in schema.get('output', {}).items()) or 'none'
+        config_hint = _BRAINSTORM_NODE_CONFIG_HINTS.get(node_type, 'config (object)')
+        io_lines.append(f'  - {node_type}: inputs=[{inputs}] outputs=[{outputs}] {config_hint}')
+
+    system_parts = [
+        BRAINSTORM_SYSTEM_PROMPT,
+        f'\nAvailable node types and their IO schemas:\n' + '\n'.join(io_lines),
+        f'\nRequired JSON output schema:\n{BRAINSTORM_JSON_SCHEMA_HINT}',
+    ]
+
+    user_lines = [
+        'Generate a marketing workflow for the following idea:',
+        idea,
+    ]
+    if brand_context_hint:
+        user_lines.append(
+            f'\nExisting brand context (use as hints, override if the idea suggests something different):\n'
+            f'{json.dumps(brand_context_hint, ensure_ascii=False)}'
+        )
+
+    return [
+        {'role': 'system', 'content': '\n'.join(system_parts)},
+        {'role': 'user', 'content': '\n'.join(user_lines)},
+    ]
+
+
+def normalize_brainstorm_result(result: Any, idea: str) -> dict[str, Any]:
+    if isinstance(result, str):
+        try:
+            result = json.loads(_strip_json_fence(result))
+        except json.JSONDecodeError:
+            result = {}
+    if not isinstance(result, dict):
+        result = {}
+
+    from api.contracts import VALID_NODE_TYPES
+
+    workflow_name = str(result.get('workflow_name') or idea[:40]).strip()
+    summary = str(result.get('summary') or f'Workflow generated from: {idea[:80]}').strip()
+
+    brand_context = result.get('brand_context')
+    if not isinstance(brand_context, dict):
+        brand_context = {}
+    brand_context.setdefault('brand_name', idea.split()[0] if idea.split() else 'Brand')
+    brand_context.setdefault('audience', 'General audience')
+    brand_context.setdefault('tone', 'Professional')
+    brand_context.setdefault('selling_points', idea[:100])
+    brand_context.setdefault('visual_style', 'modern')
+    brand_context.setdefault('campaign_goal', idea[:80])
+
+    nodes = result.get('nodes')
+    if not isinstance(nodes, list):
+        nodes = []
+    normalized_nodes: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = str(node.get('type') or 'context').strip()
+        if node_type not in VALID_NODE_TYPES:
+            node_type = 'custom_agent'
+        node_id = str(node.get('id') or f'{node_type}-{len(normalized_nodes) + 1}').strip()
+        normalized_nodes.append({
+            'id': node_id,
+            'type': node_type,
+            'label': str(node.get('label') or node_type.replace('_', ' ').title()).strip(),
+            'x': int(node.get('x') or 80 + len(normalized_nodes) * 300),
+            'y': int(node.get('y') or 120),
+            'width': int(node.get('width') or 260),
+            'height': int(node.get('height') or 166),
+            'config': node.get('config') if isinstance(node.get('config'), dict) else {},
+        })
+
+    if not normalized_nodes:
+        normalized_nodes = [
+            {
+                'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
+                'x': 80, 'y': 120, 'width': 260, 'height': 166,
+                'config': {'summary': idea[:200]},
+            },
+            {
+                'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
+                'x': 380, 'y': 120, 'width': 260, 'height': 166,
+                'config': {'tone': brand_context.get('tone', 'Professional'), 'platform': 'Xiaohongshu'},
+            },
+        ]
+
+    context_nodes = [n for n in normalized_nodes if n['type'] == 'context']
+    if context_nodes and not context_nodes[0]['config'].get('summary'):
+        context_nodes[0]['config']['summary'] = idea[:200]
+
+    edges = result.get('edges')
+    if not isinstance(edges, list):
+        edges = []
+    node_ids = {n['id'] for n in normalized_nodes}
+    normalized_edges: list[dict[str, Any]] = []
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        source = str(edge.get('source') or '').strip()
+        target = str(edge.get('target') or '').strip()
+        if source in node_ids and target in node_ids and source != target:
+            edge_id = str(edge.get('id') or f'edge-{source}-{target}').strip()
+            normalized_edges.append({'id': edge_id, 'source': source, 'target': target})
+
+    if not normalized_edges and len(normalized_nodes) >= 2:
+        for i in range(len(normalized_nodes) - 1):
+            src = normalized_nodes[i]['id']
+            tgt = normalized_nodes[i + 1]['id']
+            normalized_edges.append({'id': f'edge-{src}-{tgt}', 'source': src, 'target': tgt})
+
+    return {
+        'workflow_name': workflow_name,
+        'brand_context': brand_context,
+        'nodes': normalized_nodes,
+        'edges': normalized_edges,
+        'summary': summary,
+    }

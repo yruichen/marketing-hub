@@ -50,6 +50,33 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
         'input': {'input': 'Any'},
         'output': {'response': 'String', 'metadata': 'Object'},
     },
+    'rag_search': {
+        'input': {'query': 'String', 'scope': 'String'},
+        'output': {'references': 'Reference[]', 'insights': 'String[]', 'brand_memory': 'Object'},
+    },
+    'image_prompt': {
+        'input': {'title': 'String', 'body': 'String', 'brand_summary': 'String'},
+        'output': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style': 'String'},
+    },
+    'image_generation': {
+        'input': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style': 'String'},
+        'output': {'image_asset': 'Asset', 'image_url': 'URL', 'revised_prompt': 'String'},
+    },
+    'retrieval': {
+        'input': {'query': 'String', 'scope': 'String'},
+        'output': {'references': 'Reference[]', 'insights': 'String[]', 'brand_memory': 'Object'},
+    },
+    'review': {
+        'input': {'title': 'String', 'body': 'String', 'tags': 'String[]'},
+        'output': {'sensitive_word_issues': 'Issue[]', 'brand_consistency': 'Score', 'channel_rules': 'Issue[]'},
+    },
+}
+
+NODE_TYPE_ALIASES: dict[str, str] = {
+    'image_prompt': 'copy',
+    'image_generation': 'image',
+    'retrieval': 'rag_search',
+    'review': 'copy',
 }
 
 

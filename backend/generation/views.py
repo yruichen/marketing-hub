@@ -10,6 +10,7 @@ from api.permissions import organization_for_user
 from api.scope import as_bool, get_scope
 from ai_gateway.content_package import generate_content_package
 from api.services import (
+    brainstorm_workflow,
     create_generation_task,
     membership_role,
     queue_generation_task,
@@ -335,3 +336,43 @@ class WorkflowNodeRetryView(APIView):
             'draft': serialize_workspace_draft(draft),
             'task': serialize_task(task) if task else None,
         }), 'workspace_draft', draft.id)
+
+
+class BrainstormView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationRateThrottle]
+
+    def post(self, request):
+        idea = str(request.data.get('idea', '')).strip()
+        if not idea:
+            return Response({'error': 'idea is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(idea) > 2000:
+            return Response({'error': 'idea must be 2000 characters or fewer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user, org, project, campaign = get_scope(request)
+        request_username = request.data.get('username') or (user.username if user else None)
+        replay, idempotency = idempotency_response(request, org)
+        if replay:
+            return replay
+
+        try:
+            draft, brainstorm_result = brainstorm_workflow(
+                idea,
+                organization=org,
+                project=project,
+                campaign=campaign,
+                username=request_username,
+            )
+        except Exception as exc:
+            return Response(
+                {'error': f'Brainstorm failed: {str(exc)[:300]}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        response = Response({
+            'draft': serialize_workspace_draft(draft),
+            'summary': brainstorm_result.get('summary', ''),
+            'workflow_name': brainstorm_result.get('workflow_name', draft.name),
+            'brand_context': brainstorm_result.get('brand_context', draft.brand_context),
+        }, status=status.HTTP_201_CREATED)
+        return finalize_idempotency(idempotency, response, 'workspace_draft', draft.id)
