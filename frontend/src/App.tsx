@@ -10,7 +10,6 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   ChevronRight,
-  Grid3X3,
   ListChecks,
   PanelRight,
   Search,
@@ -22,6 +21,7 @@ import { pathForSection, sectionFromPath } from './app/routes';
 import { TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
+import { AssetsLibrary } from './features/assets';
 
 const WorkflowBuilder = lazy(() =>
   import('./features/workflows').then((module) => ({ default: module.WorkflowBuilder })),
@@ -1143,6 +1143,7 @@ export default function App() {
               activeProjectId={workspaceScope?.project.id}
               onSelectScope={handleSelectProjectScope}
               triggerToast={triggerToast}
+              onOpenAssetsLibrary={() => setActiveTab('assets')}
             />
           )}
 
@@ -2156,14 +2157,8 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'assets' && (
-            <EmptyOperationalState
-              icon={Grid3X3}
-              title="资产库"
-              description="图片、音频、文案、分镜和文档会按项目沉淀在这里。"
-              actionLabel="先生成内容包"
-              onAction={() => setActiveTab('content')}
-            />
+          {activeTab === 'assets' && workspaceScope?.organization && (
+            <AssetsLibrary organizationSlug={workspaceScope.organization.slug} />
           )}
 
           {activeTab === 'review' && (
@@ -2597,33 +2592,6 @@ function AgentTerminal({ logs }: { logs: string[] }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function EmptyOperationalState({
-  icon: Icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: {
-  icon: typeof Grid3X3;
-  title: string;
-  description: string;
-  actionLabel: string;
-  onAction: () => void;
-}) {
-  return (
-    <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-8 shadow-editorial-sm min-h-[360px] flex flex-col items-center justify-center text-center gap-4">
-      <Icon className="h-8 w-8 text-[var(--editorial-text-gray)]" aria-hidden="true" />
-      <div>
-        <h3 className="text-sm font-black uppercase">{title}</h3>
-        <p className="text-xs text-[var(--editorial-text-gray)] mt-2 max-w-md leading-6">{description}</p>
-      </div>
-      <button type="button" onClick={onAction} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase">
-        {actionLabel}
-      </button>
     </div>
   );
 }

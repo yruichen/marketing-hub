@@ -36,7 +36,7 @@ interface ContextMenuState {
 const ALL_FILTER = '全部';
 const ARCHIVED_PSEUDO = '__archived__';
 
-export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast }: ProjectManagerProps) {
+export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast, onOpenAssetsLibrary }: ProjectManagerProps) {
   const queryClient = useQueryClient();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
@@ -469,6 +469,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           if (selectedProject) void deleteProject(selectedProject);
         }}
         onClose={() => setSelectedProject(null)}
+        onOpenAssetsLibrary={onOpenAssetsLibrary ?? (() => undefined)}
       />
 
       {contextMenu ? (

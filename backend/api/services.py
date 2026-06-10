@@ -376,7 +376,9 @@ def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) 
 
     return Asset.objects.create(
         organization=task.organization,
-        project=task.project,
+        # 仅当 task 有关联 project 时才带 project_id：兼容历史数据，
+        # 同时让无项目上下文的 task 也能入库（例如 brainstorm 触发的）。
+        project=task.project if task.project_id else None,
         campaign=task.campaign,
         asset_type=asset_type,
         title=title[:255],

@@ -420,13 +420,15 @@
 /* 检查器（右侧） */
 .desktop-inspector {
   width: 320px;
+  height: 80vh;
   max-height: 80vh;
   border-left: 1.5px solid var(--editorial-stroke);
   background: var(--editorial-paper);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  /* 不在这里 overflow-y：让 __body 内部自己滚。
+     锁死 height 后，桌面 grid 列宽不再随 inspector 内容变化而跳动。 */
   transform: translateX(100%);
   opacity: 0;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
@@ -497,10 +499,13 @@
 
 .desktop-inspector__body {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
   padding: 16px;
+  padding-right: 20px;
 }
 
 .desktop-inspector__section {
