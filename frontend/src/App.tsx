@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { LoginPortal } from './features/auth';
 import {
   Bell,
   BookOpen,
@@ -262,9 +263,10 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return storedDarkMode;
   });
-  const [sidebarToggled, setSidebarToggled] = useState(true);
+  const [sidebarToggled, setSidebarToggled] = useState(false);
 
   const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
+  const mainRef = useRef<HTMLElement>(null);
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
   const [authError, setAuthError] = useState('');
   const loginForm = useForm<LoginFormValues>({
@@ -406,6 +408,10 @@ export default function App() {
   useEffect(() => {
     setActiveSection(activeTab);
   }, [activeTab, setActiveSection]);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
 
   const setActiveTab = useCallback((tab: Tab) => {
     setActiveSection(tab);
@@ -602,6 +608,8 @@ export default function App() {
         localStorage.setItem('mh_username', data.username);
         setToken(sessionMarker);
         setUsername(data.username);
+        // 强制回 /：其他 tab 走"非 brainstorm 即展开侧栏"的分流，登录后必须落在 brainstorm 沉浸式页面
+        navigate('/');
         triggerToast(`欢迎回来, ${data.username}!`, 'success');
       } else {
         setAuthError(data.error || '登录失败');
@@ -1015,87 +1023,18 @@ export default function App() {
   // Auth Guard Portal
   if (!token) {
     return (
-      <div className="min-h-screen bg-[var(--editorial-bg)] flex flex-col justify-center items-center p-4 relative overflow-hidden editorial-grid transition-colors duration-250">
-        
-        {/* Asymmetrical hand-cut sheet container */}
-        <div className="w-full max-w-md bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial p-8 paper-sheet-1 relative">
-          
-          <div className="flex flex-col items-center mb-8">
-            <h1 className="text-3xl font-bold tracking-tight text-[var(--editorial-text)] serif-header mb-1">
-              Marketing-Hub
-            </h1>
-            <p className="text-[var(--editorial-text-gray)] text-[10px] uppercase tracking-widest font-mono font-bold">
-              营销内容工作台
-            </p>
-          </div>
-
-          <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-6">
-            {authError && (
-              <div className="border border-[var(--editorial-stroke)] text-rose-600 bg-rose-50 dark:bg-rose-950/20 p-3 text-xs font-mono font-semibold">
-                <span>{authError}</span>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// USERNAME</label>
-              <input
-                type="text"
-                {...loginForm.register('username')}
-                className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
-                placeholder="输入管理员账号"
-                aria-invalid={Boolean(loginForm.formState.errors.username)}
-              />
-              {loginForm.formState.errors.username && (
-                <span className="text-[10px] text-rose-600 font-bold">{loginForm.formState.errors.username.message}</span>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider block font-mono">// PASSWORD</label>
-              <input
-                type="password"
-                {...loginForm.register('password')}
-                className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] px-2 py-2 text-sm focus:outline-none focus:border-b-2 font-mono transition-all"
-                placeholder="输入密码"
-                aria-invalid={Boolean(loginForm.formState.errors.password)}
-              />
-              {loginForm.formState.errors.password && (
-                <span className="text-[10px] text-rose-600 font-bold">{loginForm.formState.errors.password.message}</span>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-              ) : null}
-              {loading ? '正在登录工作台...' : '进入工作台'}
-            </button>
-          </form>
-
-          {/* Quick preset credentials helper */}
-          <div className="mt-6 pt-5 border-t border-dashed border-[var(--editorial-stroke)] text-center font-mono">
-            <span className="text-[10px] text-[var(--editorial-text-gray)] font-semibold block">演示账号: ROOT / 123</span>
-            <button 
-              onClick={() => {
-                loginForm.reset({ username: 'ROOT', password: '123' });
-                triggerToast('预设凭据已载入', 'info');
-              }}
-              className="mt-2 text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline"
-            >
-              [ 自动填充演示凭据 ]
-            </button>
-          </div>
-        </div>
-      </div>
+      <LoginPortal
+        loading={loading}
+        authError={authError}
+        loginForm={loginForm}
+        handleLogin={handleLogin}
+        triggerToast={triggerToast}
+      />
     );
   }
 
   return (
-    <div className={`min-h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
+    <div className={`min-h-screen xl:h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
       
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -1131,7 +1070,7 @@ export default function App() {
       )}
 
       {/* 主工作区 */}
-      <main className={`min-w-0 flex flex-col overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'p-4 md:p-8'}`}>
+      <main ref={mainRef} className={`min-w-0 xl:h-full flex flex-col overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'p-4 md:p-8'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
