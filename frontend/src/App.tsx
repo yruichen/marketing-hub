@@ -262,7 +262,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return storedDarkMode;
   });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarToggled, setSidebarToggled] = useState(true);
 
   const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
@@ -273,6 +273,7 @@ export default function App() {
   });
   
   const activeTab = sectionFromPath(location.pathname);
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
   const [globalSearch, setGlobalSearch] = useState('');
@@ -405,13 +406,6 @@ export default function App() {
   useEffect(() => {
     setActiveSection(activeTab);
   }, [activeTab, setActiveSection]);
-
-  // Auto-hide sidebar on brainstorm page
-  useEffect(() => {
-    if (activeTab === 'brainstorm') {
-      setSidebarOpen(false);
-    }
-  }, [activeTab]);
 
   const setActiveTab = useCallback((tab: Tab) => {
     setActiveSection(tab);
@@ -1234,10 +1228,10 @@ export default function App() {
                 username={username || 'ROOT'}
                 triggerToast={triggerToast}
                 onComplete={(draftId) => {
-                  setSidebarOpen(true);
+                  setSidebarToggled(true);
                   navigate(`/workflows?draft=${draftId}`);
                 }}
-                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                onToggleSidebar={() => setSidebarToggled((prev) => !prev)}
               />
             </Suspense>
           )}
