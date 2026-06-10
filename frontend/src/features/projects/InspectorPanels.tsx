@@ -149,21 +149,37 @@ export function InspectorCampaigns({ campaigns, onSelectCampaign }: InspectorCam
 
 interface InspectorAssetsProps {
   assets: Array<{ id: number; asset_type: string; title: string; created_at: string }>;
+  onOpenLibrary: () => void;
 }
 
-export function InspectorAssets({ assets }: InspectorAssetsProps) {
+export function InspectorAssets({ assets, onOpenLibrary }: InspectorAssetsProps) {
   if (assets.length === 0) {
-    return <p className="text-[10px] text-[var(--editorial-text-gray)]">暂无资产记录</p>;
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-[10px] text-[var(--editorial-text-gray)]">项目暂无资产记录</p>
+        <button type="button" onClick={onOpenLibrary} className="text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline self-start">
+          → 打开资产库查看
+        </button>
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-1">
-      {assets.map((asset) => (
+      {assets.slice(0, 5).map((asset) => (
         <div key={asset.id} className="border-b border-dashed border-[var(--editorial-stroke)]/30 pb-1.5 text-[10px]">
           <span className="font-black uppercase">{asset.asset_type}</span>
           <span className="mx-1.5 text-[var(--editorial-text-gray)]">/</span>
           <span>{asset.title}</span>
         </div>
       ))}
+      {assets.length > 5 ? (
+        <p className="text-[9px] text-[var(--editorial-text-gray)] mt-1">
+          还有 {assets.length - 5} 个资产…
+        </p>
+      ) : null}
+      <button type="button" onClick={onOpenLibrary} className="text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline self-start mt-1">
+        → 打开资产库（{assets.length}）
+      </button>
     </div>
   );
 }

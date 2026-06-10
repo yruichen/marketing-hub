@@ -10,6 +10,8 @@ from workspaces.views import (
     ProjectDetailView,
     WorkflowTemplateCollectionView,
     WorkflowTemplateForkView,
+    WorkspaceAssetDetailView,
+    WorkspaceAssetsView,
     WorkspaceBootstrapView,
     WorkspaceDraftCollectionView,
     WorkspaceDraftDetailView,
@@ -31,4 +33,6 @@ urlpatterns = [
     path('templates/', WorkflowTemplateCollectionView.as_view(), name='workflow_template_collection'),
     path('templates/<int:pk>/fork/', WorkflowTemplateForkView.as_view(), name='workflow_template_fork'),
     path('dashboard/', AnalyticsDashboardView.as_view(), name='dashboard'),
+    path('workspace/assets/', WorkspaceAssetsView.as_view(), name='workspace_assets'),
+    path('workspace/assets/<int:pk>/', WorkspaceAssetDetailView.as_view(), name='workspace_asset_detail'),
 ]

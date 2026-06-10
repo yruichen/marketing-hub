@@ -25,6 +25,7 @@ interface InspectorProps {
   onArchive: () => void;
   onDelete: () => void;
   onClose: () => void;
+  onOpenAssetsLibrary: () => void;
 }
 
 /**
@@ -46,6 +47,7 @@ export function Inspector({
   onArchive,
   onDelete,
   onClose,
+  onOpenAssetsLibrary,
 }: InspectorProps) {
   return (
     <aside
@@ -112,7 +114,7 @@ export function Inspector({
               badge={selectedProject.assets.length}
             >
               <div className="max-h-[240px] overflow-y-auto">
-                <InspectorAssets assets={selectedProject.assets} />
+                <InspectorAssets assets={selectedProject.assets} onOpenLibrary={onOpenAssetsLibrary} />
               </div>
             </CollapsibleSection>
           </>

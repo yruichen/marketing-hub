@@ -10,7 +10,7 @@ import '@xyflow/react/dist/style.css';
 import { apiGet, apiPatch, apiPost } from '../hooks/useApi';
 import type {
   BrandContext, GenerationTaskRecord,
-  WorkflowEdge, WorkflowNode, WorkflowTemplateRecord, WorkspaceDraftRecord,
+  WorkflowEdge, WorkflowNode, WorkspaceDraftRecord,
 } from '../types/workspace';
 import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, statusLabels, type NodeType } from '../features/workflows/constants';
 import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps } from '../features/workflows/types';
@@ -18,7 +18,6 @@ import { nodeStatusDotClass, schemasCompatible } from '../features/workflows/uti
 import { WorkflowNodeComponent } from '../features/workflows/WorkflowNodeComponent';
 import { NodeConfigPopover } from '../features/workflows/NodeConfigPopover';
 import { PropertyPanel } from '../features/workflows/PropertyPanel';
-import { BottomPanels } from '../features/workflows/BottomPanels';
 import { ContextMenu } from '../features/workflows/ContextMenu';
 import { CustomAgentDialog, type CustomAgentForm } from '../features/workflows/CustomAgentDialog';
 
@@ -47,7 +46,7 @@ const defaultEdgeOpts = {
 
 // --- Main Component ---
 
-export function WorkflowBuilder({ organization, project, campaign, username, triggerToast }: WorkflowBuilderProps) {
+export function WorkflowBuilder({ project, campaign, username, triggerToast }: WorkflowBuilderProps) {
   const { fitView, getViewport } = useReactFlow();
 
   // ReactFlow native state — THE CORE FIX
@@ -61,13 +60,11 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [connectionSource, setConnectionSource] = useState('');
-  const [templates, setTemplates] = useState<WorkflowTemplateRecord[]>([]);
   const [feedback, setFeedback] = useState('');
   const [loadingState, setLoadingState] = useState<'idle' | 'saving' | 'running' | 'retrying' | 'loading'>('idle');
   const [lastTasks, setLastTasks] = useState<GenerationTaskRecord[]>([]);
   const [propertyPanelOpen, setPropertyPanelOpen] = useState(true);
   const [readOnly, setReadOnly] = useState(() => new URLSearchParams(window.location.search).get('share') === 'readonly');
-  const [templateScope, setTemplateScope] = useState<'organization' | 'public'>('organization');
   const [showCustomAgent, setShowCustomAgent] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const [edgeContextMenu, setEdgeContextMenu] = useState<{ edgeId: string; x: number; y: number } | null>(null);
@@ -95,7 +92,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   // History
   const [history, setHistory] = useState<WorkflowSnapshot[]>([]);
   const [future, setFuture] = useState<WorkflowSnapshot[]>([]);
-  const [versions, setVersions] = useState<WorkflowSnapshot[]>([]);
   const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idCounterRef = useRef(0);
   const dragSnapshotRef = useRef<WorkflowSnapshot | null>(null);
@@ -153,13 +149,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
 
   // --- Data Loading ---
 
-  const loadTemplates = useCallback(async () => {
-    try {
-      const suffix = organization?.slug ? `?organization=${encodeURIComponent(organization.slug)}` : '';
-      setTemplates(await apiGet<WorkflowTemplateRecord[]>(`/templates/${suffix}`));
-    } catch { triggerToast('模板加载失败', 'error'); }
-  }, [organization, triggerToast]);
-
   const loadProjectWorkflow = useCallback(async () => {
     if (!project) return;
     setLoadingState('loading');
@@ -178,7 +167,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
         setSelectedNodeId(wfNodes[0]?.id || '');
         setSelectedNodeIds(wfNodes[0]?.id ? [wfNodes[0].id] : []);
         const snap: WorkflowSnapshot = { id: `draft-${d.id}`, label: d.name || '灵感风暴工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: wfNodes[0]?.id || '' };
-        setHistory([snap]); setFuture([]); setVersions([snap]);
+        setHistory([snap]); setFuture([]);
         const taskIds = d.last_run_summary?.task_ids as number[] | undefined;
         if (taskIds?.length) {
           const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
@@ -202,7 +191,7 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       setSelectedNodeId(wfNodes[0]?.id || '');
       setSelectedNodeIds(wfNodes[0]?.id ? [wfNodes[0].id] : []);
       const snap: WorkflowSnapshot = { id: `${detail.id}-${d?.id || 'init'}`, label: d ? '加载草稿' : '默认工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: wfNodes[0]?.id || '' };
-      setHistory([snap]); setFuture([]); setVersions([snap]);
+      setHistory([snap]); setFuture([]);
       // Restore run history from persisted last_run_summary
       const taskIds = d?.last_run_summary?.task_ids as number[] | undefined;
       if (taskIds?.length) {
@@ -214,9 +203,9 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
   }, [campaign?.id, project, triggerToast, setRfNodes, setRfEdges]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => { loadProjectWorkflow(); loadTemplates(); }, 0);
+    const t = window.setTimeout(() => { loadProjectWorkflow(); }, 0);
     return () => window.clearTimeout(t);
-  }, [loadProjectWorkflow, loadTemplates]);
+  }, [loadProjectWorkflow]);
 
   // --- API Actions ---
 
@@ -231,7 +220,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     setBrandContext(saved.brand_context);
     const snap: WorkflowSnapshot = { id: `${saved.id}-${Date.now()}`, label: silent ? '自动保存' : '手动保存', createdAt: new Date().toISOString(), nodes: sn, edges: saved.edges, brandContext: saved.brand_context, selectedNodeId };
     setHistory((prev) => [...prev.slice(-24), snap]);
-    setVersions((prev) => [snap, ...prev].slice(0, 12));
     setFuture([]);
     if (!silent) triggerToast('画布草稿已保存', 'success');
     return saved;
@@ -267,8 +255,10 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       setRfNodes(sn.map(wfToRF));
       setRfEdges(data.draft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
       setLastTasks(data.tasks);
-      setVersions((prev) => [{ id: `${data.draft.id}-${Date.now()}`, label: '运行版本', createdAt: new Date().toISOString(), nodes: sn, edges: data.draft.edges, brandContext: data.draft.brand_context, selectedNodeId: data.draft.selected_node_id }, ...prev].slice(0, 12));
       triggerToast('画布工作流执行完毕', 'success');
+      // 后端 run_now=True 时 run 接口返回前所有 task 已同步执行完，assets 已落库。
+      // 通知 ProjectManager 重新拉取项目详情，inspector 的资产列表自动更新。
+      window.dispatchEvent(new CustomEvent('mh:assets-updated', { detail: { projectId: project.id } }));
     } catch (err) { triggerToast(`工作流执行失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
   };
@@ -289,29 +279,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
       triggerToast('节点已按修改意见重试', 'success');
     } catch (err) { triggerToast(`节点重试失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
-  };
-
-  const shareTemplate = async () => {
-    if (!project || readOnly) return;
-    try {
-      const saved = await persistDraft(nodes, edges, true);
-      const tpl = await apiPost<WorkflowTemplateRecord>('/templates/', { project_id: project.id, campaign_id: campaign?.id, title: `${project.name} Workflow`, description: `${saved.nodes.length} nodes`, username, brand_context: brandContext, nodes: saved.nodes, edges: saved.edges, tags: ['workflow', project.slug], is_public: templateScope === 'public' });
-      setTemplates((prev) => [tpl, ...prev]); triggerToast('工作流模板已发布', 'success');
-    } catch { triggerToast('模板发布失败', 'error'); }
-  };
-
-  const forkTemplate = async (template: WorkflowTemplateRecord) => {
-    if (!project || readOnly) return;
-    try {
-      const data = await apiPost<{ draft: WorkspaceDraftRecord; template: WorkflowTemplateRecord }>(`/templates/${template.id}/fork/`, { project_id: project.id, campaign_id: campaign?.id, name: `${template.title} Fork` });
-      setDraft(data.draft);
-      const sn = data.draft.nodes.map((n) => normalizeWorkflowNode(n, data.draft.brand_context || brandContext));
-      setRfNodes(sn.map(wfToRF));
-      setRfEdges(data.draft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
-      setBrandContext(data.draft.brand_context);
-      setTemplates((prev) => prev.map((t) => (t.id === data.template.id ? data.template : t)));
-      triggerToast('模板已复制到当前项目', 'success');
-    } catch { triggerToast('模板复制失败', 'error'); }
   };
 
   // --- UI Event Handlers ---
@@ -448,13 +415,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
     setSelectedNodeId(newNodes[0]?.id || '');
     triggerToast('已粘贴节点', 'success');
   }, [readOnly, markHistory, getViewport, setRfNodes, setRfEdges, triggerToast]);
-
-  const rollbackVersion = useCallback((snap: WorkflowSnapshot) => {
-    if (readOnly) return;
-    markHistory('版本回滚前');
-    restoreSnapshot(snap);
-    triggerToast('已回滚到选中版本', 'success');
-  }, [readOnly, markHistory, restoreSnapshot, triggerToast]);
 
   const createReadOnlyShare = useCallback(async () => {
     const url = new URL(window.location.href);
@@ -653,13 +613,6 @@ export function WorkflowBuilder({ organization, project, campaign, username, tri
           )}
         </div>
       </section>
-
-      <BottomPanels
-        templates={templates} versions={versions} lastTasks={lastTasks}
-        templateScope={templateScope} readOnly={readOnly}
-        onSetTemplateScope={setTemplateScope} onShareTemplate={shareTemplate}
-        onForkTemplate={forkTemplate} onRollbackVersion={rollbackVersion}
-      />
 
       {contextMenu && (
         <ContextMenu

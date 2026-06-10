@@ -36,7 +36,7 @@ interface ContextMenuState {
 const ALL_FILTER = '全部';
 const ARCHIVED_PSEUDO = '__archived__';
 
-export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast }: ProjectManagerProps) {
+export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast, onOpenAssetsLibrary }: ProjectManagerProps) {
   const queryClient = useQueryClient();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
@@ -129,6 +129,19 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     },
     [triggerToast],
   );
+
+  // 监听工作流运行事件，刷新当前选中项目的详情（含 assets）。
+  useEffect(() => {
+    const onAssetsUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId: number }>).detail;
+      if (!detail?.projectId) return;
+      if (selectedProject?.id === detail.projectId) {
+        void loadProject(detail.projectId);
+      }
+    };
+    window.addEventListener('mh:assets-updated', onAssetsUpdated);
+    return () => window.removeEventListener('mh:assets-updated', onAssetsUpdated);
+  }, [selectedProject?.id, loadProject]);
 
   // ===== actions =====
   const createFolder = async (name: string) => {
@@ -456,6 +469,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           if (selectedProject) void deleteProject(selectedProject);
         }}
         onClose={() => setSelectedProject(null)}
+        onOpenAssetsLibrary={onOpenAssetsLibrary ?? (() => undefined)}
       />
 
       {contextMenu ? (

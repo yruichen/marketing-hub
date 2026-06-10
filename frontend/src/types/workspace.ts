@@ -199,3 +199,23 @@ export interface GenerationTaskRecord {
   error_message: string;
   created_at: string;
 }
+
+export type AssetType = 'image' | 'audio' | 'video' | 'document';
+
+export interface AssetRecord {
+  id: number;
+  organization_id: number;
+  project_id: number | null;
+  campaign_id: number | null;
+  asset_type: AssetType;
+  title: string;
+  source_url: string;
+  tags: string[];
+  metadata: {
+    generation_task_id?: number;
+    task_type?: string;
+    result?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  created_at: string;
+}

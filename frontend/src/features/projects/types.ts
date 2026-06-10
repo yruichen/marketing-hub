@@ -22,6 +22,7 @@ export interface ProjectManagerProps {
   activeProjectId?: number;
   onSelectScope: (project: ProjectRecord, campaign?: CampaignRecord) => void;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  onOpenAssetsLibrary?: () => void;
 }
 
 export const PLATFORM_CHOICES = ['小红书', '抖音', '微信公众号', '视频号', 'B站'];
