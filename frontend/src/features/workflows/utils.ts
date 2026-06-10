@@ -16,16 +16,80 @@ export function nodeStatusDotClass(status?: string) {
   return 'bg-[var(--editorial-text-gray)]';
 }
 
+export type NodeOutputDisplay =
+  | { kind: 'empty'; text: string }
+  | { kind: 'text'; text: string }
+  | { kind: 'image'; text: string; imageUrl: string }
+  | { kind: 'video'; text: string; videoUrl: string; thumbnailUrl?: string };
+
+function pickOutputText(output: Record<string, unknown>): string | null {
+  const textKeys = ['body', 'prompt', 'response', 'title', 'summary', 'revised_prompt', 'voiceover', 'text'];
+  for (const key of textKeys) {
+    const value = output[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  if (Array.isArray(output.paragraphs) && output.paragraphs.length > 0) {
+    return (output.paragraphs as string[]).filter(Boolean).join('\n');
+  }
+  if (Array.isArray(output.scenes) && output.scenes.length > 0) {
+    return `已生成 ${output.scenes.length} 个分镜场景`;
+  }
+  if (Array.isArray(output.shots) && output.shots.length > 0) {
+    return `已生成 ${output.shots.length} 个分镜镜头`;
+  }
+  if (typeof output.video_url === 'string' && output.video_url) {
+    const seconds = output.duration_seconds;
+    return seconds ? `已生成 ${seconds} 秒视频` : '已生成视频';
+  }
+  if (Array.isArray(output.insights) && output.insights.length > 0) {
+    return (output.insights as string[]).slice(0, 3).join(' · ');
+  }
+  if (typeof output.audio_url === 'string' && output.audio_url) return '已生成音频，可在属性面板查看';
+  if (output.brand_consistency != null) return `品牌一致性评分：${output.brand_consistency}`;
+  return null;
+}
+
+export function resolveNodeOutputDisplay(
+  output?: Record<string, unknown>,
+  status?: string,
+): NodeOutputDisplay {
+  const videoUrl = typeof output?.video_url === 'string' ? output.video_url : '';
+  if (videoUrl) {
+    const thumbnailUrl = typeof output?.thumbnail_url === 'string' ? output.thumbnail_url : undefined;
+    const seconds = output?.duration_seconds;
+    return {
+      kind: 'video',
+      text: seconds ? `已生成 ${seconds} 秒视频` : '已生成视频',
+      videoUrl,
+      thumbnailUrl,
+    };
+  }
+
+  const imageUrl = typeof output?.image_url === 'string' ? output.image_url : '';
+  if (imageUrl) {
+    return { kind: 'image', text: '已生成图片', imageUrl };
+  }
+
+  const text = output ? pickOutputText(output) : null;
+  if (text) return { kind: 'text', text };
+
+  if (status === 'running') return { kind: 'empty', text: '生成中…' };
+  if (status === 'queued') return { kind: 'empty', text: '排队等待…' };
+  if (status === 'failed') {
+    const err = output?.error ?? output?.error_message;
+    return { kind: 'text', text: err ? String(err) : '生成失败，请检查配置后重试' };
+  }
+  if (output && Object.keys(output).length > 0) {
+    const compact = JSON.stringify(output);
+    if (compact.length > 2) return { kind: 'text', text: compact.slice(0, 240) };
+  }
+  return { kind: 'empty', text: '运行后在此显示结果' };
+}
+
 export function summarizeOutput(output?: Record<string, unknown>) {
-  if (!output || Object.keys(output).length === 0) return '暂无输出内容';
-  if (output.title) return String(output.title).slice(0, 80);
-  if (output.response) return String(output.response).slice(0, 80);
-  if (Array.isArray(output.paragraphs)) return `${output.paragraphs.length} 段文案`;
-  if (output.image_url) return '已生成图片';
-  if (Array.isArray(output.scenes)) return `${output.scenes.length} 个场景`;
-  if (output.audio_url) return '已生成音频';
-  if (output.summary) return String(output.summary).slice(0, 80);
-  return JSON.stringify(output).slice(0, 80) + '…';
+  const display = resolveNodeOutputDisplay(output);
+  if (display.kind === 'image') return display.text;
+  return display.text;
 }
 
 export function compactOutput(output?: Record<string, unknown>) {

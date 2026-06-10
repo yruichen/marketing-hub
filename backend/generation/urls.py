@@ -9,6 +9,7 @@ from generation.views import (
     StoryboardView,
     TaskDetailView,
     TaskQueueView,
+    VideoGenerateView,
     WorkflowNodeRetryView,
     WorkflowRunView,
 )
@@ -21,6 +22,7 @@ urlpatterns = [
     path('generate/image/', ImageGenerateView.as_view(), name='generate_image'),
     path('generate/storyboard/', StoryboardView.as_view(), name='generate_storyboard'),
     path('generate/audio/', AudioVoiceoverView.as_view(), name='generate_audio'),
+    path('generate/video/', VideoGenerateView.as_view(), name='generate_video'),
     path('tasks/', TaskQueueView.as_view(), name='task_queue'),
     path('tasks/<int:pk>/', TaskDetailView.as_view(), name='task_detail'),
     path('drafts/<int:pk>/run/', WorkflowRunView.as_view(), name='workflow_run'),

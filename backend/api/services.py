@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
+from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
 from ai_gateway.services import AIModelGateway
 from api.audit import record_audit_log
 from api.serializers import (
@@ -227,6 +228,17 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+        elif task.task_type == 'video':
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='video',
+                payload=payload,
+                prompt_key='marketing.video.system',
+            )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
         elif task.task_type == 'rag_search':
             query = payload.get('query', '').strip()
             results = []
@@ -354,6 +366,10 @@ def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) 
         asset_type = 'audio'
         title = result.get('text', title)[:120]
         source_url = result.get('audio_url', '')
+    elif task.task_type == 'video':
+        asset_type = 'video'
+        title = result.get('video_topic') or title
+        source_url = result.get('video_url', '')
 
     if not isinstance(tags, list):
         tags = []
@@ -517,7 +533,7 @@ def extract_upstream_text(upstream: list[dict[str, Any]], max_chars: int = 2000)
     for output in upstream:
         if not isinstance(output, dict):
             continue
-        for key in ('summary', 'title', 'response', 'paragraphs', 'text', 'query'):
+        for key in ('summary', 'title', 'response', 'paragraphs', 'text', 'query', 'prompt', 'video_topic'):
             val = output.get(key)
             if not val:
                 continue
@@ -527,6 +543,81 @@ def extract_upstream_text(upstream: list[dict[str, Any]], max_chars: int = 2000)
                 parts.append(str(val))
     text = '\n'.join(parts)
     return text[:max_chars] if text else ''
+
+
+def _merge_upstream_video_params(upstream: list[dict[str, Any]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for item in upstream:
+        if not isinstance(item, dict):
+            continue
+        for key in ('scenes', 'video_topic', 'total_duration_seconds', 'audio_url', 'duration_seconds'):
+            value = item.get(key)
+            if value not in (None, '', []):
+                merged[key] = value
+        shots = item.get('shots')
+        if shots and not merged.get('scenes'):
+            merged['scenes'] = shots
+    return merged
+
+
+def _merge_upstream_image_params(upstream: list[dict[str, Any]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for item in upstream:
+        if not isinstance(item, dict):
+            continue
+        for key in ('prompt', 'negative_prompt', 'aspect_ratio', 'style', 'style_skill'):
+            value = item.get(key)
+            if value not in (None, '', []):
+                merged[key] = value
+    return merged
+
+
+def _compose_image_prompt_text(
+    config: dict[str, Any],
+    *,
+    upstream_text: str,
+    brand_context: dict[str, Any],
+    task_data: dict[str, Any] | None = None,
+) -> str:
+    skill_text = resolve_style_skill(config.get('style_skill'), config.get('style'))
+    manual_prompt = str(config.get('prompt') or '').strip()
+    ai_text = ''
+    if task_data:
+        paragraphs = task_data.get('paragraphs') or []
+        if isinstance(paragraphs, list) and paragraphs:
+            ai_text = '\n'.join(str(item).strip() for item in paragraphs if str(item).strip())
+        elif task_data.get('title'):
+            ai_text = str(task_data.get('title')).strip()
+    base = manual_prompt or ai_text or upstream_text or str(brand_context.get('selling_points') or '').strip()
+    parts = [part for part in (skill_text, base) if part]
+    return '\n'.join(parts)
+
+
+def _reshape_image_prompt_output(
+    config: dict[str, Any],
+    task_data: dict[str, Any],
+    *,
+    upstream_text: str,
+    brand_context: dict[str, Any],
+) -> dict[str, Any]:
+    style_skill_id = str(config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID).strip()
+    style_text = resolve_style_skill(style_skill_id, config.get('style'))
+    prompt = _compose_image_prompt_text(
+        config,
+        upstream_text=upstream_text,
+        brand_context=brand_context,
+        task_data=task_data,
+    )
+    return {
+        'prompt': prompt,
+        'negative_prompt': str(config.get('negative_prompt') or '').strip(),
+        'aspect_ratio': str(config.get('aspect_ratio') or '1:1').strip(),
+        'style_skill': style_skill_id,
+        'style': style_text,
+        'title': task_data.get('title'),
+        'paragraphs': task_data.get('paragraphs') or [],
+        'tags': task_data.get('tags') or [],
+    }
 
 
 def build_payload_for_node(
@@ -552,11 +643,19 @@ def build_payload_for_node(
             'feedback': feedback,
         }
     if node_type == 'image':
-        prompt = config.get('prompt') or upstream_text or brand_context.get('visual_style') or 'A creative marketing campaign visual'
+        merged = _merge_upstream_image_params(upstream)
+        prompt = str(merged.get('prompt') or config.get('prompt') or upstream_text or '').strip()
+        if not prompt:
+            prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
+        style = resolve_style_skill(merged.get('style_skill'), merged.get('style') or config.get('style') or brand_context.get('visual_style'))
+        aspect_ratio = str(merged.get('aspect_ratio') or config.get('aspect_ratio') or '1:1').strip()
+        negative_prompt = str(merged.get('negative_prompt') or '').strip()
+        if negative_prompt:
+            prompt = f'{prompt}\n避免: {negative_prompt}'
         return {
             'prompt': f'{prompt}{feedback_text}',
-            'style': config.get('style') or brand_context.get('visual_style') or 'minimalist',
-            'aspect_ratio': config.get('aspect_ratio') or '1:1',
+            'style': style,
+            'aspect_ratio': aspect_ratio,
             'workflow_context': context_text,
         }
     if node_type == 'storyboard':
@@ -590,21 +689,57 @@ def build_payload_for_node(
             'query': config.get('query') or upstream_text or '',
         }
     if node_type == 'image_prompt':
+        skill_text = resolve_style_skill(config.get('style_skill'), config.get('style'))
+        manual_prompt = str(config.get('prompt') or '').strip()
+        product_description = manual_prompt or upstream_text or brand_context.get('selling_points') or ''
+        negative_prompt = str(config.get('negative_prompt') or '').strip()
+        extra_feedback = feedback
+        if negative_prompt:
+            extra_feedback = f'{feedback}\n负面提示词: {negative_prompt}'.strip()
         return {
             'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
-            'product_description': upstream_text or brand_context.get('selling_points') or '',
-            'tone': f"视觉风格: {config.get('style', 'editorial')}, 比例: {config.get('aspect_ratio', '1:1')}",
+            'product_description': product_description,
+            'tone': f'风格Skill: {skill_text}, 画幅: {config.get("aspect_ratio", "1:1")}',
             'platform': 'image_prompt',
             'workflow_context': context_text,
-            'feedback': feedback,
+            'feedback': extra_feedback,
+            'style_skill': config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID,
+            'negative_prompt': negative_prompt,
         }
     if node_type == 'image_generation':
-        prompt = upstream_text or config.get('prompt') or brand_context.get('visual_style') or 'A creative marketing campaign visual'
+        merged = _merge_upstream_image_params(upstream)
+        prompt = str(merged.get('prompt') or upstream_text or '').strip()
+        if not prompt:
+            prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
+        style = resolve_style_skill(merged.get('style_skill'), merged.get('style') or brand_context.get('visual_style'))
+        aspect_ratio = str(merged.get('aspect_ratio') or '1:1').strip()
+        negative_prompt = str(merged.get('negative_prompt') or '').strip()
+        if negative_prompt:
+            prompt = f'{prompt}\n避免: {negative_prompt}'
         return {
             'prompt': f'{prompt}{feedback_text}',
-            'style': config.get('style') or brand_context.get('visual_style') or 'minimalist',
-            'aspect_ratio': config.get('aspect_ratio') or '1:1',
+            'style': style,
+            'aspect_ratio': aspect_ratio,
             'workflow_context': context_text,
+        }
+    if node_type == 'video_generation':
+        merged = _merge_upstream_video_params(upstream)
+        scenes = merged.get('scenes') or []
+        if not isinstance(scenes, list):
+            scenes = []
+        try:
+            duration = int(str(config.get('duration_cap') or merged.get('total_duration_seconds') or 30).strip())
+        except (ValueError, TypeError):
+            duration = 30
+        return {
+            'video_topic': config.get('video_topic') or merged.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or 'Marketing video',
+            'scenes': scenes,
+            'audio_url': str(merged.get('audio_url') or ''),
+            'aspect_ratio': str(config.get('aspect_ratio') or '9:16').strip(),
+            'duration': duration,
+            'model': config.get('model') or '',
+            'workflow_context': context_text,
+            'feedback': feedback,
         }
     if node_type == 'review':
         return {
@@ -678,6 +813,8 @@ def run_workflow_node(
         upstream=upstream_outputs(node_id, nodes, edges),
         feedback=feedback,
     )
+    upstream = upstream_outputs(node_id, nodes, edges)
+    upstream_text = extract_upstream_text(upstream)
     task = create_generation_task(
         task_type=task_type,
         payload=payload,
@@ -687,7 +824,17 @@ def run_workflow_node(
         campaign=campaign,
         run_now=True,
     )
-    node['output'] = task.result.get('data', {})
+    if node_type == 'image_prompt':
+        task_data = task.result.get('data', {}) if isinstance(task.result.get('data'), dict) else {}
+        node_config = node.get('config') if isinstance(node.get('config'), dict) else {}
+        node['output'] = _reshape_image_prompt_output(
+            node_config,
+            task_data,
+            upstream_text=upstream_text,
+            brand_context=brand_context,
+        )
+    else:
+        node['output'] = task.result.get('data', {})
     node['task_id'] = task.id
     node['status'] = task.status
     node['error_message'] = task.error_message

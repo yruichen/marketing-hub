@@ -23,6 +23,7 @@ from ai_gateway.prompts import (
     normalize_custom_agent_result,
     normalize_image_result,
     normalize_storyboard_result,
+    normalize_video_result,
 )
 from api.models import AIConfiguration, Organization
 from api.rbac import role_rank
@@ -55,6 +56,7 @@ PROMPT_REGISTRY = {
     'marketing.storyboard.system': {'version': '2026-05-31', 'template': 'You are a storyboard director.'},
     'marketing.image.system': {'version': '2026-05-31', 'template': 'You are an art director.'},
     'marketing.audio.system': {'version': '2026-05-31', 'template': 'You are a voiceover director.'},
+    'marketing.video.system': {'version': '2026-06-01', 'template': 'You are a short-form marketing video producer.'},
     'marketing.brainstorm.system': {'version': '2026-06-10', 'template': 'You are a marketing workflow architect.'},
 }
 
@@ -120,6 +122,7 @@ IMAGE_RUNTIME_PROVIDERS = frozenset({'mock', 'agnes'})
 TEXT_TASK_TYPES = frozenset({'copy', 'storyboard'})
 IMAGE_TASK_TYPES = frozenset({'image'})
 AUDIO_TASK_TYPES = frozenset({'audio'})
+VIDEO_TASK_TYPES = frozenset({'video'})
 
 
 def task_lane(task_type: str) -> str:
@@ -127,6 +130,8 @@ def task_lane(task_type: str) -> str:
         return 'image'
     if task_type in AUDIO_TASK_TYPES:
         return 'audio'
+    if task_type in VIDEO_TASK_TYPES:
+        return 'video'
     return 'text'
 
 
@@ -151,6 +156,8 @@ def provider_supports_task(provider: str, task_type: str) -> bool:
         return provider in IMAGE_RUNTIME_PROVIDERS
     if task_type in AUDIO_TASK_TYPES:
         return provider in {'mock', 'openai', 'local_proxy'}
+    if task_type in VIDEO_TASK_TYPES:
+        return provider in {'mock', 'local_proxy'}
     caps = CAPABILITY_REGISTRY.get(provider, CAPABILITY_REGISTRY['mock'])
     return 'text' in caps
 
@@ -246,6 +253,8 @@ class MockProviderAdapter(ProviderAdapter):
                 'text_length': len(payload.get('text', '')),
                 'estimated_audio_duration_seconds': 10,
             }
+        if task_type == 'video':
+            return normalize_video_result({}, payload)
         if task_type == 'brainstorm':
             idea = str(payload.get('idea', 'Marketing campaign'))
             return normalize_brainstorm_result(
@@ -573,6 +582,8 @@ class AIModelGateway:
             return f"Storyboard task: {payload}"
         if task_type == 'audio':
             return f"Audio task: {payload}"
+        if task_type == 'video':
+            return f"Video task: {payload}"
         return json.dumps(payload, ensure_ascii=False)
 
     @classmethod
@@ -595,6 +606,8 @@ class AIModelGateway:
             return normalize_storyboard_result(result, payload)
         if task_type == 'image':
             return normalize_image_result(result, payload)
+        if task_type == 'video':
+            return normalize_video_result(result, payload)
         if task_type == 'custom_agent':
             return normalize_custom_agent_result(result, payload)
         if task_type == 'brainstorm':

@@ -62,6 +62,10 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
         'input': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style': 'String'},
         'output': {'image_asset': 'Asset', 'image_url': 'URL', 'revised_prompt': 'String'},
     },
+    'video_generation': {
+        'input': {'scenes': 'Scene[]', 'audio_url': 'URL', 'video_topic': 'String'},
+        'output': {'video_asset': 'Asset', 'video_url': 'URL', 'thumbnail_url': 'URL', 'duration_seconds': 'Number'},
+    },
     'retrieval': {
         'input': {'query': 'String', 'scope': 'String'},
         'output': {'references': 'Reference[]', 'insights': 'String[]', 'brand_memory': 'Object'},
@@ -75,6 +79,7 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
 NODE_TYPE_ALIASES: dict[str, str] = {
     'image_prompt': 'copy',
     'image_generation': 'image',
+    'video_generation': 'video',
     'retrieval': 'rag_search',
     'review': 'copy',
 }
