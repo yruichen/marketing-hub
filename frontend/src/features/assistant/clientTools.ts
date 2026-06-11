@@ -1,23 +1,14 @@
 import type { ToolHandler } from './types';
 
 /**
- * Tools that the backend returns as `kind: 'navigate'`. The frontend
- * intercepts these client-side and runs the actual navigation —
- * no backend state changes.
+ * Client-side tool intents.
  *
- * New client-side tools are registered here. They MUST be idempotent
- * (the backend may retry the same tool_call_id).
+ * Backend tools whose `result` carries `kind: 'navigate'` are NOT
+ * executed here — they are surfaced as a "go to X" button on the
+ * relevant ToolCallCard, and the user opts in by clicking it.
+ *
+ * This file only registers handlers that need to run in the browser
+ * (e.g. local clipboard ops, file picker, etc.). Currently empty;
+ * keep the export for the dispatch site in `useAssistantChat`.
  */
-export const clientTools: Record<string, ToolHandler> = {
-  navigate: async (args) => ({
-    kind: 'navigate',
-    tab: String(args.tab ?? ''),
-    project_id: typeof args.project_id === 'number' ? args.project_id : undefined,
-    asset_id: typeof args.asset_id === 'number' ? args.asset_id : undefined,
-    reason: typeof args.reason === 'string' ? args.reason : '',
-  }),
-};
-
-export function isClientTool(name: string): boolean {
-  return Object.hasOwn(clientTools, name);
-}
+export const clientTools: Record<string, ToolHandler> = {};

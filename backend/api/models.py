@@ -339,6 +339,7 @@ class AuditLog(models.Model):
         ('workflow_run', 'Workflow Run'),
         ('workflow_retry', 'Workflow Retry'),
         ('brainstorm', 'Brainstorm'),
+        ('assistant_step', 'Assistant Step'),
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')

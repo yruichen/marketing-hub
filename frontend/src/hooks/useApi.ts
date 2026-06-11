@@ -63,6 +63,15 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   return response;
 }
 
+/**
+ * Streaming variant of apiFetch: same auth/CSRF dance, but returns
+ * the raw `Response` so the caller can read `body.getReader()`.
+ * Use for `text/event-stream` endpoints like the assistant chat.
+ */
+export async function apiStream(path: string, init: RequestInit = {}): Promise<Response> {
+  return apiFetch(path, init);
+}
+
 export function useToast() {
   const [feedbackMsg, setFeedbackMsg] = useState<ToastMessage | null>(null);
 

@@ -5,11 +5,13 @@ import type { PageContext } from './types';
 
 interface PageContextTrackerProps {
   /**
-   * Map from current route → extra context fields. The tracker will
-   * shallow-merge this map's entry on each route change. Optional —
-   * fall back to route-only if you don't need domain context.
+   * Extra context fields merged into the resolved PageContext on every
+   * route change. The tracker will shallow-merge this object's fields
+   * on top of the current `route` path.
+   *
+   * Omit to fall back to route-only context (still useful as a mount point).
    */
-  contextByPath?: Record<string, PageContext>;
+  extras?: PageContext;
 }
 
 /**
@@ -17,15 +19,14 @@ interface PageContextTrackerProps {
  * PageContext into the assistant context. Mount once inside the
  * AssistantProvider tree.
  */
-export function PageContextTracker({ contextByPath = {} }: PageContextTrackerProps) {
+export function PageContextTracker({ extras }: PageContextTrackerProps) {
   const location = useLocation();
   const { setPageContext } = useAssistant();
 
   useEffect(() => {
     const path = location.pathname;
-    const extra = contextByPath[path] ?? {};
-    setPageContext({ route: path, ...extra });
-  }, [location.pathname, contextByPath, setPageContext]);
+    setPageContext({ ...(extras ?? {}), route: path });
+  }, [location.pathname, extras, setPageContext]);
 
   return null;
 }
