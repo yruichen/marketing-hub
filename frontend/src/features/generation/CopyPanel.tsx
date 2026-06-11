@@ -1,33 +1,80 @@
 import { Sparkles } from 'lucide-react';
-import AgentTerminal from '../../components/AgentTerminal';
-import type { CopyInput, CopyOutput, ToastType } from './types';
+import { useState } from 'react';
+import { AgentTerminal } from './AgentTerminal';
+import { useGenerationTask } from './useGenerationTask';
+import type { CopyOutput, CreationContent } from './types';
+import type { WorkspaceScope } from '../dashboard/types';
+import type { GenerationTaskRecord } from '../../types/workspace';
 
-interface CopyTabProps {
-  copyInput: CopyInput;
-  copyOutput: CopyOutput;
-  setCopyInput: (next: CopyInput) => void;
+interface CopyPanelProps {
+  workspaceScope: WorkspaceScope | null;
+  username: string | null;
   loading: boolean;
+  setLoading: (loading: boolean) => void;
   agentLogs: string[];
-  onGenerate: () => void;
-  onShareToCommunity: (kind: 'copy' | 'image' | 'storyboard' | 'audio', title: string, payload: CopyOutput) => void;
-  onCopyClipboard: (text: string) => void;
-  triggerToast: (text: string, type?: ToastType) => void;
+  setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
+  setLatestTask: (task: GenerationTaskRecord) => void;
+  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  fetchDashboard: () => Promise<void>;
+  onShare: (type: 'copy', title: string, content: CreationContent) => Promise<void>;
+  onCopy: (text: string) => Promise<void>;
 }
 
-/**
- * 文案编排 tab。State 全部住在 App.tsx（被 buildContentPackage 等
- * 共享 callback 读），本组件只负责"输入 + 触发 + 渲染输出"。
- */
-export function CopyTab({
-  copyInput,
-  copyOutput,
-  setCopyInput,
+export function CopyPanel({
+  workspaceScope,
+  username,
   loading,
+  setLoading,
   agentLogs,
-  onGenerate,
-  onShareToCommunity,
-  onCopyClipboard,
-}: CopyTabProps) {
+  setAgentLogs,
+  setLatestTask,
+  triggerToast,
+  fetchDashboard,
+  onShare,
+  onCopy,
+}: CopyPanelProps) {
+  const [copyInput, setCopyInput] = useState({
+    brandName: 'Marketing-Hub',
+    description: 'AI 营销场景全能助手，秒级生成爆款图文',
+    tone: '爆款活泼',
+    platform: 'Xiaohongshu',
+  });
+  const [copyOutput, setCopyOutput] = useState<CopyOutput>({
+    platform: 'Xiaohongshu',
+    tone: '爆款活泼',
+    title: '🔥 救命！这个 Marketing-Hub 真的绝了！后悔没早点发现！',
+    paragraphs: [
+      '家人们谁懂啊！今天必须给你们安利这个神仙单品：【Marketing-Hub】！它的核心功能是 AI 营销场景全能助手，秒级生成爆款图文，简直是创作者和打工人的福利！😭',
+      '用了一段时间，感觉整个工作流都顺畅了！在爆款活泼的风格调校下，操作起来非常有仪式感，幸福感直接拉满。✨',
+      '姐妹们听我的，闭眼入不踩雷！早买早享受，别怪我没提醒你们哦～'
+    ],
+    tags: ['安利神仙单品', '好物分享', '高颜值实用', 'Marketing-Hub', '宝藏工具'],
+    call_to_action: '👉 立即点击体验 Marketing-Hub，解锁你的创意生产力！'
+  });
+
+  const { submitQueuedGeneration } = useGenerationTask({
+    setLoading,
+    setAgentLogs,
+    setLatestTask,
+    triggerToast,
+    workspaceScope,
+    username,
+    fetchDashboard,
+  });
+
+  const handleGenerateCopy = () => submitQueuedGeneration<CopyOutput>(
+    'copy',
+    {
+      brand_name: copyInput.brandName,
+      product_description: copyInput.description,
+      tone: copyInput.tone,
+      platform: copyInput.platform,
+    },
+    setCopyOutput,
+    '[0.00s] [INFO] Initializing queued Editorial Copywriting Agent Workflow...',
+    '文案异步任务执行完毕'
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       {/* Left Input Slate */}
@@ -35,6 +82,7 @@ export function CopyTab({
         <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
           <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
         </div>
+
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// PARAMETERS SLATE</h3>
 
         <div className="flex flex-col gap-1.5">
@@ -89,7 +137,7 @@ export function CopyTab({
         </div>
 
         <button
-          onClick={onGenerate}
+          onClick={handleGenerateCopy}
           disabled={loading}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
@@ -109,13 +157,13 @@ export function CopyTab({
             </span>
             <div className="flex gap-2">
               <button
-                onClick={() => onShareToCommunity('copy', `[${copyOutput.platform}] ${copyInput.brandName}`, copyOutput)}
+                onClick={() => onShare('copy', `[${copyOutput.platform}] ${copyInput.brandName}`, copyOutput)}
                 className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
               >
                 <span>分享社区</span>
               </button>
               <button
-                onClick={() => onCopyClipboard(`${copyOutput.title}\n\n${copyOutput.paragraphs.join('\n')}\n\n${copyOutput.tags.map((t: string) => '#' + t).join(' ')}`)}
+                onClick={() => onCopy(`${copyOutput.title}\n\n${copyOutput.paragraphs.join('\n')}\n\n${copyOutput.tags.map((t: string) => '#' + t).join(' ')}`)}
                 className="bg-[var(--editorial-stroke)] border border-[var(--editorial-stroke)] text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-black hover:scale-103 active:scale-97 transition-all cursor-pointer"
               >
                 复制剪贴板

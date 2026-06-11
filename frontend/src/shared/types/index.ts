@@ -1,1 +1,1 @@
-export {};
+export type { ToastType } from './toast';
