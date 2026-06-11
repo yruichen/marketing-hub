@@ -1,28 +1,38 @@
-import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import AgentTerminal from './AgentTerminal';
-import { API_BASE_URL, useCopyClipboard } from '../hooks/useApi';
+import { useState } from 'react';
+import { AgentTerminal } from './AgentTerminal';
+import { useGenerationTask } from './useGenerationTask';
+import type { CreationContent, ImageOutput } from './types';
+import type { WorkspaceScope } from '../dashboard/types';
+import type { GenerationTaskRecord } from '../../types/workspace';
 
-interface ImageTabProps {
-  triggerToast: (text: string, type: 'success' | 'info' | 'error') => void;
+interface ImagePanelProps {
+  workspaceScope: WorkspaceScope | null;
   username: string | null;
+  loading: boolean;
+  setLoading: (loading: boolean) => void;
   agentLogs: string[];
-  setAgentLogs: (logs: string[]) => void;
+  setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
+  setLatestTask: (task: GenerationTaskRecord) => void;
+  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  fetchDashboard: () => Promise<void>;
+  onShare: (type: 'image', title: string, content: CreationContent, imageUrl?: string) => Promise<void>;
+  onCopy: (text: string) => Promise<void>;
 }
 
-interface ImageOutput {
-  prompt: string;
-  style: string;
-  aspectRatio?: string;
-  aspect_ratio?: string;
-  image_url: string;
-  revised_prompt: string;
-}
-
-export default function ImageTab({ triggerToast, username, agentLogs, setAgentLogs }: ImageTabProps) {
-  const handleCopyClipboard = useCopyClipboard(triggerToast);
-  const [loading, setLoading] = useState(false);
-
+export function ImagePanel({
+  workspaceScope,
+  username,
+  loading,
+  setLoading,
+  agentLogs,
+  setAgentLogs,
+  setLatestTask,
+  triggerToast,
+  fetchDashboard,
+  onShare,
+  onCopy,
+}: ImagePanelProps) {
   const [imageInput, setImageInput] = useState({
     prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, raw visual balance',
     aspectRatio: '1:1',
@@ -36,66 +46,36 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
     revised_prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, styled in minimalist editorial aesthetic, low contrast natural lighting, matte visual details, 1:1 aspect ratio'
   });
 
-  const handleGenerateImage = async () => {
-    setLoading(true);
-    setAgentLogs(['[0.00s] [INFO] Initializing Editorial Sketch Image Agent Workflow...']);
-    try {
-      const res = await fetch(`${API_BASE_URL}/generate/image/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: imageInput.prompt,
-          style: imageInput.style,
-          aspect_ratio: imageInput.aspectRatio,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setImageOutput(data.result);
-        setAgentLogs(data.logs);
-        triggerToast('视觉图片生成成功', 'success');
-      } else {
-        throw new Error('API Error');
-      }
-    } catch {
-      triggerToast('图片生成服务异常', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { submitQueuedGeneration } = useGenerationTask({
+    setLoading,
+    setAgentLogs,
+    setLatestTask,
+    triggerToast,
+    workspaceScope,
+    username,
+    fetchDashboard,
+  });
 
-  const handleShareToCommunity = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/community/creations/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: username || 'ROOT',
-          creation_type: 'image',
-          title: `[${imageOutput.style}] Graphic Polaroid`,
-          content: imageOutput,
-          image_url: imageOutput.image_url,
-        })
-      });
-      if (res.ok) {
-        triggerToast('已成功分享到手绘工坊社区！', 'success');
-      } else {
-        triggerToast('作品分享失败', 'error');
-      }
-    } catch {
-      triggerToast('分享失败，无法连接服务器', 'error');
-    }
-  };
+  const handleGenerateImage = () => submitQueuedGeneration<ImageOutput>(
+    'image',
+    {
+      prompt: imageInput.prompt,
+      style: imageInput.style,
+      aspect_ratio: imageInput.aspectRatio,
+    },
+    setImageOutput,
+    '[0.00s] [INFO] Initializing queued Editorial Sketch Image Agent Workflow...',
+    '视觉图片异步任务执行完毕'
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      
       {/* Left Input Slate */}
       <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
         <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
           <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
         </div>
-        
+
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// VISUAL STICKY SLATE</h3>
 
         <div className="flex flex-col gap-2">
@@ -110,8 +90,6 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          
-          {/* Geometric ratio button selector */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">尺寸比例</label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -123,7 +101,7 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
                     key={ratio}
                     onClick={() => setImageInput({ ...imageInput, aspectRatio: ratio })}
                     className={`border border-[var(--editorial-stroke)] p-2 text-[9px] font-black font-mono transition-all ${
-                      isSelected 
+                      isSelected
                         ? 'bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] scale-[1.03]'
                         : 'bg-[var(--editorial-paper)] text-[var(--editorial-text)] hover:bg-[var(--editorial-unselected)]'
                     }`}
@@ -164,17 +142,14 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
 
       {/* Right Output Preview */}
       <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
-        
-        {/* Polaroid container */}
         <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[-0.5deg]">
-          
           <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-2">
             <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
               <span>VISUAL POLAROID IMAGE</span>
             </span>
             <div className="flex gap-2">
               <button
-                onClick={handleShareToCommunity}
+                onClick={() => onShare('image', `[${imageOutput.style}] Graphic Polaroid`, imageOutput, imageOutput.image_url)}
                 className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
               >
                 <span>分享社区</span>
@@ -190,8 +165,6 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-            
-            {/* Generative picture canvas */}
             <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)] p-2 relative flex justify-center items-center overflow-hidden min-h-[220px]">
               {loading ? (
                 <div className="w-full h-full absolute inset-0 editorial-loader-bar flex flex-col items-center justify-center border-none">
@@ -213,9 +186,9 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
                 <span className="font-black text-[var(--editorial-text)] uppercase tracking-wider block mb-1.5">// REVISED PROMPT</span>
                 <p className="text-[var(--editorial-text-muted)] font-semibold">{imageOutput.revised_prompt}</p>
               </div>
-              
+
               <button
-                onClick={() => handleCopyClipboard(imageOutput.revised_prompt)}
+                onClick={() => onCopy(imageOutput.revised_prompt)}
                 className="w-full bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] hover:bg-[var(--editorial-unselected)] text-[var(--editorial-text)] py-2 text-xs font-bold shadow-editorial-sm active:shadow-none active:translate-x-[1.5px] active:translate-y-[1.5px] cursor-pointer transition-all"
               >
                 复制系统微调 Prompt
@@ -223,10 +196,9 @@ export default function ImageTab({ triggerToast, username, agentLogs, setAgentLo
             </div>
           </div>
 
-          {/* Metadata polaroid tag */}
           <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
             <span>SEED: 309485-VIS</span>
-            <span>RATIO: {imageOutput.aspectRatio}</span>
+            <span>RATIO: {imageOutput.aspectRatio || imageOutput.aspect_ratio}</span>
           </div>
         </div>
 

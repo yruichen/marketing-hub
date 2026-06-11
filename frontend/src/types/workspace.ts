@@ -192,12 +192,17 @@ export interface GenerationTaskRecord {
   id: number;
   task_type: 'copy' | 'image' | 'storyboard' | 'video' | 'audio' | 'rag_search' | 'custom_agent';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
+  celery_task_id?: string;
   result: {
     data?: unknown;
     logs?: string[];
   };
   error_message: string;
+  token_count?: number;
+  cost_usd?: string;
   created_at: string;
+  updated_at?: string;
+  completed_at?: string | null;
 }
 
 export type AssetType = 'image' | 'audio' | 'video' | 'document';

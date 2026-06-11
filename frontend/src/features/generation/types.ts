@@ -36,7 +36,8 @@ export interface ImageInput {
 export interface ImageOutput {
   prompt: string;
   style: string;
-  aspectRatio: string;
+  aspectRatio?: string;
+  aspect_ratio?: string;
   image_url: string;
   revised_prompt: string;
 }
@@ -47,11 +48,18 @@ export interface StoryboardInput {
   audience: string;
 }
 
+export interface StoryScene {
+  scene_number: number;
+  visual_description: string;
+  audio_narration: string;
+  duration_seconds: number;
+}
+
 export interface StoryboardOutput {
   video_topic: string;
   total_duration_seconds: number;
   target_audience: string;
-  scenes: Array<{ scene_number: number; visual_description: string; audio_narration: string; duration_seconds: number }>;
+  scenes: StoryScene[];
 }
 
 export interface AudioInput {
@@ -65,6 +73,18 @@ export interface AudioOutput {
   voice_id: string;
   speed: number;
   audio_url: string;
+  text_length?: number;
+  estimated_audio_duration_seconds?: number;
 }
 
 export type ToastType = 'success' | 'info' | 'error';
+
+export type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutput & AudioOutput>;
+
+export const taskTypeLabels: Record<string, string> = {
+  copy: '文案',
+  image: '图片',
+  storyboard: '分镜',
+  audio: '配音',
+  rag_search: '历史素材检索',
+};
