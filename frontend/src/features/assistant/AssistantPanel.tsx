@@ -1,10 +1,11 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useAssistant } from './useAssistant';
 import { useAssistantSessions } from './useAssistantSessions';
 import { useAssistantChat } from './useAssistantChat';
 import { AssistantThread } from './AssistantThread';
 import { AssistantComposer } from './AssistantComposer';
+import type { AssistantSession } from './types';
 import './assistant.css';
 
 interface AssistantPanelProps {
@@ -20,7 +21,7 @@ interface AssistantPanelProps {
  * Owns its own sessions list, active session id, and chat stream.
  */
 export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
-  const { open, setOpen, sessionId, setSessionId } = useAssistant();
+  const { open, setOpen, sessionId, setSessionId, pageContext } = useAssistant();
   const sessions = useAssistantSessions();
   const chat = useAssistantChat();
 
@@ -48,8 +49,12 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
     return () => {
       cancelled = true;
     };
-    // chat object is stable from useAssistantChat; sessions.fetchMessages too.
-  }, [sessionId, chat, sessions]);
+    // chat / sessions are returned as object literals by their hooks
+    // and get a new identity on every render, so depending on them
+    // would re-fire this effect (and any setState inside — loadHistory,
+    // reset — would just re-trigger it). Depend on the stable
+    // sub-callbacks and the actual session id instead.
+  }, [sessionId, chat.loadHistory, chat.reset, sessions.fetchMessages]);
 
   const onNewSession = useCallback(async () => {
     const created = await sessions.createSession('新对话');
@@ -66,12 +71,11 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
       await chat.send({
         text,
         sessionId,
-        pageContext: { route: window.location.pathname },
-        onNavigate,
+        pageContext,
         onSessionId: (id) => setSessionId(id),
       });
     },
-    [chat, sessionId, onNavigate, setSessionId],
+    [chat.send, sessionId, pageContext, setSessionId],
   );
 
   return (
@@ -106,35 +110,28 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
       {sessions.sessions.length > 0 ? (
         <div className="assistant-sessions">
           {sessions.sessions.slice(0, 8).map((s) => (
-            <div
+            <SessionRow
               key={s.id}
-              className={`assistant-session-row ${s.id === sessionId ? 'assistant-session-row--active' : ''}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelectSession(s.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') onSelectSession(s.id);
+              session={s}
+              active={s.id === sessionId}
+              onSelect={() => onSelectSession(s.id)}
+              onDelete={() => {
+                void sessions.deleteSession(s.id);
+                if (s.id === sessionId) setSessionId(null);
               }}
-            >
-              <span className="assistant-session-row__title">{s.title}</span>
-              <button
-                type="button"
-                className="assistant-session-row__del"
-                aria-label="删除会话"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void sessions.deleteSession(s.id);
-                  if (s.id === sessionId) setSessionId(null);
-                }}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
+              onRename={(title) => {
+                void sessions.renameSession(s.id, title);
+              }}
+            />
           ))}
         </div>
       ) : null}
 
-      <AssistantThread messages={chat.messages} sending={chat.sending} />
+      <AssistantThread
+        messages={chat.messages}
+        sending={chat.sending}
+        onNavigate={onNavigate}
+      />
 
       <AssistantComposer
         onSend={onSend}
@@ -143,5 +140,82 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
         disabled={!open}
       />
     </aside>
+  );
+}
+
+interface SessionRowProps {
+  session: AssistantSession;
+  active: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+  onRename: (title: string) => void;
+}
+
+function SessionRow({ session, active, onSelect, onDelete, onRename }: SessionRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(session.title);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next && next !== session.title) onRename(next);
+    else setDraft(session.title);
+    setEditing(false);
+  };
+
+  return (
+    <div
+      className={`assistant-session-row ${active ? 'assistant-session-row--active' : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        if (!editing) onSelect();
+      }}
+      onKeyDown={(e) => {
+        if (editing) return;
+        if (e.key === 'Enter' || e.key === ' ') onSelect();
+      }}
+    >
+      {editing ? (
+        <input
+          autoFocus
+          className="assistant-session-row__edit"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') commit();
+            else if (e.key === 'Escape') {
+              setDraft(session.title);
+              setEditing(false);
+            }
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span
+          className="assistant-session-row__title"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setDraft(session.title);
+            setEditing(true);
+          }}
+          title="双击重命名"
+        >
+          {session.title}
+        </span>
+      )}
+      <button
+        type="button"
+        className="assistant-session-row__del"
+        aria-label="删除会话"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
   );
 }

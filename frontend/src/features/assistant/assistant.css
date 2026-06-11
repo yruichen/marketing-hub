@@ -144,6 +144,19 @@
   font-weight: 700;
 }
 
+.assistant-session-row__edit {
+  flex: 1;
+  min-width: 0;
+  background: var(--editorial-bg);
+  color: var(--editorial-text);
+  border: 1px solid var(--editorial-stroke);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  outline: none;
+}
+
 .assistant-session-row__del {
   background: transparent;
   border: none;
@@ -166,8 +179,9 @@
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   background: var(--editorial-bg);
+  min-width: 0;
 }
 
 .assistant-empty {
@@ -182,7 +196,22 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Constrain so long content can't push past the thread edge.
+     480px drawer - 32px thread padding - safe gutter. */
   max-width: 100%;
+  min-width: 0;
+}
+
+.assistant-msg--user {
+  align-items: flex-end;
+}
+
+.assistant-msg--user .assistant-msg__bubble {
+  max-width: 85%;
+}
+
+.assistant-msg--assistant .assistant-msg__bubble {
+  max-width: 92%;
 }
 
 .assistant-msg__role {
@@ -196,20 +225,26 @@
 .assistant-msg__bubble {
   padding: 8px 12px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   color: var(--editorial-text);
   background: var(--editorial-paper);
   border: 1px solid var(--editorial-stroke);
-  white-space: pre-wrap;
+  /* Defense-in-depth against very long unbreakable strings (URLs,
+     hashes, identifiers). `overflow-wrap: anywhere` lets the browser
+     break anywhere it has to; `word-break: break-word` keeps the wrap
+     looking natural on CJK + Latin mixed text. */
+  overflow-wrap: anywhere;
   word-break: break-word;
+  min-width: 0;
 }
 
 .assistant-msg--user .assistant-msg__bubble {
   background: var(--editorial-stroke);
   color: var(--editorial-bg);
+  white-space: pre-wrap;
 }
 
-.assistant-msg--assistant .assistant-msg__bubble--pending::after {
+.assistant-msg__bubble--pending::after {
   content: ' ▍';
   animation: assistant-blink 1s steps(2) infinite;
 }
@@ -219,6 +254,160 @@
   50.01%, 100% { opacity: 0; }
 }
 
+.assistant-msg__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ===== Markdown content reset ===== */
+.assistant-md {
+  display: block;
+  min-width: 0;
+}
+
+.assistant-md > :first-child {
+  margin-top: 0;
+}
+
+.assistant-md > :last-child {
+  margin-bottom: 0;
+}
+
+.assistant-md p {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.assistant-md h1,
+.assistant-md h2,
+.assistant-md h3,
+.assistant-md h4 {
+  font-family: var(--serif-font);
+  font-weight: 700;
+  margin: 10px 0 6px;
+  line-height: 1.3;
+}
+
+.assistant-md h1 { font-size: 15px; }
+.assistant-md h2 { font-size: 13px; }
+.assistant-md h3 { font-size: 12px; }
+.assistant-md h4 { font-size: 12px; opacity: 0.85; }
+
+.assistant-md ul,
+.assistant-md ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.assistant-md li {
+  margin: 2px 0;
+}
+
+.assistant-md li > p {
+  margin: 0;
+}
+
+.assistant-md code {
+  font-family: var(--mono-font);
+  font-size: 11px;
+  padding: 1px 4px;
+  background: var(--editorial-unselected);
+  border: 1px solid var(--editorial-stroke);
+  border-radius: 2px;
+}
+
+.assistant-md pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--editorial-desk);
+  border: 1px solid var(--editorial-stroke);
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.assistant-md pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 11px;
+  white-space: pre;
+}
+
+.assistant-md a {
+  color: var(--editorial-accent-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.assistant-md a:hover {
+  text-decoration: none;
+}
+
+.assistant-md blockquote {
+  margin: 6px 0;
+  padding: 4px 10px;
+  border-left: 3px solid var(--editorial-stroke);
+  color: var(--editorial-text-gray);
+  font-style: italic;
+}
+
+.assistant-md hr {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px dashed var(--editorial-stroke);
+}
+
+.assistant-md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+  display: block;
+  overflow-x: auto;
+}
+
+.assistant-md th,
+.assistant-md td {
+  border: 1px solid var(--editorial-stroke);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.assistant-md th {
+  background: var(--editorial-unselected);
+  font-weight: 700;
+}
+
+.assistant-md img {
+  max-width: 100%;
+  height: auto;
+}
+
+.assistant-md__caret {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  animation: assistant-blink 1s steps(2) infinite;
+}
+
+.assistant-md__thinking {
+  color: var(--editorial-text-gray);
+  font-style: italic;
+}
+.assistant-md__thinking::after {
+  content: ' ▍';
+  animation: assistant-blink 1s steps(2) infinite;
+}
+
 /* Tool call card */
 .assistant-tool {
   border: 1px solid var(--editorial-stroke);
@@ -226,6 +415,9 @@
   padding: 8px 10px;
   font-size: 10px;
   color: var(--editorial-text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .assistant-tool__name {
@@ -243,6 +435,7 @@
   color: var(--editorial-text-gray);
   margin-bottom: 4px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -251,6 +444,75 @@
   padding-top: 4px;
   font-size: 9px;
   color: var(--editorial-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Navigate action — surfaced as a button instead of raw JSON so the
+   user opts in to the jump. */
+.assistant-navbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--editorial-paper);
+  color: var(--editorial-text);
+  border: 1px solid var(--editorial-stroke);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  min-width: 0;
+  transition: background 0.12s ease, transform 0.12s ease;
+  box-shadow: 2px 2px 0 var(--editorial-stroke);
+}
+
+.assistant-navbtn:hover:not(:disabled) {
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
+}
+
+.assistant-navbtn:active:not(:disabled) {
+  transform: translate(0, 0);
+  box-shadow: 1px 1px 0 var(--editorial-stroke);
+}
+
+.assistant-navbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.assistant-navbtn__arrow {
+  flex-shrink: 0;
+}
+
+.assistant-navbtn__label {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.assistant-navbtn__reason {
+  font-weight: 400;
+  color: var(--editorial-text-gray);
+  font-size: 10px;
+  border-left: 1px solid currentColor;
+  padding-left: 6px;
+  margin-left: 2px;
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.assistant-navbtn:hover .assistant-navbtn__reason {
+  color: var(--editorial-bg);
+  opacity: 0.85;
 }
 
 /* Composer (input) */

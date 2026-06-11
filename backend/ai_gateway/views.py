@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+
 from django.db.models import Q
+from django.http import StreamingHttpResponse
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -6,12 +13,20 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ai_gateway.agent import LlmUpstreamError, build_assistant_agent
 from ai_gateway.services import AGNES_DEFAULT_BASE_URL, AGNES_DEFAULT_IMAGE_MODEL, AGNES_DEFAULT_MODEL
+from ai_gateway.tools import ToolContext
 from api.audit import record_audit_log
-from api.models import AIConfiguration
+from api.models import AIConfiguration, AssistantMessage, AssistantSession
 from api.permissions import CanManageAIConfiguration, resolve_staff_user_from_request
 from api.scope import get_scope
-from api.serializers import AIConfigurationSerializer
+from api.serializers import (
+    AIConfigurationSerializer,
+    AssistantMessageSerializer,
+    AssistantSessionSerializer,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def looks_like_masked_api_key(value: str) -> bool:
@@ -125,24 +140,26 @@ class AIConfigView(APIView):
 # ================================================================
 
 
-import json
-import logging
-
-from asgiref.sync import async_to_sync
-from django.http import StreamingHttpResponse
-
-from .agent import AssistantAgent
-from .tools import ToolContext
-from api.models import AssistantMessage, AssistantSession
-from api.serializers import AssistantMessageSerializer, AssistantSessionSerializer
-from api.scope import get_scope
-
-logger = logging.getLogger(__name__)
-
-
 def _sse_format(payload: dict) -> str:
     """Wrap a dict as a single SSE data line."""
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _iter_async_gen_sync(async_gen):
+    """
+    Drive an async generator to completion and yield each resolved
+    value synchronously. asgiref's `async_to_sync` only handles
+    awaitables; this is the missing piece for async generators.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        while True:
+            try:
+                yield loop.run_until_complete(async_gen.__anext__())
+            except StopAsyncIteration:
+                break
+    finally:
+        loop.close()
 
 
 class AssistantChatView(APIView):
@@ -157,8 +174,14 @@ class AssistantChatView(APIView):
         {type: 'tool_call',  name, args}
         {type: 'tool_result',name, result}
         {type: 'done',       usage, session_id}
-        {type: 'error',      error}
+        {type: 'error',      error, status?}
     """
+
+    # SSE is a long-lived single request; counting it against the
+    # default per-view UserRateThrottle bucket made the panel hit 429
+    # the moment React re-fired the effect twice in strict mode. The
+    # underlying LLM provider has its own quota anyway.
+    throttle_classes: list = []
 
     def post(self, request):
         username, org, _, _ = get_scope(request)
@@ -200,7 +223,10 @@ class AssistantChatView(APIView):
                 'role', 'content', 'tool_calls', 'tool_name',
             )
         )
-        agent = AssistantAgent()
+        # Resolve the LLM from AIConfiguration (text lane). The factory
+        # falls back to mock when no key is configured, so this stays
+        # usable in dev/tests.
+        agent = build_assistant_agent(org)
         ctx = ToolContext(organization=org, user=request.user, session_id=session.id)
         messages = agent.build_messages(
             history=history,
@@ -212,10 +238,11 @@ class AssistantChatView(APIView):
             assistant_text_chunks: list[str] = []
             tool_calls_log: list[dict] = []
             try:
-                # async_to_sync wraps an async generator; for each event
-                # we await it synchronously and yield to the SSE response.
+                # Drive the agent's async generator step-by-step inside
+                # a sync loop so Django's StreamingHttpResponse can yield
+                # each event as it's produced.
                 gen = agent.run_streaming(messages=messages, ctx=ctx)
-                for step in async_to_sync_iter(gen):
+                for step in _iter_async_gen_sync(gen):
                     if step.type == 'text':
                         assistant_text_chunks.append(step.delta)
                     elif step.type == 'tool_call':
@@ -223,14 +250,19 @@ class AssistantChatView(APIView):
                     elif step.type == 'tool_result':
                         if tool_calls_log:
                             tool_calls_log[-1]['result'] = step.result
-                    yield _sse_format({
+                    payload = {
                         'type': step.type,
                         'delta': step.delta,
                         'name': step.name,
                         'args': step.args,
                         'result': step.result,
                         'error': step.error,
-                    })
+                    }
+                    # Surface upstream LLM status (e.g. 429) so the UI
+                    # can show a specific message instead of "unknown".
+                    if step.type == 'error' and getattr(step, 'status', 0):
+                        payload['status'] = step.status
+                    yield _sse_format(payload)
                     if step.type == 'done':
                         # Persist the assistant turn atomically.
                         AssistantMessage.objects.create(
@@ -249,7 +281,12 @@ class AssistantChatView(APIView):
                         break
             except Exception as exc:
                 logger.exception('Assistant stream failed')
-                yield _sse_format({'type': 'error', 'error': str(exc)})
+                status_code = getattr(exc, 'status', 0)
+                yield _sse_format({
+                    'type': 'error',
+                    'error': str(exc),
+                    **({'status': status_code} if status_code else {}),
+                })
 
         response = StreamingHttpResponse(
             event_stream(), content_type='text/event-stream',
@@ -257,26 +294,6 @@ class AssistantChatView(APIView):
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         return response
-
-
-def async_to_sync_iter(async_gen):
-    """
-    Helper: drive an async generator to completion, yielding each
-    resolved value synchronously. Equivalent to `asgiref.sync.async_to_sync`
-    but for generators.
-    """
-    loop = asyncio.new_event_loop()
-    try:
-        while True:
-            try:
-                yield loop.run_until_complete(async_gen.__anext__())
-            except StopAsyncIteration:
-                break
-    finally:
-        loop.close()
-
-
-import asyncio  # noqa: E402  (placed after other imports intentionally)
 
 
 class AssistantSessionListView(APIView):

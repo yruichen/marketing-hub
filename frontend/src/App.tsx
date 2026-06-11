@@ -14,7 +14,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { apiFetch } from './hooks/useApi';
-import { pathForSection, sectionFromPath } from './app/routes';
+import { sectionFromPath } from './app/routes';
 import { TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
@@ -58,6 +58,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
+    activeSection,
     setActiveSection,
     rightPanelOpen,
     setRightPanelOpen,
@@ -77,7 +78,7 @@ export default function App() {
     defaultValues: { username: 'ROOT', password: '123' },
   });
 
-  const activeTab = sectionFromPath(location.pathname);
+  const activeTab = activeSection;
   const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
@@ -105,20 +106,18 @@ export default function App() {
   const { workspaceScope, fetchWorkspaceBootstrap, selectProjectScope } = useWorkspaceScope(username);
   const { dashboardSnapshot, fetchDashboard } = useDashboardSnapshot(username);
 
-  // AI assistant: map URL path to PageContext so the assistant knows which tab the user is on.
-  const assistantContextByPath = useMemo<Record<string, PageContext>>(
+  // AI assistant: current page context. The tracker inside the
+  // <AssistantPanel> tree just needs an object describing where the
+  // user is — derive it from activeTab + workspace scope so we don't
+  // hand-maintain a path→tab mapping. The tracker only reads `route`
+  // + extra fields; we just push the resolved values.
+  const assistantPageContext = useMemo<PageContext>(
     () => ({
-      '/': { tab: 'brainstorm' },
-      '/dashboard': { tab: 'dashboard' },
-      '/projects': { tab: 'projects' },
-      '/workflows': { tab: 'builder' },
-      '/assets': { tab: 'assets' },
-      '/community': { tab: 'community' },
-      '/review': { tab: 'review' },
-      '/billing': { tab: 'billing' },
-      '/settings': { tab: 'config' },
+      tab: activeTab,
+      projectId: workspaceScope?.project.id,
+      campaignId: workspaceScope?.campaign.id,
     }),
-    [],
+    [activeTab, workspaceScope?.project.id, workspaceScope?.campaign.id],
   );
 
   // Sync theme
@@ -133,31 +132,46 @@ export default function App() {
     setStoredDarkMode(darkMode);
   }, [darkMode, setStoredDarkMode]);
 
-  useEffect(() => {
-    setActiveSection(activeTab);
-  }, [activeTab, setActiveSection]);
-
-  useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0 });
-  }, [activeTab]);
-
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
-    const nextPath = pathForSection(tab);
-    if (location.pathname !== nextPath) {
-      navigate(nextPath);
-    }
-  }, [location.pathname, navigate, setActiveSection]);
-
-  // AI assistant navigation handler
-  const onAssistantNavigate = useCallback((tab: string) => {
-    setActiveTab(tab as AppSection);
-  }, [setActiveTab]);
+  }, [setActiveSection]);
 
   const triggerToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setFeedbackMsg({ text, type });
     setTimeout(() => setFeedbackMsg(null), 3000);
   }, []);
+
+  // AI assistant navigation handler. The assistant may also pass a
+  // project_id/asset_id to deep-link into a specific project or asset
+  // detail view, and a human-readable reason for the jump.
+  const onAssistantNavigate = useCallback(
+    (tab: string, projectId?: number, assetId?: number, reason?: string) => {
+      setActiveTab(tab as AppSection);
+      if (typeof projectId === 'number' && projectId > 0) {
+        // Resolve the project, then push it into the workspace scope so
+        // downstream panels (brief, generation, assets) re-render with
+        // the new context. Best-effort: failure is silent.
+        apiFetch(`/workspaces/projects/${projectId}/`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            // The detail view returns serialized project fields at the
+            // top level (see ProjectDetailView.get). Only switch scope
+            // when the payload looks like a real project.
+            if (data && typeof data === 'object' && 'id' in data && 'slug' in data) {
+              selectProjectScope(data as ProjectRecord, undefined, username);
+            }
+          })
+          .catch(() => undefined);
+      }
+      if (reason) {
+        triggerToast(reason, 'info');
+      }
+      // asset_id is reserved for a future asset-detail surface; nothing
+      // to do with it yet beyond the type.
+      void assetId;
+    },
+    [setActiveTab, selectProjectScope, username, triggerToast],
+  );
 
   const handleCopyClipboard = useCallback(async (text: string) => {
     try {
@@ -204,7 +218,7 @@ export default function App() {
         localStorage.setItem('mh_username', data.username);
         setToken(sessionMarker);
         setUsername(data.username);
-        navigate('/');
+        setActiveSection('brainstorm');
         triggerToast(`欢迎回来, ${data.username}!`, 'success');
       } else {
         setAuthError(data.error || '登录失败');
@@ -283,6 +297,21 @@ export default function App() {
       triggerToast('分享失败，无法连接服务器', 'error');
     }
   }, [username, workspaceScope, triggerToast, fetchDashboard]);
+
+  // One-time URL → store sync on mount, so deep links / refresh land
+  // on the right tab. After that, store is the source of truth: every
+  // sidebar click / programmatic jump goes through setActiveSection,
+  // and the URL is the projection (handled by each call site).
+  // (Earlier we tried a two-way sync here and it re-introduced the
+  // "Maximum update depth exceeded" loop, so it's intentionally
+  // one-way.)
+  useEffect(() => {
+    const section = sectionFromPath(location.pathname);
+    if (section !== activeSection) {
+      setActiveSection(section);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Initial bootstrap: API status + workspace + dashboard + billing
   useEffect(() => {
@@ -449,7 +478,8 @@ export default function App() {
                   triggerToast={triggerToast}
                   onComplete={(draftId) => {
                     setSidebarToggled(true);
-                    navigate(`/workflows?draft=${draftId}`);
+                    setActiveSection('builder');
+                    navigate(`/workflows?draft=${draftId}`, { replace: true });
                   }}
                   onToggleSidebar={() => setSidebarToggled((prev) => !prev)}
                 />
@@ -618,7 +648,7 @@ export default function App() {
       </main>
 
       {/* AI assistant mount */}
-      <PageContextTracker contextByPath={assistantContextByPath} />
+      <PageContextTracker extras={assistantPageContext} />
       <AssistantBubble />
       <AssistantPanel onNavigate={onAssistantNavigate} />
 

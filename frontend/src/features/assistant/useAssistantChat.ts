@@ -1,30 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
-import { apiPost } from '../../hooks/useApi';
-import { getCsrfToken } from '../../hooks/useApi';
-import type { AssistantSseEvent, PageContext } from './types';
+import { apiStream } from '../../hooks/useApi';
 import { clientTools } from './clientTools';
+import type { AssistantSseEvent, ChatMessage, PageContext } from './types';
 
-export type ChatMessageRole = 'user' | 'assistant' | 'system';
-
-export interface ToolCall {
-  name: string;
-  args: Record<string, unknown>;
-  result?: unknown;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: ChatMessageRole;
-  content: string;
-  toolCalls: ToolCall[];
-  pending?: boolean;
-}
+export type { ChatMessage, ChatMessageRole } from './types';
 
 interface SendInput {
   text: string;
   sessionId: number | null;
   pageContext: PageContext;
-  onNavigate: (tab: string, projectId?: number, assetId?: number, reason?: string) => void;
   onSessionId: (id: number) => void;
 }
 
@@ -79,7 +63,7 @@ export function useAssistantChat(): UseAssistantChatResult {
   }, []);
 
   const send = useCallback(
-    async ({ text, sessionId, pageContext, onNavigate, onSessionId }: SendInput) => {
+    async ({ text, sessionId, pageContext, onSessionId }: SendInput) => {
       if (!text.trim() || sending) return;
       setError(null);
 
@@ -106,7 +90,7 @@ export function useAssistantChat(): UseAssistantChatResult {
       // Local mutable view onto the assistant message we're streaming.
       // We commit each event through setMessages with a fresh object so
       // React re-renders.
-      const liveToolCalls: ToolCall[] = [];
+      const liveToolCalls: ChatMessage['toolCalls'] = [];
       let liveContent = '';
       const commit = () => {
         setMessages((prev) =>
@@ -119,13 +103,8 @@ export function useAssistantChat(): UseAssistantChatResult {
       };
 
       try {
-        const res = await fetch('/api/assistant/chat', {
+        const res = await apiStream('/assistant/chat', {
           method: 'POST',
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken() ?? '',
-          },
           body: JSON.stringify({
             session_id: sessionId,
             message: text,
@@ -135,7 +114,20 @@ export function useAssistantChat(): UseAssistantChatResult {
         });
 
         if (!res.ok || !res.body) {
-          throw new Error(`HTTP ${res.status}`);
+          // Surface the backend's body (DRF throttle messages, upstream
+          // 4xx, etc.) so the user gets actionable text instead of
+          // just "HTTP 429".
+          let detail = '';
+          try {
+            detail = (await res.text()).slice(0, 200);
+          } catch {
+            /* body not readable */
+          }
+          throw new Error(
+            res.status === 429
+              ? `请求过于频繁（429）${detail ? `：${detail}` : ''}`
+              : `HTTP ${res.status}${detail ? `：${detail}` : ''}`,
+          );
         }
 
         const reader = res.body.getReader();
@@ -162,19 +154,13 @@ export function useAssistantChat(): UseAssistantChatResult {
                 args: event.args ?? {},
               });
               commit();
-              // Run client-side tool, if any
+              // Browser-side tool intents (e.g. clipboard, file picker).
+              // navigate is intentionally NOT handled here — it surfaces
+              // as a button on the ToolCallCard so the user opts in.
               const handler = clientTools[event.name];
               if (handler) {
                 try {
                   const result = await handler(event.args ?? {});
-                  if (result.kind === 'navigate' && result.tab) {
-                    onNavigate(
-                      result.tab,
-                      result.project_id,
-                      result.asset_id,
-                      result.reason,
-                    );
-                  }
                   liveToolCalls[liveToolCalls.length - 1].result = result;
                   commit();
                 } catch (err) {
@@ -195,8 +181,18 @@ export function useAssistantChat(): UseAssistantChatResult {
                 onSessionId(event.session_id);
               }
             } else if (event.type === 'error') {
-              liveContent += `\n\n（出错：${event.error ?? 'unknown'}）`;
-              commit();
+              // Lift error out of the bubble into the composer's error
+              // slot — it's much more visible there, and we cancel the
+              // 'pending' state so the spinner stops.
+              const upstreamStatus = event.status;
+              const msg = event.error ?? 'unknown';
+              setError(
+                upstreamStatus === 429
+                  ? `上游模型限流（429）：${msg}`
+                  : upstreamStatus
+                    ? `上游模型 ${upstreamStatus}：${msg}`
+                    : msg,
+              );
             }
           }
         }
@@ -215,9 +211,6 @@ export function useAssistantChat(): UseAssistantChatResult {
     },
     [sending],
   );
-
-  // Suppress unused-import warning (apiPost kept for future use)
-  void apiPost;
 
   return { messages, sending, error, send, reset, loadHistory };
 }
