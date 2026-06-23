@@ -6,9 +6,10 @@ from typing import Any
 
 
 COPY_SYSTEM_PROMPT = (
-    'You are a professional marketing copywriting AI. '
-    'Generate high-converting social media copy that matches the target platform and tone. '
-    'Respond ONLY with valid JSON. Do not wrap the JSON in markdown code fences.'
+    '你是一位专精中国社交媒体营销的资深文案策划。'
+    '根据品牌、产品、语气与目标平台生成高转化营销文案。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    '正文以中文为主；标签与 emoji 按平台习惯使用。'
 )
 
 COPY_JSON_SCHEMA_HINT = """{
@@ -23,18 +24,51 @@ COPY_JSON_SCHEMA_HINT = """{
 }"""
 
 PLATFORM_GUIDANCE = {
-    'xiaohongshu': 'Use Xiaohongshu style: conversational, emoji-friendly, short punchy lines, hashtag-friendly tags.',
-    '小红书': 'Use Xiaohongshu style: conversational, emoji-friendly, short punchy lines, hashtag-friendly tags.',
-    'wechat': 'Use WeChat article style: informative, structured paragraphs, trustworthy tone.',
-    '微信': 'Use WeChat article style: informative, structured paragraphs, trustworthy tone.',
-    'douyin': 'Use Douyin short-video caption style: hook-first, spoken rhythm, strong CTA.',
-    '抖音': 'Use Douyin short-video caption style: hook-first, spoken rhythm, strong CTA.',
+    'xiaohongshu': (
+        '小红书风格：口语化种草语气，emoji 适度，短句分段，标签 4-8 个带 #，'
+        '首句强钩子，避免硬广感，强调真实体验与使用场景。'
+    ),
+    '小红书': (
+        '小红书风格：口语化种草语气，emoji 适度，短句分段，标签 4-8 个带 #，'
+        '首句强钩子，避免硬广感，强调真实体验与使用场景。'
+    ),
+    'wechat': (
+        '微信公众号风格：信息密度高、段落结构清晰，语气可信克制，'
+        '少用感叹号，适合深度阅读，CTA 引导关注或点击阅读原文。'
+    ),
+    '微信': (
+        '微信公众号风格：信息密度高、段落结构清晰，语气可信克制，'
+        '少用感叹号，适合深度阅读，CTA 引导关注或点击阅读原文。'
+    ),
+    'douyin': (
+        '抖音短视频文案风格：前 3 秒强钩子，口语化可念读，节奏短促，'
+        '适合字幕与口播，结尾明确行动号召。'
+    ),
+    '抖音': (
+        '抖音短视频文案风格：前 3 秒强钩子，口语化可念读，节奏短促，'
+        '适合字幕与口播，结尾明确行动号召。'
+    ),
+}
+
+PLATFORM_FEW_SHOT = {
+    'xiaohongshu': '范例标题：「这支精华真的把熬夜脸救回来了✨」；正文短句+emoji；标签如 #护肤 #好物分享',
+    '小红书': '范例标题：「这支精华真的把熬夜脸救回来了✨」；正文短句+emoji；标签如 #护肤 #好物分享',
+    'wechat': '范例标题：「为什么越来越多品牌选择 AI 内容工作流」；正文分 3-4 段论述价值',
+    '微信': '范例标题：「为什么越来越多品牌选择 AI 内容工作流」；正文分 3-4 段论述价值',
+    'douyin': '范例钩子：「还在一条一条写脚本？这个工具 10 分钟搞定全平台内容」',
+    '抖音': '范例钩子：「还在一条一条写脚本？这个工具 10 分钟搞定全平台内容」',
 }
 
 
 def _platform_hint(platform: str) -> str:
     key = (platform or '').strip().lower()
-    return PLATFORM_GUIDANCE.get(key, f'Adapt copy conventions for platform: {platform or "general social media"}.')
+    guidance = PLATFORM_GUIDANCE.get(key) or PLATFORM_GUIDANCE.get(platform or '')
+    few_shot = PLATFORM_FEW_SHOT.get(key) or PLATFORM_FEW_SHOT.get(platform or '')
+    if guidance and few_shot:
+        return f'{guidance} {few_shot}'
+    if guidance:
+        return guidance
+    return f'按 {platform or "通用社交媒体"} 的内容习惯适配语气、结构与标签。'
 
 
 def build_copy_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
@@ -46,18 +80,18 @@ def build_copy_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     workflow_context = payload.get('workflow_context')
 
     user_lines = [
-        'Generate marketing copy with the following inputs:',
-        f'- Brand / product name: {brand_name}',
-        f'- Product description: {product_description or "Not specified"}',
-        f'- Tone: {tone}',
-        f'- Target platform: {platform}',
-        f'- Platform guidance: {_platform_hint(platform)}',
-        f'- Required JSON schema:\n{COPY_JSON_SCHEMA_HINT}',
+        '请根据以下输入生成营销文案：',
+        f'- 品牌/产品名：{brand_name}',
+        f'- 产品描述：{product_description or "未指定"}',
+        f'- 语气风格：{tone}',
+        f'- 目标平台：{platform}',
+        f'- 平台写作要求：{_platform_hint(platform)}',
+        f'- 输出 JSON 结构：\n{COPY_JSON_SCHEMA_HINT}',
     ]
     if workflow_context:
-        user_lines.append(f'- Workflow / brand context: {workflow_context}')
+        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
     if feedback:
-        user_lines.append(f'- Revision feedback (apply strictly): {feedback}')
+        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
 
     return [
         {'role': 'system', 'content': COPY_SYSTEM_PROMPT},
@@ -130,9 +164,10 @@ def normalize_copy_result(result: Any, payload: dict[str, Any]) -> dict[str, Any
 
 
 STORYBOARD_SYSTEM_PROMPT = (
-    'You are a professional short-video director and storyboard AI. '
-    'Design a compelling scene-by-scene script with visual direction and voiceover narration. '
-    'Respond ONLY with valid JSON. Do not wrap the JSON in markdown code fences.'
+    '你是一位专精短视频营销的导演与分镜策划。'
+    '按场景输出视觉描述与旁白脚本，适配抖音/小红书等竖屏传播节奏。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    'visual_description 用中文描述镜头；audio_narration 为可念读的口播文案。'
 )
 
 STORYBOARD_JSON_SCHEMA_HINT = """{
@@ -159,20 +194,20 @@ def build_storyboard_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     platform = str(payload.get('platform') or '').strip()
 
     user_lines = [
-        'Generate a storyboard script with the following inputs:',
-        f'- Video topic / focus: {video_topic}',
-        f'- Target total duration: {duration} seconds',
-        f'- Target audience: {target_audience}',
-        '- Create between 3 and 6 logical scenes.',
-        f'- Ensure scene duration_seconds values sum to exactly {duration} seconds.',
-        f'- Required JSON schema:\n{STORYBOARD_JSON_SCHEMA_HINT}',
+        '请根据以下输入生成分镜脚本：',
+        f'- 视频主题：{video_topic}',
+        f'- 目标总时长：{duration} 秒',
+        f'- 目标受众：{target_audience}',
+        '- 场景数量：3 到 6 个，逻辑连贯。',
+        f'- 各场景 duration_seconds 之和必须等于 {duration} 秒。',
+        f'- 输出 JSON 结构：\n{STORYBOARD_JSON_SCHEMA_HINT}',
     ]
     if platform:
-        user_lines.insert(4, f'- Distribution platform: {platform} (adapt pacing and style accordingly)')
+        user_lines.insert(5, f'- 发布平台：{platform}（请适配该平台的内容节奏与镜头风格）')
     if workflow_context:
-        user_lines.append(f'- Workflow / brand context: {workflow_context}')
+        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
     if feedback:
-        user_lines.append(f'- Revision feedback (apply strictly): {feedback}')
+        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
 
     return [
         {'role': 'system', 'content': STORYBOARD_SYSTEM_PROMPT},
@@ -314,23 +349,28 @@ def aspect_ratio_to_size(aspect_ratio: str) -> str:
 
 
 def build_image_generation_prompt(payload: dict[str, Any]) -> str:
+    from api.image_style_skills import resolve_style_skill
+
     user_prompt = str(payload.get('prompt') or '').strip()
-    style = str(payload.get('style') or '').strip()
+    style_skill = payload.get('style_skill')
+    legacy_style = payload.get('style')
+    style = resolve_style_skill(style_skill, legacy_style) if (style_skill or legacy_style) else ''
     aspect_ratio = str(payload.get('aspect_ratio') or payload.get('aspectRatio') or '1:1').strip()
     platform = str(payload.get('platform') or '').strip()
+    negative_prompt = str(payload.get('negative_prompt') or '').strip()
 
     parts: list[str] = []
     if user_prompt:
         parts.append(user_prompt)
     if style:
-        parts.append(f'Artistic style: {style}')
+        parts.append(f'视觉风格：{style}')
     if platform:
-        parts.append(f'Optimized for {platform} social media marketing visual')
-    parts.append(
-        '[Main subject] + [Scene / background] + [Style] + [Lighting] + [Composition] + [High quality, sharp details]'
-    )
-    parts.append(f'Composition aspect ratio: {aspect_ratio}')
-    return '. '.join(part for part in parts if part)
+        parts.append(f'适配 {platform} 社交媒体营销主视觉')
+    parts.append('高清细节，专业构图，主体清晰，光影自然，无文字水印，无畸形肢体')
+    parts.append(f'画幅比例：{aspect_ratio}')
+    if negative_prompt:
+        parts.append(f'避免：{negative_prompt}')
+    return '。'.join(part for part in parts if part)
 
 
 def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -361,8 +401,386 @@ def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, An
     }
 
 
-MOCK_VIDEO_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+IMAGE_PROMPT_SYSTEM_PROMPT = (
+    '你是一位 AI 绘画提示词工程师，专精中国社交媒体营销视觉。'
+    '根据品牌信息、内容主题与风格 Skill，生成可直接用于文生图模型的详细 prompt。'
+    'prompt 字段用英文撰写（模型友好），同时提供 prompt_zh 中文摘要。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+)
+
+IMAGE_PROMPT_JSON_SCHEMA_HINT = """{
+  "prompt": "Detailed English prompt for text-to-image model: subject, scene, lighting, composition, style",
+  "prompt_zh": "中文摘要，便于运营理解画面意图",
+  "negative_prompt": "Elements to avoid, comma-separated",
+  "composition_notes": "Brief notes on framing and aspect ratio usage"
+}"""
+
+
+def build_image_prompt_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
+    subject = str(payload.get('subject') or payload.get('product_description') or '').strip()
+    brand_name = str(payload.get('brand_name') or 'Marketing-Hub').strip()
+    style_text = str(payload.get('style') or '').strip()
+    style_skill_id = str(payload.get('style_skill') or '').strip()
+    aspect_ratio = str(payload.get('aspect_ratio') or '1:1').strip()
+    platform = str(payload.get('platform') or '小红书').strip()
+    negative_prompt = str(payload.get('negative_prompt') or '').strip()
+    upstream_text = str(payload.get('upstream_text') or '').strip()
+    feedback = str(payload.get('feedback') or '').strip()
+    workflow_context = payload.get('workflow_context')
+
+    user_lines = [
+        '请为以下营销场景生成文生图 prompt：',
+        f'- 品牌：{brand_name}',
+        f'- 画面主题/产品描述：{subject or upstream_text or "未指定"}',
+        f'- 风格 Skill：{style_text or "默认编辑风"}',
+    ]
+    if style_skill_id:
+        user_lines.append(f'- 风格 Skill ID：{style_skill_id}')
+    user_lines.extend([
+        f'- 目标画幅：{aspect_ratio}',
+        f'- 发布平台：{platform}',
+        f'- 输出 JSON 结构：\n{IMAGE_PROMPT_JSON_SCHEMA_HINT}',
+    ])
+    if upstream_text and upstream_text != subject:
+        user_lines.append(f'- 上游节点内容参考：\n{upstream_text[:2000]}')
+    if negative_prompt:
+        user_lines.append(f'- 必须排除的元素：{negative_prompt}')
+    if workflow_context:
+        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
+    if feedback:
+        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
+
+    return [
+        {'role': 'system', 'content': IMAGE_PROMPT_SYSTEM_PROMPT},
+        {'role': 'user', 'content': '\n'.join(user_lines)},
+    ]
+
+
+def normalize_image_prompt_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result, str):
+        try:
+            result = json.loads(_strip_json_fence(result))
+        except json.JSONDecodeError:
+            result = {'prompt': result}
+    if not isinstance(result, dict):
+        result = {}
+
+    style_skill = str(payload.get('style_skill') or '').strip()
+    style_text = str(payload.get('style') or result.get('style') or '').strip()
+    aspect_ratio = str(payload.get('aspect_ratio') or result.get('aspect_ratio') or '1:1').strip()
+    negative_prompt = str(
+        result.get('negative_prompt') or payload.get('negative_prompt') or ''
+    ).strip()
+    prompt = str(result.get('prompt') or '').strip()
+    prompt_zh = str(result.get('prompt_zh') or '').strip()
+
+    if not prompt:
+        subject = str(payload.get('subject') or payload.get('upstream_text') or 'marketing visual').strip()
+        prompt = f'{subject}, {style_text}, aspect ratio {aspect_ratio}, professional marketing photography'
+
+    return {
+        'prompt': prompt,
+        'prompt_zh': prompt_zh,
+        'negative_prompt': negative_prompt,
+        'aspect_ratio': aspect_ratio,
+        'style_skill': style_skill,
+        'style': style_text,
+        'composition_notes': str(result.get('composition_notes') or '').strip(),
+    }
+
+
+REVIEW_SYSTEM_PROMPT = (
+    '你是一位营销内容合规与品牌一致性审核专家。'
+    '审查给定内容的违禁词、品牌调性、平台规则符合度。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    'issues 需具体指出问题片段与修改建议。'
+)
+
+REVIEW_JSON_SCHEMA_HINT = """{
+  "passed": true,
+  "brand_consistency_score": 85,
+  "sensitive_word_issues": [
+    {"word": "问题词", "context": "出现上下文", "suggestion": "修改建议"}
+  ],
+  "channel_rule_issues": [
+    {"rule": "违反的规则", "context": "出现上下文", "suggestion": "修改建议"}
+  ],
+  "summary": "整体审核结论与优先修改项",
+  "revised_suggestions": ["建议修改 1", "建议修改 2"]
+}"""
+
+
+def build_review_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
+    title = str(payload.get('content_title') or payload.get('title') or '').strip()
+    body = str(payload.get('content_body') or payload.get('product_description') or '').strip()
+    tags = payload.get('tags') or []
+    forbidden_words = str(payload.get('forbidden_words') or '').strip()
+    channel_rules = str(payload.get('channel_rules') or '').strip()
+    platform = str(payload.get('platform') or '小红书').strip()
+    feedback = str(payload.get('feedback') or '').strip()
+    workflow_context = payload.get('workflow_context')
+
+    tag_text = ', '.join(str(t) for t in tags) if isinstance(tags, list) else str(tags)
+    user_lines = [
+        '请审核以下营销内容：',
+        f'- 标题：{title or "（无标题）"}',
+        f'- 正文：\n{body or "（无正文）"}',
+        f'- 标签：{tag_text or "（无）"}',
+        f'- 目标平台：{platform}',
+        f'- 禁用词列表：{forbidden_words or "（未指定，按广告法与平台规范检查）"}',
+        f'- 频道/渠道规则：{channel_rules or "（未指定，按平台通用规范检查）"}',
+        f'- 输出 JSON 结构：\n{REVIEW_JSON_SCHEMA_HINT}',
+    ]
+    if workflow_context:
+        user_lines.append(f'- 品牌上下文：{workflow_context}')
+    if feedback:
+        user_lines.append(f'- 额外审核要求：{feedback}')
+
+    return [
+        {'role': 'system', 'content': REVIEW_SYSTEM_PROMPT},
+        {'role': 'user', 'content': '\n'.join(user_lines)},
+    ]
+
+
+def _coerce_sensitive_issues(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    issues: list[dict[str, str]] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            issues.append({'word': item.strip(), 'context': '', 'suggestion': '请替换或删除'})
+        elif isinstance(item, dict):
+            issues.append({
+                'word': str(item.get('word') or '').strip(),
+                'context': str(item.get('context') or '').strip(),
+                'suggestion': str(item.get('suggestion') or '请替换或删除').strip(),
+            })
+    return [i for i in issues if i.get('word')]
+
+
+def _coerce_channel_issues(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    issues: list[dict[str, str]] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            issues.append({'rule': item.strip(), 'context': '', 'suggestion': '请按平台规范修改'})
+        elif isinstance(item, dict):
+            issues.append({
+                'rule': str(item.get('rule') or '').strip(),
+                'context': str(item.get('context') or '').strip(),
+                'suggestion': str(item.get('suggestion') or '请按平台规范修改').strip(),
+            })
+    return [i for i in issues if i.get('rule')]
+
+
+def normalize_review_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result, str):
+        try:
+            result = json.loads(_strip_json_fence(result))
+        except json.JSONDecodeError:
+            result = {'summary': result}
+    if not isinstance(result, dict):
+        result = {}
+
+    sensitive = result.get('sensitive_word_issues') or []
+    channel = result.get('channel_rule_issues') or []
+
+    score = result.get('brand_consistency_score') or result.get('brand_consistency')
+    try:
+        brand_score = int(score) if score is not None else 80
+    except (TypeError, ValueError):
+        brand_score = 80
+
+    passed = result.get('passed')
+    if passed is None:
+        passed = brand_score >= 70 and not sensitive
+
+    return {
+        'passed': bool(passed),
+        'brand_consistency_score': max(0, min(100, brand_score)),
+        'sensitive_word_issues': _coerce_sensitive_issues(sensitive),
+        'channel_rule_issues': _coerce_channel_issues(channel),
+        'summary': str(result.get('summary') or '审核完成').strip(),
+        'revised_suggestions': [
+            str(s).strip() for s in (result.get('revised_suggestions') or []) if str(s).strip()
+        ],
+    }
+
+
+AUDIO_SYSTEM_PROMPT = (
+    '你是一位中文营销配音导演。'
+    '根据给定文本与音色设定，输出适合 TTS 朗读的优化脚本及元数据。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    'optimized_text 应口语化、停顿自然、适合口播。'
+)
+
+AUDIO_JSON_SCHEMA_HINT = """{
+  "optimized_text": "优化后的配音脚本",
+  "voice_direction": "语气与节奏指导",
+  "estimated_duration_seconds": 15,
+  "pause_markers": ["停顿位置说明"]
+}"""
+
+
+def build_audio_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
+    text = str(payload.get('text') or '').strip()
+    voice_id = str(payload.get('voice_id') or 'female_warm').strip()
+    try:
+        speed = float(payload.get('speed') or 1.0)
+    except (TypeError, ValueError):
+        speed = 1.0
+    feedback = str(payload.get('feedback') or '').strip()
+    workflow_context = payload.get('workflow_context')
+
+    user_lines = [
+        '请优化以下配音脚本：',
+        f'- 原始文本：\n{text or "（空）"}',
+        f'- 音色 ID：{voice_id}',
+        f'- 语速倍率：{speed}',
+        f'- 输出 JSON 结构：\n{AUDIO_JSON_SCHEMA_HINT}',
+    ]
+    if workflow_context:
+        user_lines.append(f'- 品牌上下文：{workflow_context}')
+    if feedback:
+        user_lines.append(f'- 修改意见：{feedback}')
+
+    return [
+        {'role': 'system', 'content': AUDIO_SYSTEM_PROMPT},
+        {'role': 'user', 'content': '\n'.join(user_lines)},
+    ]
+
+
+def normalize_audio_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result, str):
+        try:
+            result = json.loads(_strip_json_fence(result))
+        except json.JSONDecodeError:
+            result = {'optimized_text': result}
+    if not isinstance(result, dict):
+        result = {}
+
+    original_text = str(payload.get('text') or '').strip()
+    optimized = str(result.get('optimized_text') or original_text).strip()
+    voice_id = str(payload.get('voice_id') or result.get('voice_id') or 'female_warm').strip()
+    try:
+        speed = float(payload.get('speed') or result.get('speed') or 1.0)
+    except (TypeError, ValueError):
+        speed = 1.0
+
+    try:
+        duration = int(result.get('estimated_duration_seconds') or max(5, len(optimized) // 4))
+    except (TypeError, ValueError):
+        duration = max(5, len(optimized) // 4)
+
+    audio_url = str(result.get('audio_url') or '').strip()
+    if not audio_url:
+        audio_url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
+
+    return {
+        'text': optimized,
+        'original_text': original_text,
+        'voice_id': voice_id,
+        'speed': speed,
+        'voice_direction': str(result.get('voice_direction') or '').strip(),
+        'audio_url': audio_url,
+        'text_length': len(optimized),
+        'estimated_audio_duration_seconds': duration,
+    }
+
+
+MOCK_VIDEO_URL = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
 MOCK_VIDEO_THUMBNAIL = 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=640&q=80'
+AGNES_VIDEO_ALLOWED_FRAMES = (81, 121, 161, 241, 441)
+AGNES_VIDEO_DEFAULT_FRAME_RATE = 24
+
+
+def snap_agnes_num_frames(target_seconds: int, frame_rate: int = AGNES_VIDEO_DEFAULT_FRAME_RATE) -> int:
+    """Agnes Video v2.0 requires num_frames = 8n+1, max 441."""
+    try:
+        seconds = max(1, int(target_seconds))
+    except (TypeError, ValueError):
+        seconds = 5
+    target_frames = seconds * max(1, int(frame_rate))
+    for value in AGNES_VIDEO_ALLOWED_FRAMES:
+        if value >= target_frames:
+            return value
+    return AGNES_VIDEO_ALLOWED_FRAMES[-1]
+
+
+def aspect_ratio_to_video_dimensions(aspect_ratio: str) -> tuple[int, int]:
+    """Map aspect ratio to Agnes `(width, height)` pixel dimensions."""
+    ratio = (aspect_ratio or '9:16').strip()
+    mapping = {
+        '16:9': (1152, 648),
+        '9:16': (768, 1365),
+        '1:1': (1024, 1024),
+        '4:5': (896, 1120),
+        '4:3': (1152, 864),
+        '3:4': (864, 1152),
+    }
+    return mapping.get(ratio, mapping['9:16'])
+
+
+def build_video_generation_prompt(payload: dict[str, Any]) -> str:
+    """
+    Build an Agnes-friendly cinematic prompt.
+    See: https://agnes-ai.com/doc/agnes-video-v20
+    """
+    explicit = str(payload.get('prompt') or payload.get('expanded_prompt') or '').strip()
+    if explicit:
+        return explicit
+
+    video_topic = str(payload.get('video_topic') or '').strip()
+    scenes = payload.get('scenes') or []
+    parts: list[str] = []
+
+    if video_topic:
+        parts.append(f"Marketing video about {video_topic}.")
+
+    if isinstance(scenes, list):
+        for index, scene in enumerate(scenes[:8], 1):
+            if not isinstance(scene, dict):
+                continue
+            visual = str(scene.get('visual_description') or scene.get('visual') or scene.get('description') or '').strip()
+            narration = str(scene.get('audio_narration') or scene.get('voiceover') or scene.get('narration') or '').strip()
+            if visual:
+                parts.append(f"Shot {index}: {visual}")
+            if narration:
+                parts.append(f"Voiceover cue: {narration}")
+
+    workflow_context = str(payload.get('workflow_context') or '').strip()
+    if workflow_context and len(workflow_context) < 400:
+        parts.append(f"Brand context: {workflow_context}")
+
+    feedback = str(payload.get('feedback') or '').strip()
+    if feedback:
+        parts.append(f"Revision notes: {feedback}")
+
+    if not parts:
+        return (
+            '电影感品牌营销短片：清晰主体、平滑运镜、专业布光、'
+            '浅景深、高细节、广告级构图，无文字叠加，无水印。'
+        )
+
+    return (
+        ' '.join(parts)
+        + ' 电影级构图，自然流畅运镜，专业布光，浅景深，高细节，'
+        '营销广告质感，无文字叠加，无水印。'
+    ).strip()
+
+
+def extract_agnes_video_url(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ''
+    for key in ('video_url', 'remixed_from_video_id', 'url', 'output_url', 'download_url'):
+        value = body.get(key)
+        if isinstance(value, str) and value.strip().startswith('http'):
+            return value.strip()
+    nested = body.get('data') or body.get('result') or body.get('output')
+    if isinstance(nested, dict):
+        return extract_agnes_video_url(nested)
+    return ''
 
 
 def normalize_video_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -380,25 +798,34 @@ def normalize_video_result(result: Any, payload: dict[str, Any]) -> dict[str, An
 
     video_topic = str(payload.get('video_topic') or result.get('video_topic') or 'Marketing video').strip()
     aspect_ratio = str(payload.get('aspect_ratio') or result.get('aspect_ratio') or '9:16').strip()
-    video_url = str(result.get('video_url') or result.get('url') or MOCK_VIDEO_URL).strip()
+    video_url = extract_agnes_video_url(result) or str(result.get('video_url') or result.get('url') or MOCK_VIDEO_URL).strip()
     thumbnail_url = str(result.get('thumbnail_url') or result.get('poster_url') or MOCK_VIDEO_THUMBNAIL).strip()
+    frame_rate = int(result.get('frame_rate') or payload.get('frame_rate') or AGNES_VIDEO_DEFAULT_FRAME_RATE)
+    num_frames = int(result.get('num_frames') or payload.get('num_frames') or snap_agnes_num_frames(duration, frame_rate))
+    duration_seconds = int(result.get('duration_seconds') or max(1, round(num_frames / max(frame_rate, 1))))
+
+    is_demo_fallback = video_url == MOCK_VIDEO_URL and not str(result.get('id') or result.get('task_id') or '').strip()
 
     return {
         'video_topic': video_topic,
         'aspect_ratio': aspect_ratio,
         'video_url': video_url,
         'thumbnail_url': thumbnail_url,
-        'duration_seconds': int(result.get('duration_seconds') or duration),
+        'duration_seconds': duration_seconds,
+        'num_frames': num_frames,
+        'frame_rate': frame_rate,
         'scenes_count': len(scenes),
         'has_audio': bool(str(payload.get('audio_url') or '').strip()),
-        'model': str(payload.get('model') or result.get('model') or 'video-default'),
+        'model': str(payload.get('model') or result.get('model') or 'agnes-video-v2.0'),
+        'provider_task_id': str(result.get('id') or result.get('task_id') or ''),
+        'is_demo_fallback': is_demo_fallback,
     }
 
 
 CUSTOM_AGENT_SYSTEM_PROMPT = (
-    'You are a customizable marketing AI agent. '
-    'Execute the user-defined task using the provided context and upstream data. '
-    'Respond ONLY with valid JSON. Do not wrap the JSON in markdown code fences.'
+    '你是 Marketing-Hub 的可定制营销智能体。'
+    '根据用户定义的任务说明与上游上下文完成指定工作。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
 )
 
 CUSTOM_AGENT_JSON_SCHEMA_HINT = """{
@@ -458,29 +885,25 @@ def normalize_custom_agent_result(result: Any, payload: dict[str, Any]) -> dict[
 
 
 BRAINSTORM_SYSTEM_PROMPT = (
-    'You are a marketing workflow architect AI. '
-    'Given a creative marketing idea from the user, you design a complete marketing workflow '
-    'consisting of interconnected AI processing nodes that form a DAG (directed acyclic graph). '
-    'Analyze the idea to infer brand context (brand name, audience, tone, selling points, visual style, campaign goal). '
-    'Choose appropriate node types based on the idea:\n'
-    '- "context" for brand/audience setup (always include at least one as the starting node)\n'
-    '- "copy" for text/social media/marketing copy generation\n'
-    '- "image" for visual/image generation\n'
-    '- "image_prompt" for crafting image prompts from text\n'
-    '- "image_generation" for actual image creation\n'
-    '- "storyboard" for video storyboard/scene planning\n'
-    '- "video_generation" for turning storyboard/audio into a marketing video\n'
-    '- "audio" for voiceover/audio generation\n'
-    '- "retrieval" for research and reference gathering\n'
-    '- "review" for content review and compliance checking\n'
-    '- "custom_agent" for specialized custom tasks\n'
-    '- "rag_search" for semantic retrieval\n'
-    'Position nodes horizontally with 300px spacing (x starts at 80, y around 120). '
-    'Each node must have width=260, height=166. '
-    'Create edges that form a valid DAG with no cycles. '
-    'Set sensible default config values for each node based on the inferred brand context. '
-    'Respond ONLY with valid JSON matching the required schema. '
-    'Do not wrap the JSON in markdown code fences.'
+    '你是营销工作流架构师 AI。'
+    '根据用户的创意需求，设计由 AI 处理节点组成的有向无环图（DAG）工作流。'
+    '从需求中推断 brand_context（品牌名、受众、语气、卖点、视觉风格、活动目标）。'
+    '根据需求选择合适的节点类型：\n'
+    '- "context"：品牌/受众设定（至少一个起始节点）\n'
+    '- "copy"：文案/社媒内容生成\n'
+    '- "image" / "image_prompt" / "image_generation"：视觉与配图流程\n'
+    '- "storyboard"：视频分镜策划\n'
+    '- "video_generation"：分镜/音频合成营销视频\n'
+    '- "audio"：配音生成\n'
+    '- "retrieval" / "rag_search"：检索参考\n'
+    '- "review"：内容审核与合规\n'
+    '- "custom_agent"：自定义专项任务\n'
+    '图片相关节点的 config.style_skill 请从以下 ID 中选择：'
+    'editorial_magazine, xiaohongshu_lifestyle, product_studio, minimal_flat, '
+    'cinematic_film, illustration_hand, corporate_b2b, cyber_neon。'
+    '节点水平间距约 300px（x 从 80 起，y 约 120），width=260，height=166。'
+    '边必须构成有效 DAG，无环。'
+    '只输出合法 JSON，不要用 markdown 代码块包裹。'
 )
 
 BRAINSTORM_JSON_SCHEMA_HINT = """{
@@ -518,13 +941,13 @@ BRAINSTORM_JSON_SCHEMA_HINT = """{
 }"""
 
 _BRAINSTORM_NODE_CONFIG_HINTS = {
-    'context': 'config.summary (string): brand/campaign brief',
+    'context': 'config.summary (string): 品牌/活动 brief',
     'copy': 'config.tone (string), config.platform (string), config.product_description (string)',
-    'image': 'config.style (string), config.aspect_ratio (string, e.g. "1:1"), config.prompt (string)',
-    'image_prompt': 'config.tone (string), config.platform (string)',
-    'image_generation': 'config.style (string), config.aspect_ratio (string)',
-    'storyboard': 'config.video_topic (string), config.duration (number, seconds), config.target_audience (string)',
-    'video_generation': 'config.aspect_ratio (string, e.g. "9:16"), config.duration_cap (number, seconds), config.model (string)',
+    'image': 'config.style_skill (string), config.aspect_ratio (string), config.prompt (string)',
+    'image_prompt': 'config.style_skill (string), config.aspect_ratio (string), config.platform (string)',
+    'image_generation': 'config.style_skill (string), config.aspect_ratio (string)',
+    'storyboard': 'config.video_topic (string), config.duration (number), config.target_audience (string)',
+    'video_generation': 'config.aspect_ratio (string), config.duration_cap (number), config.model (string)',
     'audio': 'config.text (string), config.voice_id (string), config.speed (number)',
     'retrieval': 'config.query (string)',
     'review': 'config.forbidden_words (string), config.channel_rules (string)',

@@ -10,12 +10,20 @@ from ai_gateway.services import ModelPolicy
 from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
+    aspect_ratio_to_video_dimensions,
     build_copy_messages,
     build_image_generation_prompt,
+    build_image_prompt_messages,
+    build_review_messages,
     build_storyboard_messages,
+    build_video_generation_prompt,
+    extract_agnes_video_url,
     normalize_copy_result,
+    normalize_image_prompt_result,
     normalize_image_result,
+    normalize_review_result,
     normalize_storyboard_result,
+    snap_agnes_num_frames,
 )
 
 
@@ -49,7 +57,7 @@ class StoryboardPromptTests(SimpleTestCase):
             'feedback': 'Make the opening hook stronger.',
         })
         self.assertEqual(messages[0]['role'], 'system')
-        self.assertIn('30 seconds', messages[1]['content'])
+        self.assertIn('30 秒', messages[1]['content'])
         self.assertIn('Make the opening hook stronger.', messages[1]['content'])
 
     def test_normalize_storyboard_result_balances_scene_durations(self):
@@ -133,7 +141,90 @@ class ModelPolicyTests(APITestCase):
         self.assertEqual(image_config.image_model_name, 'agnes-image-2.0-flash')
 
 
-class ImagePromptTests(SimpleTestCase):
+class ImagePromptEngineTests(SimpleTestCase):
+    def test_build_image_prompt_messages_includes_style_skill(self):
+        messages = build_image_prompt_messages({
+            'brand_name': 'Launchbook',
+            'subject': '夏季新品护肤套装',
+            'style': '明亮通透的桌面场景',
+            'style_skill': 'xiaohongshu_lifestyle',
+            'aspect_ratio': '4:5',
+            'platform': '小红书',
+        })
+        self.assertEqual(messages[0]['role'], 'system')
+        self.assertIn('xiaohongshu_lifestyle', messages[1]['content'])
+        self.assertIn('夏季新品护肤套装', messages[1]['content'])
+
+    def test_normalize_image_prompt_result_fills_defaults(self):
+        normalized = normalize_image_prompt_result(
+            {'prompt': 'A product hero shot on marble desk', 'prompt_zh': '大理石桌面产品主视觉'},
+            {'style_skill': 'product_studio', 'style': '产品棚拍', 'aspect_ratio': '1:1'},
+        )
+        self.assertIn('product hero shot', normalized['prompt'])
+        self.assertEqual(normalized['style_skill'], 'product_studio')
+
+
+class ReviewPromptTests(SimpleTestCase):
+    def test_build_review_messages_includes_forbidden_words(self):
+        messages = build_review_messages({
+            'content_title': '测试标题',
+            'content_body': '正文内容',
+            'forbidden_words': '绝对,第一',
+            'platform': '小红书',
+        })
+        self.assertIn('绝对,第一', messages[1]['content'])
+
+    def test_normalize_review_result_coerces_issues(self):
+        normalized = normalize_review_result(
+            {
+                'passed': False,
+                'brand_consistency_score': 60,
+                'sensitive_word_issues': ['绝对'],
+                'channel_rule_issues': [{'rule': '标题过长', 'context': '标题', 'suggestion': '缩短'}],
+                'summary': '需修改',
+            },
+            {},
+        )
+        self.assertFalse(normalized['passed'])
+        self.assertEqual(normalized['sensitive_word_issues'][0]['word'], '绝对')
+
+
+class ImageGenerationPromptTests(SimpleTestCase):
+    def test_build_image_generation_prompt_uses_style_skill(self):
+        prompt = build_image_generation_prompt({
+            'prompt': '品牌主视觉',
+            'style_skill': 'minimal_flat',
+            'aspect_ratio': '1:1',
+        })
+        self.assertIn('品牌主视觉', prompt)
+        self.assertIn('极简构图', prompt)
+
+
+class VideoPromptTests(SimpleTestCase):
+    def test_snap_agnes_num_frames_uses_allowed_values(self):
+        self.assertEqual(snap_agnes_num_frames(5), 121)
+        self.assertEqual(snap_agnes_num_frames(18), 441)
+
+    def test_aspect_ratio_to_video_dimensions_vertical(self):
+        width, height = aspect_ratio_to_video_dimensions('9:16')
+        self.assertLess(width, height)
+
+    def test_build_video_generation_prompt_from_storyboard_scenes(self):
+        prompt = build_video_generation_prompt({
+            'video_topic': '新品发布',
+            'scenes': [
+                {'visual_description': '产品特写', 'audio_narration': '开场介绍'},
+            ],
+        })
+        self.assertIn('Shot 1', prompt)
+        self.assertIn('产品特写', prompt)
+
+    def test_extract_agnes_video_url_supports_remixed_field(self):
+        url = extract_agnes_video_url({'status': 'completed', 'remixed_from_video_id': 'https://cdn.example.com/a.mp4'})
+        self.assertEqual(url, 'https://cdn.example.com/a.mp4')
+
+
+class ImagePromptHelperTests(SimpleTestCase):
     def test_aspect_ratio_to_size_mapping(self):
         self.assertEqual(aspect_ratio_to_size('16:9'), '1024x768')
         self.assertEqual(aspect_ratio_to_size('4:5'), '768x1024')
@@ -141,11 +232,11 @@ class ImagePromptTests(SimpleTestCase):
     def test_build_image_generation_prompt_includes_style(self):
         prompt = build_image_generation_prompt({
             'prompt': 'A product hero shot',
-            'style': 'neo-brutalism',
+            'style_skill': 'minimal_flat',
             'aspect_ratio': '1:1',
         })
         self.assertIn('A product hero shot', prompt)
-        self.assertIn('neo-brutalism', prompt)
+        self.assertIn('极简构图', prompt)
 
     def test_normalize_image_result_supports_openai_style_response(self):
         normalized = normalize_image_result(

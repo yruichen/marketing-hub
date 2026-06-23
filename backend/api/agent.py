@@ -1,3 +1,7 @@
+"""
+DEPRECATED: Legacy direct LLM agent. Production code uses ai_gateway.services.AIModelGateway.
+Kept for reference only — do not import in new code.
+"""
 import time
 import json
 import random
@@ -231,7 +235,7 @@ class AIAgentWorkflow:
                 "title": f"🔥 救命！这个 {brand_name} 真的绝了！后悔没早点发现！",
                 "paragraphs": [
                     f"家人们谁懂啊！今天必须给你们安利这个神仙单品：【{brand_name}】！它的核心功能是 {product_description}，简直是打工人和学生党的福音！😭",
-                    f"用了一段时间，感觉整个工作流都顺畅了！在 {tone} 的风格加持下，操作起来非常有仪式感，幸福感直接拉满。✨",
+                    f"用了一段时间，从打开到出稿全程丝滑，细节打磨得很到位，那种越用越顺手的爽感真的会上瘾。✨",
                     "姐妹们听我的，闭眼入不踩雷！早买早享受，别怪我没提醒你们哦～"
                 ],
                 "tags": ["安利神仙单品", "好物分享", "高颜值实用", brand_name, "宝藏工具"]
@@ -240,7 +244,7 @@ class AIAgentWorkflow:
                 "title": f"深度评测：【{brand_name}】如何颠覆传统的营销工作流？",
                 "paragraphs": [
                     f"在当今快速变化的数字时代，效率即生命。今天我们为您深度解析行业新宠——【{brand_name}】。作为一款主打 {product_description} 的工具，它正以前所未有的姿态改变我们的效率路径。",
-                    f"我们采用了 {tone} 的态度对该系统进行了全方位实测。结果表明，其在响应速度和易用性上均表现卓越，完美适配多场景需求。",
+                    "我们对其进行了全方位实测，覆盖日常高频场景与边界用法，其在响应速度和易用性上均表现卓越，完美适配多场景需求。",
                     "总结来看，这不仅是一次工具升级，更是对未来工作形态的主动重塑。欢迎长按识别下方链接体验。"
                 ],
                 "tags": ["深度解析", "生产力工具", "商业科技", brand_name, "效率指南"]
@@ -249,7 +253,7 @@ class AIAgentWorkflow:
                 "title": f"🚀 Discover {brand_name}: The ultimate game changer you need!",
                 "paragraphs": [
                     f"Looking for something that delivers {product_description}? Look no further! {brand_name} is designed to meet your highest standards with a completely redefined experience.",
-                    f"Engineered with a focus on {tone} values, it perfectly fits into your creative or professional workflow, leaving you more time to think about big ideas.",
+                    f"It slots seamlessly into your creative or professional workflow, leaving you more time to think about big ideas.",
                     "Check it out today and join thousands of satisfied users globally!"
                 ],
                 "tags": ["Innovation", "MarketingHub", brand_name, "TechStack", "CreatorEconomy"]

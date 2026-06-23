@@ -99,7 +99,7 @@ export const defaultNodeConfig = (type: NodeType, brandContext: BrandContext) =>
   }
   if (type === 'image_generation') return { model: 'image-default', failure_strategy: '失败后保留提示词并重试一次' };
   if (type === 'storyboard') return { duration: 30, target_audience: brandContext.audience || '' };
-  if (type === 'video_generation') return { aspect_ratio: '9:16', duration_cap: 30, model: '', failure_strategy: '失败后重试一次' };
+  if (type === 'video_generation') return { aspect_ratio: '9:16', duration_cap: 30, model: 'agnes-video-v2.0', failure_strategy: '失败后重试一次' };
   if (type === 'audio') return { voice_id: 'female_warm', speed: 1 };
   if (type === 'retrieval') return { retrieval_scope: '品牌记忆和资产库', query: brandContext.campaign_goal || '' };
   if (type === 'review') return { forbidden_words: '绝对、第一、包治', channel_rules: '平台基础合规规则' };

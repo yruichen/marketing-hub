@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useAiConfig } from './useAiConfig';
 import {
   providerDefaultScope,
   providerSupportsImageConfig,
+  providerSupportsVideoConfig,
   configScopeLabels,
 } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -34,9 +36,10 @@ export function AiConfigPage({
     handleSelectPlan,
   } = useAiConfig({ workspaceScope, username, triggerToast, onWorkspaceRefresh });
 
-  // Auto-fetch on mount
-  void fetchConfigs();
-  void fetchBillingPlans();
+  useEffect(() => {
+    void fetchConfigs();
+    void fetchBillingPlans();
+  }, [fetchConfigs, fetchBillingPlans]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start font-mono">
@@ -77,16 +80,23 @@ export function AiConfigPage({
             value={activeConfigForm.config_scope}
             onChange={(e) => setActiveConfigForm({
               ...activeConfigForm,
-              config_scope: e.target.value as 'all' | 'text' | 'image' | 'audio',
+              config_scope: e.target.value as 'all' | 'text' | 'image' | 'audio' | 'video',
             })}
             className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
           >
-            {Object.entries(configScopeLabels).map(([value, label]) => (
+            {Object.entries(configScopeLabels)
+              .filter(([value]) => {
+                if (value === 'image' && !providerSupportsImageConfig(activeConfigForm.provider)) return false;
+                if (value === 'video' && !providerSupportsVideoConfig(activeConfigForm.provider)) return false;
+                if (activeConfigForm.provider === 'anthropic' && value !== 'text') return false;
+                return true;
+              })
+              .map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
           <p className="text-[9px] text-[var(--editorial-text-gray)] leading-relaxed">
-            不同用途可分别保存并同时激活。例如：OpenAI 仅文本 + Agnes 仅图片。
+            不同用途可分别保存并同时激活。例如：OpenAI 仅文本 + Agnes 仅图片 + Agnes 仅视频。
           </p>
         </div>
 
@@ -150,7 +160,7 @@ export function AiConfigPage({
               />
             </div>
 
-            {activeConfigForm.config_scope !== 'image' && (
+            {activeConfigForm.config_scope !== 'image' && activeConfigForm.config_scope !== 'video' && (
               <div className="flex flex-col gap-1.5">
                 <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
                   <span>文本模型名称</span>
@@ -192,6 +202,27 @@ export function AiConfigPage({
                       : activeConfigForm.provider === 'openai'
                         ? 'dall-e-3'
                         : 'image-model'
+                  }
+                />
+              </div>
+            )}
+
+            {providerSupportsVideoConfig(activeConfigForm.provider)
+              && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'video') && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
+                  <span>视频模型名称</span>
+                  <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">视频任务专用</span>
+                </label>
+                <input
+                  type="text"
+                  value={activeConfigForm.video_model_name}
+                  onChange={(e) => setActiveConfigForm({ ...activeConfigForm, video_model_name: e.target.value })}
+                  className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
+                  placeholder={
+                    activeConfigForm.provider === 'agnes'
+                      ? 'agnes-video-v2.0'
+                      : 'mock-video'
                   }
                 />
               </div>
@@ -262,7 +293,7 @@ export function AiConfigPage({
                     <span>{config.config_scope_display || configScopeLabels[config.config_scope || 'all']}</span>
                     <span>•</span>
                     <span>Key: {config.api_key_masked || 'Unset'}</span>
-                    {config.model_name && config.config_scope !== 'image' && (
+                    {config.model_name && !['image', 'video'].includes(config.config_scope || 'all') && (
                       <>
                         <span>•</span>
                         <span>Text: {config.model_name}</span>
@@ -272,6 +303,12 @@ export function AiConfigPage({
                       <>
                         <span>•</span>
                         <span>Image: {config.image_model_name}</span>
+                      </>
+                    )}
+                    {config.video_model_name && (
+                      <>
+                        <span>•</span>
+                        <span>Video: {config.video_model_name}</span>
                       </>
                     )}
                     <span>•</span>

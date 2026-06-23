@@ -2,6 +2,7 @@ export { CopyPanel } from './CopyPanel';
 export { ImagePanel } from './ImagePanel';
 export { StoryboardPanel } from './StoryboardPanel';
 export { AudioPanel } from './AudioPanel';
+export { VideoPanel } from './VideoPanel';
 export { AgentTerminal } from './AgentTerminal';
 export { useGenerationTask } from './useGenerationTask';
 export type {
@@ -11,6 +12,7 @@ export type {
   StoryboardOutput,
   StoryScene,
   AudioOutput,
+  VideoOutput,
   CreationContent,
 } from './types';
 export { taskTypeLabels } from './types';

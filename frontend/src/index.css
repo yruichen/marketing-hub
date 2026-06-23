@@ -41,12 +41,41 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     font-family: var(--sans-font);
     background-color: var(--editorial-bg);
     color: var(--editorial-text);
     transition: background-color 0.2s ease, color 0.2s ease;
     @apply antialiased selection:bg-yellow-200 selection:text-black;
+  }
+}
+
+@layer components {
+  .generation-workspace {
+    @apply grid h-full min-h-0 grid-cols-1 lg:grid-cols-12 gap-4 items-stretch;
+  }
+
+  .generation-workspace__form {
+    @apply col-span-1 lg:col-span-5 flex flex-col gap-3 min-h-0 h-full overflow-hidden;
+  }
+
+  .generation-workspace__form-body {
+    @apply flex-1 min-h-0 overflow-y-auto flex flex-col gap-4;
+  }
+
+  .generation-workspace__results {
+    @apply col-span-1 lg:col-span-7 flex flex-col gap-3 min-h-0 h-full;
+  }
+
+  .generation-workspace__preview {
+    @apply flex-1 min-h-0 overflow-y-auto;
   }
 }
 

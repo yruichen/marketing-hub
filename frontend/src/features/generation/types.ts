@@ -79,12 +79,24 @@ export interface AudioOutput {
 
 export type ToastType = 'success' | 'info' | 'error';
 
-export type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutput & AudioOutput>;
+export interface VideoOutput {
+  video_topic: string;
+  aspect_ratio: string;
+  video_url: string;
+  thumbnail_url: string;
+  duration_seconds: number;
+  prompt?: string;
+  asset_id?: number;
+  is_demo_fallback?: boolean;
+}
+
+export type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutput & AudioOutput & VideoOutput>;
 
 export const taskTypeLabels: Record<string, string> = {
   copy: '文案',
   image: '图片',
   storyboard: '分镜',
   audio: '配音',
+  video: '视频',
   rag_search: '历史素材检索',
 };

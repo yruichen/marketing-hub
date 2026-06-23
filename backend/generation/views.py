@@ -5,6 +5,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from api.idempotency import claim_idempotency_key, finish_idempotency_key
+from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
 from api.models import GenerationTask
 from api.permissions import organization_for_user
 from api.scope import as_bool, get_scope
@@ -13,7 +14,7 @@ from api.services import (
     brainstorm_workflow,
     create_generation_task,
     membership_role,
-    queue_generation_task,
+    schedule_generation_task,
     retry_workspace_node,
     run_generation_task,
     run_workspace_workflow,
@@ -24,6 +25,19 @@ from api.services import (
 
 class GenerationRateThrottle(UserRateThrottle):
     scope = 'generation'
+
+
+def _image_generation_payload(data) -> dict:
+    style_skill = str(data.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID).strip()
+    legacy_style = data.get('style')
+    return {
+        'prompt': data.get('prompt', 'A creative workspace'),
+        'style_skill': style_skill,
+        'style': resolve_style_skill(style_skill, legacy_style),
+        'aspect_ratio': data.get('aspect_ratio', '1:1'),
+        'negative_prompt': data.get('negative_prompt', ''),
+        'platform': data.get('platform', ''),
+    }
 
 
 def idempotency_response(request, org):
@@ -130,11 +144,7 @@ class ImageGenerateView(APIView):
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='image',
-                payload={
-                    'prompt': request.data.get('prompt', 'A creative workspace'),
-                    'style': request.data.get('style', 'neo-brutalism'),
-                    'aspect_ratio': request.data.get('aspect_ratio', '1:1'),
-                },
+                payload=_image_generation_payload(request.data),
                 username=request_username,
                 organization=org,
                 project=project,
@@ -145,11 +155,7 @@ class ImageGenerateView(APIView):
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
         task = create_generation_task(
             task_type='image',
-            payload={
-                'prompt': request.data.get('prompt', 'A creative workspace'),
-                'style': request.data.get('style', 'neo-brutalism'),
-                'aspect_ratio': request.data.get('aspect_ratio', '1:1'),
-            },
+            payload=_image_generation_payload(request.data),
             username=request_username,
             organization=org,
             project=project,
@@ -305,8 +311,8 @@ class TaskQueueView(APIView):
         )
         if run_now:
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task), 'result': task.result.get('data', {}), 'logs': task.result.get('logs', [])}), 'generation_task', task.id)
-        queue_generation_task(task)
-        return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_201_CREATED), 'generation_task', task.id)
+        schedule_generation_task(task)
+        return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
 
 
 class TaskDetailView(APIView):

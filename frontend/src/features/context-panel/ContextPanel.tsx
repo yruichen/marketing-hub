@@ -23,7 +23,7 @@ export function ContextPanel({
   onClose,
 }: ContextPanelProps) {
   return (
-    <aside className="sticky top-6 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial-sm p-4 space-y-4">
+    <aside className="h-full min-h-0 overflow-y-auto bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial-sm p-4 space-y-4">
       <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
         <h3 className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">上下文面板</h3>
         <button

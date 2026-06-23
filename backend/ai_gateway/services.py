@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -12,18 +14,29 @@ from typing import Any
 from django.db.models import Q
 
 from ai_gateway.prompts import (
+    AGNES_VIDEO_DEFAULT_FRAME_RATE,
     aspect_ratio_to_size,
+    aspect_ratio_to_video_dimensions,
+    build_audio_messages,
     build_brainstorm_messages,
     build_copy_messages,
     build_custom_agent_messages,
     build_image_generation_prompt,
+    build_image_prompt_messages,
+    build_review_messages,
     build_storyboard_messages,
+    build_video_generation_prompt,
+    extract_agnes_video_url,
+    normalize_audio_result,
     normalize_brainstorm_result,
     normalize_copy_result,
     normalize_custom_agent_result,
+    normalize_image_prompt_result,
     normalize_image_result,
+    normalize_review_result,
     normalize_storyboard_result,
     normalize_video_result,
+    snap_agnes_num_frames,
 )
 from api.models import AIConfiguration, Organization
 from api.rbac import role_rank
@@ -32,10 +45,11 @@ from api.rbac import role_rank
 AGNES_DEFAULT_BASE_URL = 'https://apihub.agnes-ai.com/v1'
 AGNES_DEFAULT_MODEL = 'agnes-2.0-flash'
 AGNES_DEFAULT_IMAGE_MODEL = 'agnes-image-2.0-flash'
+AGNES_DEFAULT_VIDEO_MODEL = 'agnes-video-v2.0'
 
 CAPABILITY_REGISTRY = {
     'openai': {'text', 'vision', 'image', 'audio', 'embedding', 'function_calling'},
-    'agnes': {'text', 'vision', 'image', 'function_calling'},
+    'agnes': {'text', 'vision', 'image', 'video', 'function_calling'},
     'anthropic': {'text', 'vision', 'function_calling'},
     'gemini': {'text', 'vision', 'image', 'audio', 'embedding', 'function_calling'},
     'mock': {'text', 'vision', 'image', 'audio', 'embedding', 'function_calling'},
@@ -52,13 +66,20 @@ MODEL_CAPABILITIES = {
 }
 
 PROMPT_REGISTRY = {
-    'marketing.copy.system': {'version': '2026-05-31', 'template': 'You are a marketing copywriter.'},
-    'marketing.storyboard.system': {'version': '2026-05-31', 'template': 'You are a storyboard director.'},
-    'marketing.image.system': {'version': '2026-05-31', 'template': 'You are an art director.'},
-    'marketing.audio.system': {'version': '2026-05-31', 'template': 'You are a voiceover director.'},
-    'marketing.video.system': {'version': '2026-06-01', 'template': 'You are a short-form marketing video producer.'},
-    'marketing.brainstorm.system': {'version': '2026-06-10', 'template': 'You are a marketing workflow architect.'},
+    'marketing.copy.system': {'version': '2026-06-12', 'template': '营销文案生成'},
+    'marketing.storyboard.system': {'version': '2026-06-12', 'template': '短视频分镜策划'},
+    'marketing.image.system': {'version': '2026-06-12', 'template': '营销配图生成'},
+    'marketing.image_prompt.system': {'version': '2026-06-12', 'template': '文生图提示词工程'},
+    'marketing.review.system': {'version': '2026-06-12', 'template': '内容合规审核'},
+    'marketing.audio.system': {'version': '2026-06-12', 'template': '配音脚本优化'},
+    'marketing.video.system': {'version': '2026-06-12', 'template': '营销视频生成'},
+    'marketing.custom_agent.system': {'version': '2026-06-12', 'template': '自定义营销智能体'},
+    'marketing.brainstorm.system': {'version': '2026-06-12', 'template': '工作流灵感风暴'},
 }
+
+JSON_RESPONSE_TASK_TYPES = frozenset({
+    'copy', 'storyboard', 'custom_agent', 'brainstorm', 'image_prompt', 'review', 'audio',
+})
 
 SAFETY_BLOCKLIST = {'illegal', 'copyright infringement', 'weapon instruction'}
 
@@ -119,6 +140,7 @@ class CostCalculator:
 
 
 IMAGE_RUNTIME_PROVIDERS = frozenset({'mock', 'agnes'})
+VIDEO_RUNTIME_PROVIDERS = frozenset({'mock', 'agnes'})
 TEXT_TASK_TYPES = frozenset({'copy', 'storyboard'})
 IMAGE_TASK_TYPES = frozenset({'image'})
 AUDIO_TASK_TYPES = frozenset({'audio'})
@@ -157,7 +179,7 @@ def provider_supports_task(provider: str, task_type: str) -> bool:
     if task_type in AUDIO_TASK_TYPES:
         return provider in {'mock', 'openai', 'local_proxy'}
     if task_type in VIDEO_TASK_TYPES:
-        return provider in {'mock', 'local_proxy'}
+        return provider in VIDEO_RUNTIME_PROVIDERS | {'local_proxy'}
     caps = CAPABILITY_REGISTRY.get(provider, CAPABILITY_REGISTRY['mock'])
     return 'text' in caps
 
@@ -226,7 +248,7 @@ class MockProviderAdapter(ProviderAdapter):
                     'title': f"✨ {payload.get('brand_name', 'Marketing Hub')} 真的绝了！",
                     'paragraphs': [
                         f"家人们！今天必须安利【{payload.get('brand_name', 'Marketing Hub')}】——{payload.get('product_description', 'AI 营销助手')}。",
-                        f"在{payload.get('tone', '爆款活泼')}风格下，整个创作流程都顺了，效率直接拉满。",
+                        '用过才知道，从选题到成稿一路顺畅，效率真的能打满。',
                         '姐妹们听我的，闭眼入不踩雷！',
                     ],
                     'tags': ['好物分享', '营销工具', payload.get('platform', 'Xiaohongshu'), '种草'],
@@ -244,15 +266,30 @@ class MockProviderAdapter(ProviderAdapter):
             )
         if task_type == 'storyboard':
             return normalize_storyboard_result({'scenes': []}, payload)
+        if task_type == 'image_prompt':
+            subject = str(payload.get('subject') or payload.get('upstream_text') or 'marketing visual')
+            return normalize_image_prompt_result(
+                {
+                    'prompt': f'{subject}, professional marketing photography, high detail',
+                    'prompt_zh': subject,
+                    'negative_prompt': payload.get('negative_prompt', ''),
+                },
+                payload,
+            )
+        if task_type == 'review':
+            return normalize_review_result(
+                {
+                    'passed': True,
+                    'brand_consistency_score': 85,
+                    'sensitive_word_issues': [],
+                    'channel_rule_issues': [],
+                    'summary': '（演示）内容审核通过，未发现明显违规。',
+                    'revised_suggestions': [],
+                },
+                payload,
+            )
         if task_type == 'audio':
-            return {
-                'text': payload.get('text', ''),
-                'voice_id': payload.get('voice_id', 'female_warm'),
-                'speed': payload.get('speed', 1.0),
-                'audio_url': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-                'text_length': len(payload.get('text', '')),
-                'estimated_audio_duration_seconds': 10,
-            }
+            return normalize_audio_result({}, payload)
         if task_type == 'video':
             return normalize_video_result({}, payload)
         if task_type == 'brainstorm':
@@ -282,7 +319,7 @@ class MockProviderAdapter(ProviderAdapter):
                         {
                             'id': 'image-1', 'type': 'image', 'label': 'Campaign Visual',
                             'x': 720, 'y': 120, 'width': 260, 'height': 166,
-                            'config': {'style': 'minimalist', 'aspect_ratio': '1:1'},
+                            'config': {'style_skill': 'minimal_flat', 'aspect_ratio': '1:1'},
                         },
                     ],
                     'edges': [
@@ -327,7 +364,7 @@ class ChatCompletionsAdapter(ProviderAdapter):
         messages: list[dict[str, str]] | None = None,
     ) -> ChatCompletionResult:
         chat_messages = messages or [
-            {'role': 'system', 'content': 'You are a helpful assistant that always outputs JSON.'},
+            {'role': 'system', 'content': '你是 Marketing-Hub 助手，只输出合法 JSON。'},
             {'role': 'user', 'content': prompt},
         ]
         request_payload: dict[str, Any] = {
@@ -336,7 +373,7 @@ class ChatCompletionsAdapter(ProviderAdapter):
             'temperature': 0.7,
             'max_tokens': 2048,
         }
-        if task_type in {'copy', 'storyboard'}:
+        if task_type in JSON_RESPONSE_TASK_TYPES:
             request_payload['response_format'] = {'type': 'json_object'}
 
         req = urllib.request.Request(
@@ -444,6 +481,168 @@ class AgnesImageAdapter(ProviderAdapter):
         )
 
 
+class AgnesVideoAdapter(ProviderAdapter):
+    provider_name = 'agnes'
+    default_base_url = AGNES_DEFAULT_BASE_URL
+    default_model = AGNES_DEFAULT_VIDEO_MODEL
+    request_timeout = 90
+    poll_interval = 4
+    max_wait = 1800
+    max_create_retries = 8
+    max_request_retries = 6
+
+    def __init__(self, config: AIConfiguration):
+        self._config = config
+
+    def _videos_root(self) -> str:
+        base = (self._config.base_url or self.default_base_url).rstrip('/')
+        if base.endswith('/videos'):
+            return base
+        return f'{base}/videos'
+
+    def _auth_headers(self) -> dict[str, str]:
+        return {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self._config.api_key}',
+        }
+
+    def _ssl_context(self) -> ssl.SSLContext:
+        return ssl.create_default_context()
+
+    def _request_json(
+        self,
+        url: str,
+        *,
+        method: str = 'GET',
+        payload: dict[str, Any] | None = None,
+        timeout: int | None = None,
+    ) -> dict[str, Any]:
+        data = json.dumps(payload).encode('utf-8') if payload is not None else None
+        req = urllib.request.Request(url, data=data, headers=self._auth_headers(), method=method)
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=self._ssl_context()),
+        )
+        last_error: Exception | None = None
+        for attempt in range(self.max_request_retries):
+            try:
+                with opener.open(req, timeout=timeout or self.request_timeout) as response:
+                    body = json.loads(response.read().decode('utf-8'))
+                if not isinstance(body, dict):
+                    raise RetryableGatewayError('Agnes video API returned non-object JSON')
+                return body
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode('utf-8', errors='replace')
+                if exc.code in {429, 503} and attempt + 1 < self.max_request_retries:
+                    time.sleep(min(2 ** attempt, 8))
+                    continue
+                raise RetryableGatewayError(f'Agnes video API error {exc.code}: {detail}') from exc
+            except (urllib.error.URLError, TimeoutError, ConnectionResetError, http.client.RemoteDisconnected, OSError) as exc:
+                last_error = exc
+                if attempt + 1 >= self.max_request_retries:
+                    break
+                time.sleep(min(2 ** attempt, 8))
+        raise RetryableGatewayError(
+            f'Agnes video API connection error after {self.max_request_retries} attempts: {last_error}'
+        ) from last_error
+
+    def _create_video_task(self, request_payload: dict[str, Any]) -> str:
+        last_error: Exception | None = None
+        for attempt in range(self.max_create_retries):
+            try:
+                body = self._request_json(self._videos_root(), method='POST', payload=request_payload)
+                task_id = str(body.get('id') or body.get('task_id') or '').strip()
+                if task_id:
+                    return task_id
+                raise RetryableGatewayError(f'Agnes video API returned no task id: {body}')
+            except RetryableGatewayError as exc:
+                last_error = exc
+                if attempt + 1 >= self.max_create_retries:
+                    break
+                time.sleep(min(4 * (attempt + 1), 20))
+        raise RetryableGatewayError(str(last_error or 'Agnes video task creation failed'))
+
+    def _poll_video_task(self, task_id: str) -> dict[str, Any]:
+        deadline = time.time() + self.max_wait
+        last_body: dict[str, Any] = {}
+        while time.time() < deadline:
+            try:
+                last_body = self._request_json(f'{self._videos_root()}/{task_id}')
+            except RetryableGatewayError:
+                time.sleep(self.poll_interval)
+                continue
+
+            status = str(last_body.get('status') or '').lower()
+            if status in {'completed', 'succeeded', 'success'}:
+                return last_body
+            if status in {'failed', 'error', 'cancelled', 'canceled'}:
+                message = str(last_body.get('error') or last_body.get('message') or last_body.get('error_message') or 'Agnes video task failed')
+                raise RetryableGatewayError(message)
+            time.sleep(self.poll_interval)
+
+        raise RetryableGatewayError(f'Agnes video task timed out after {self.max_wait}s (last status={last_body.get("status")})')
+
+    def invoke(
+        self,
+        prompt: str,
+        *,
+        model_name: str,
+        task_type: str,
+        payload: dict[str, Any],
+        messages: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        video_prompt = build_video_generation_prompt(payload)
+        aspect_ratio = str(payload.get('aspect_ratio') or payload.get('aspectRatio') or '9:16').strip()
+        width, height = aspect_ratio_to_video_dimensions(aspect_ratio)
+        frame_rate = int(payload.get('frame_rate') or AGNES_VIDEO_DEFAULT_FRAME_RATE)
+        try:
+            target_seconds = int(payload.get('duration') or payload.get('duration_cap') or 5)
+        except (TypeError, ValueError):
+            target_seconds = 5
+        num_frames = int(payload.get('num_frames') or snap_agnes_num_frames(target_seconds, frame_rate))
+
+        selected_model = (model_name or str(payload.get('model') or '').strip() or self.default_model)
+        if selected_model in {'', 'video-default', 'default'}:
+            selected_model = self.default_model
+
+        request_payload: dict[str, Any] = {
+            'model': selected_model,
+            'prompt': video_prompt,
+            'width': width,
+            'height': height,
+            'num_frames': num_frames,
+            'frame_rate': frame_rate,
+        }
+
+        reference_image = (
+            payload.get('image')
+            or payload.get('image_url')
+            or payload.get('reference_image')
+            or payload.get('input_image')
+        )
+        if isinstance(reference_image, str) and reference_image.strip().startswith('http'):
+            request_payload['image'] = reference_image.strip()
+
+        task_id = self._create_video_task(request_payload)
+        completed = self._poll_video_task(task_id)
+        video_url = extract_agnes_video_url(completed)
+        if not video_url:
+            raise RetryableGatewayError('Agnes video API completed without a downloadable video URL')
+
+        return normalize_video_result(
+            {
+                **completed,
+                'id': task_id,
+                'video_url': video_url,
+                'num_frames': num_frames,
+                'frame_rate': frame_rate,
+                'model': selected_model,
+                'aspect_ratio': aspect_ratio,
+                'video_topic': payload.get('video_topic'),
+            },
+            payload,
+        )
+
+
 class GeminiAdapter(ProviderAdapter):
     provider_name = 'gemini'
 
@@ -545,6 +744,8 @@ class AIModelGateway:
     def _resolve_adapter(cls, provider: str, task_type: str):
         if provider == 'agnes' and task_type == 'image':
             return AgnesImageAdapter
+        if provider == 'agnes' and task_type == 'video':
+            return AgnesVideoAdapter
         return cls.ADAPTERS.get(provider, MockProviderAdapter)
 
     @classmethod
@@ -558,6 +759,15 @@ class AIModelGateway:
                 'mock': 'mock-image',
             }
             return image_defaults.get(provider, 'mock-image')
+
+        if task_type == 'video':
+            if config and getattr(config, 'video_model_name', '').strip():
+                return config.video_model_name.strip()
+            video_defaults = {
+                'agnes': AGNES_DEFAULT_VIDEO_MODEL,
+                'mock': 'mock-video',
+            }
+            return video_defaults.get(provider, 'mock-video')
 
         if config and config.model_name:
             return config.model_name.strip()
@@ -579,11 +789,15 @@ class AIModelGateway:
         if task_type == 'image':
             return build_image_generation_prompt(payload)
         if task_type == 'storyboard':
-            return f"Storyboard task: {payload}"
+            return f"分镜任务: {json.dumps(payload, ensure_ascii=False)}"
         if task_type == 'audio':
-            return f"Audio task: {payload}"
+            return f"配音任务: {json.dumps(payload, ensure_ascii=False)}"
+        if task_type == 'image_prompt':
+            return json.dumps(payload, ensure_ascii=False)
+        if task_type == 'review':
+            return json.dumps(payload, ensure_ascii=False)
         if task_type == 'video':
-            return f"Video task: {payload}"
+            return build_video_generation_prompt(payload)
         return json.dumps(payload, ensure_ascii=False)
 
     @classmethod
@@ -592,6 +806,12 @@ class AIModelGateway:
             return build_copy_messages(payload)
         if task_type == 'storyboard' and prompt_key == 'marketing.storyboard.system':
             return build_storyboard_messages(payload)
+        if task_type == 'image_prompt' and prompt_key == 'marketing.image_prompt.system':
+            return build_image_prompt_messages(payload)
+        if task_type == 'review' and prompt_key == 'marketing.review.system':
+            return build_review_messages(payload)
+        if task_type == 'audio' and prompt_key == 'marketing.audio.system':
+            return build_audio_messages(payload)
         if task_type == 'custom_agent' and prompt_key == 'marketing.custom_agent.system':
             return build_custom_agent_messages(payload)
         if task_type == 'brainstorm' and prompt_key == 'marketing.brainstorm.system':
@@ -608,6 +828,12 @@ class AIModelGateway:
             return normalize_image_result(result, payload)
         if task_type == 'video':
             return normalize_video_result(result, payload)
+        if task_type == 'image_prompt':
+            return normalize_image_prompt_result(result, payload)
+        if task_type == 'review':
+            return normalize_review_result(result, payload)
+        if task_type == 'audio':
+            return normalize_audio_result(result, payload)
         if task_type == 'custom_agent':
             return normalize_custom_agent_result(result, payload)
         if task_type == 'brainstorm':
@@ -654,6 +880,13 @@ class AIModelGateway:
         if task_type == 'image' and provider == 'agnes':
             logs.append('gateway:image_api=agnes-images')
             logs.append(f'gateway:image_size={aspect_ratio_to_size(str(payload.get("aspect_ratio") or payload.get("aspectRatio") or "1:1"))}')
+        if task_type == 'video' and provider == 'agnes':
+            width, height = aspect_ratio_to_video_dimensions(str(payload.get('aspect_ratio') or '9:16'))
+            frame_rate = int(payload.get('frame_rate') or AGNES_VIDEO_DEFAULT_FRAME_RATE)
+            num_frames = snap_agnes_num_frames(int(payload.get('duration') or 5), frame_rate)
+            logs.append('gateway:video_api=agnes-videos')
+            logs.append(f'gateway:video_size={width}x{height}')
+            logs.append(f'gateway:video_frames={num_frames}@{frame_rate}fps')
         fallback_used = False
         prompt_tokens = 0
         completion_tokens = 0
@@ -667,6 +900,18 @@ class AIModelGateway:
                 result = cls._post_process(task_type, raw, payload)
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, RetryableGatewayError, json.JSONDecodeError, KeyError, IndexError) as exc:
             if provider != fallback_provider:
+                if task_type == 'video':
+                    if isinstance(exc, urllib.error.HTTPError):
+                        detail = exc.read().decode('utf-8', errors='replace')[:240]
+                        logs.append(f'gateway:error=http_{exc.code}')
+                        logs.append(f'gateway:error_detail={detail}')
+                    else:
+                        logs.append(f'gateway:error={str(exc)[:240]}')
+                    raise NonRetryableGatewayError(
+                        'Agnes 视频 API 调用失败（已自动重试多次）。'
+                        f' 原因：{str(exc)[:200]}。'
+                        ' 若 PowerShell 可创建任务但此处失败，多为 Python SSL 链路偶发中断，请稍后重试或配置 HTTPS_PROXY。'
+                    ) from exc
                 fallback_used = True
                 logs.append(f'gateway:fallback={fallback_provider}')
                 if isinstance(exc, urllib.error.HTTPError):
@@ -687,6 +932,9 @@ class AIModelGateway:
             completion_tokens = max(40, len(json.dumps(result, ensure_ascii=False)) // 4)
         if task_type == 'image':
             cost = CostCalculator.calculate_image(provider, generated_images=int(result.get('generated_images') or 1))
+        elif task_type == 'video':
+            media_seconds = int(result.get('duration_seconds') or max(1, round(int(result.get('num_frames') or 121) / max(int(result.get('frame_rate') or 24), 1))))
+            cost = CostCalculator.calculate(provider, model_name, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, media_seconds=media_seconds)
         else:
             cost = CostCalculator.calculate(provider, model_name, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
         return GatewayResponse(

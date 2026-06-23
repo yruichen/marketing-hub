@@ -14,7 +14,8 @@ export type AppSection =
   | 'copy'
   | 'image'
   | 'storyboard'
-  | 'audio';
+  | 'audio'
+  | 'video';
 
 interface UiState {
   activeSection: AppSection;

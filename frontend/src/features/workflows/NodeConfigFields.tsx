@@ -202,10 +202,9 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
           <Field label="时长上限 (秒)" variant={v}>
             <input type="number" min="5" max="180" value={cfg.duration_cap || 30} onChange={(e) => onUpdateConfig('duration_cap', Number(e.target.value))} className={inputCls} />
           </Field>
-          <Field label="视频模型" hint="留空使用默认" variant={v}>
-            <select value={cfg.model || ''} onChange={(e) => onUpdateConfig('model', e.target.value)} className={inputCls}>
-              <option value="">默认模型</option>
-              <option value="video-default">Video Default (Mock)</option>
+          <Field label="视频模型" variant={v}>
+            <select value={cfg.model || 'agnes-video-v2.0'} onChange={(e) => onUpdateConfig('model', e.target.value)} className={inputCls}>
+              <option value="agnes-video-v2.0">Agnes Video v2.0</option>
             </select>
           </Field>
           <Field label="失败策略" variant={v}>

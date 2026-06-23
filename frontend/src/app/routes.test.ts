@@ -13,6 +13,8 @@ describe('app routes', () => {
     expect(sectionFromPath('/projects/core-launch')).toBe('projects');
     expect(sectionFromPath('/workflows/default')).toBe('builder');
     expect(sectionFromPath('/generation/storyboard')).toBe('storyboard');
+    expect(sectionFromPath('/generation/video')).toBe('video');
+    expect(pathForSection('video')).toBe('/generation/video');
     expect(sectionFromPath('/templates/public')).toBe('community');
   });
 });

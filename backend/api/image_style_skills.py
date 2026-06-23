@@ -46,3 +46,10 @@ def resolve_style_skill(style_skill_id: str | None, legacy_style: str | None = N
     if legacy_style and str(legacy_style).strip():
         return str(legacy_style).strip()
     return IMAGE_STYLE_SKILLS[DEFAULT_IMAGE_STYLE_SKILL_ID]['skill']
+
+
+def list_image_style_skills() -> list[dict[str, str]]:
+    return [
+        {'id': skill_id, 'label': entry['label'], 'skill': entry['skill']}
+        for skill_id, entry in IMAGE_STYLE_SKILLS.items()
+    ]

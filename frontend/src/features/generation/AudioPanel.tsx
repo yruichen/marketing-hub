@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
 import { useGenerationTask } from './useGenerationTask';
@@ -68,12 +67,9 @@ export function AudioPanel({
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
-        <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
-          <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
-        </div>
-
+    <div className="generation-workspace">
+      <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
+        <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// AUDIO STICKY SLATE</h3>
 
         <div className="flex flex-col gap-2">
@@ -140,10 +136,13 @@ export function AudioPanel({
           ) : null}
           <span>{loading ? 'AGENT SYNTHESIZING...' : '运行配音合成 Agent'}</span>
         </button>
+        </div>
+
+        <AgentTerminal logs={agentLogs} className="shrink-0" />
       </div>
 
-      <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
-        <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[-0.3deg]">
+      <div className="generation-workspace__results">
+        <div className="generation-workspace__preview bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-10 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 transform rotate-[-0.3deg] h-full">
           <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-2">
             <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
               <span>AUDIO TIMELINE STREAM PREVIEW</span>
@@ -215,8 +214,6 @@ export function AudioPanel({
             <span>DECK: [MANUSCRIPT_TTS]</span>
           </div>
         </div>
-
-        <AgentTerminal logs={agentLogs} />
       </div>
     </div>
   );

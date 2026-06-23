@@ -7,13 +7,14 @@ export interface AiConfig {
   base_url: string;
   model_name: string;
   image_model_name?: string;
-  config_scope?: 'all' | 'text' | 'image' | 'audio';
+  video_model_name?: string;
+  config_scope?: 'all' | 'text' | 'image' | 'audio' | 'video';
   config_scope_display?: string;
   billing_mode: string;
   is_active: boolean;
 }
 
-export type ConfigScope = 'all' | 'text' | 'image' | 'audio';
+export type ConfigScope = 'all' | 'text' | 'image' | 'audio' | 'video';
 export type BillingMode = 'platform' | 'byok';
 
 export const providerDefaultScope = (provider: string): ConfigScope => {
@@ -24,9 +25,13 @@ export const providerDefaultScope = (provider: string): ConfigScope => {
 export const providerSupportsImageConfig = (provider: string) =>
   ['mock', 'agnes', 'openai', 'gemini'].includes(provider);
 
+export const providerSupportsVideoConfig = (provider: string) =>
+  ['mock', 'agnes'].includes(provider);
+
 export const configScopeLabels: Record<string, string> = {
   all: '全部能力',
   text: '仅文本（文案/分镜）',
   image: '仅图片',
   audio: '仅配音',
+  video: '仅视频',
 };

@@ -35,7 +35,7 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
         'output': {'title': 'String', 'paragraphs': 'String[]', 'tags': 'String[]', 'call_to_action': 'String'},
     },
     'image': {
-        'input': {'prompt': 'String', 'style': 'String', 'aspect_ratio': 'String'},
+        'input': {'prompt': 'String', 'style_skill': 'String', 'aspect_ratio': 'String'},
         'output': {'image_url': 'URL', 'revised_prompt': 'String'},
     },
     'storyboard': {
@@ -59,7 +59,7 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
         'output': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style': 'String'},
     },
     'image_generation': {
-        'input': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style': 'String'},
+        'input': {'prompt': 'String', 'negative_prompt': 'String', 'aspect_ratio': 'String', 'style_skill': 'String'},
         'output': {'image_asset': 'Asset', 'image_url': 'URL', 'revised_prompt': 'String'},
     },
     'video_generation': {
@@ -77,11 +77,11 @@ NODE_IO_SCHEMAS: dict[str, dict[str, dict[str, str]]] = {
 }
 
 NODE_TYPE_ALIASES: dict[str, str] = {
-    'image_prompt': 'copy',
+    'image_prompt': 'image_prompt',
     'image_generation': 'image',
     'video_generation': 'video',
     'retrieval': 'rag_search',
-    'review': 'copy',
+    'review': 'review',
 }
 
 

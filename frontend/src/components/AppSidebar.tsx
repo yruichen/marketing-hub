@@ -19,7 +19,7 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   return (
-    <aside className="w-full xl:w-auto xl:h-full xl:overflow-y-auto flex flex-col justify-between shrink-0 p-4 xl:p-6 z-10 xl:my-6 xl:ml-6 xl:mr-2 border-b xl:border-b-0 border-[var(--editorial-stroke)]/20">
+    <aside className="w-full xl:w-auto xl:h-full xl:min-h-0 xl:overflow-y-auto flex flex-col justify-between shrink-0 px-4 xl:px-5 pt-5 xl:pt-6 pb-3 xl:pb-4 z-10 xl:ml-4 xl:mr-1 border-b xl:border-b-0 border-[var(--editorial-stroke)]/20">
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-1 select-none">
           <h1 className="serif-header text-xl font-bold tracking-tight text-[var(--editorial-text)]">

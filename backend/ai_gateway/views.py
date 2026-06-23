@@ -14,11 +14,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai_gateway.agent import LlmUpstreamError, build_assistant_agent
-from ai_gateway.services import AGNES_DEFAULT_BASE_URL, AGNES_DEFAULT_IMAGE_MODEL, AGNES_DEFAULT_MODEL
+from ai_gateway.services import (
+    AGNES_DEFAULT_BASE_URL,
+    AGNES_DEFAULT_IMAGE_MODEL,
+    AGNES_DEFAULT_MODEL,
+    AGNES_DEFAULT_VIDEO_MODEL,
+)
 from ai_gateway.tools import ToolContext
 from api.audit import record_audit_log
 from api.models import AIConfiguration, AssistantMessage, AssistantSession
 from api.permissions import CanManageAIConfiguration, resolve_staff_user_from_request
+from api.image_style_skills import list_image_style_skills
 from api.scope import get_scope
 from api.serializers import (
     AIConfigurationSerializer,
@@ -44,13 +50,15 @@ def with_csrf_token(response: Response, request) -> Response:
 
 
 def normalize_config_scope(provider: str, config_scope: str) -> str:
-    allowed = {'all', 'text', 'image', 'audio'}
+    allowed = {'all', 'text', 'image', 'audio', 'video'}
     scope = config_scope if config_scope in allowed else 'all'
     if provider == 'anthropic':
         return 'text'
     if provider == 'mock':
         return 'all'
     if scope == 'image' and provider not in {'agnes', 'mock'}:
+        return 'text'
+    if scope == 'video' and provider not in {'agnes', 'mock'}:
         return 'text'
     if scope == 'audio' and provider not in {'mock', 'openai'}:
         return 'text'
@@ -77,6 +85,7 @@ class AIConfigView(APIView):
         base_url = request.data.get('base_url', '').strip()
         model_name = request.data.get('model_name', '').strip()
         image_model_name = request.data.get('image_model_name', '').strip()
+        video_model_name = request.data.get('video_model_name', '').strip()
         config_scope = normalize_config_scope(provider, request.data.get('config_scope', 'all'))
         billing_mode = request.data.get('billing_mode', 'platform')
         billing_mode = billing_mode if billing_mode in {'platform', 'byok'} else 'platform'
@@ -88,6 +97,8 @@ class AIConfigView(APIView):
                 model_name = AGNES_DEFAULT_MODEL
             if config_scope in {'image', 'all'} and not image_model_name:
                 image_model_name = AGNES_DEFAULT_IMAGE_MODEL
+            if config_scope in {'video', 'all'} and not video_model_name:
+                video_model_name = AGNES_DEFAULT_VIDEO_MODEL
 
         config, _ = AIConfiguration.objects.update_or_create(
             provider=provider,
@@ -97,6 +108,7 @@ class AIConfigView(APIView):
                 'base_url': base_url,
                 'model_name': model_name,
                 'image_model_name': image_model_name,
+                'video_model_name': video_model_name,
                 'billing_mode': billing_mode,
                 'is_active': True,
             },
@@ -122,6 +134,7 @@ class AIConfigView(APIView):
                 'billing_mode': billing_mode,
                 'model_name': model_name,
                 'image_model_name': image_model_name,
+                'video_model_name': video_model_name,
                 'config_scope': config_scope,
             },
         )
@@ -358,3 +371,10 @@ class AssistantSessionMessagesView(APIView):
             'session': AssistantSessionSerializer(session).data,
             'messages': AssistantMessageSerializer(messages, many=True).data,
         })
+
+
+class ImageStyleSkillsView(APIView):
+    """GET /ai/image-style-skills/ — 图片风格 Skill 列表（前后端统一数据源）"""
+
+    def get(self, request):
+        return Response({'skills': list_image_style_skills()})
