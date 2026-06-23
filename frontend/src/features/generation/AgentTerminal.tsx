@@ -1,11 +1,11 @@
 import { useState } from 'react';
 
-export function AgentTerminal({ logs }: { logs: string[] }) {
+export function AgentTerminal({ logs, className = '' }: { logs: string[]; className?: string }) {
   const [open, setOpen] = useState(true);
   const hasActivity = logs.length > 0;
 
   return (
-    <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] overflow-hidden shadow-editorial transform rotate-[0.1deg]">
+    <div className={`bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] overflow-hidden shadow-editorial transform rotate-[0.1deg] ${className}`}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full bg-[var(--editorial-unselected)] px-5 py-3 border-b-1.5 border-[var(--editorial-stroke)] flex items-center justify-between text-[10px] font-black text-[var(--editorial-text)] font-mono tracking-wider cursor-pointer transition-all"

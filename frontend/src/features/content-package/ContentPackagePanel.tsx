@@ -98,8 +98,8 @@ export function ContentPackagePanel({
   void buildContentPackage;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-      <section className="xl:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial-sm space-y-4">
+    <div className="generation-workspace">
+      <section className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-black uppercase">内容包输入</h3>
@@ -170,7 +170,7 @@ export function ContentPackagePanel({
         </div>
       </section>
 
-      <section className="xl:col-span-7 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial-sm space-y-4">
+      <section className="generation-workspace__results bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3 overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
           <div>
             <h3 className="text-sm font-black uppercase">{contentPackage.title}</h3>

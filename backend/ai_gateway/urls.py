@@ -6,11 +6,13 @@ from ai_gateway.views import (
     AssistantSessionDetailView,
     AssistantSessionListView,
     AssistantSessionMessagesView,
+    ImageStyleSkillsView,
 )
 
 
 urlpatterns = [
     path('ai/config/', AIConfigView.as_view(), name='ai_config'),
+    path('ai/image-style-skills/', ImageStyleSkillsView.as_view(), name='image_style_skills'),
     path('assistant/chat', AssistantChatView.as_view(), name='assistant_chat'),
     path(
         'assistant/sessions',

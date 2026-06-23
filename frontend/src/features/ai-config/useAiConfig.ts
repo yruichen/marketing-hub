@@ -19,7 +19,8 @@ export function useAiConfig({ workspaceScope, username, triggerToast, onWorkspac
     base_url: '',
     model_name: '',
     image_model_name: '',
-    config_scope: 'all' as 'all' | 'text' | 'image' | 'audio',
+    video_model_name: '',
+    config_scope: 'all' as 'all' | 'text' | 'image' | 'audio' | 'video',
     billing_mode: 'platform',
   });
   const [showKey, setShowKey] = useState(false);
@@ -40,6 +41,7 @@ export function useAiConfig({ workspaceScope, username, triggerToast, onWorkspac
             base_url: active.base_url,
             model_name: active.model_name,
             image_model_name: active.image_model_name || '',
+            video_model_name: active.video_model_name || '',
             config_scope: active.config_scope || (active.provider === 'anthropic' ? 'text' : 'all'),
             billing_mode: active.billing_mode || 'platform',
           });

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_gateway.prompts import build_image_generation_prompt
 from ai_gateway.services import AIModelGateway, GatewayResponse
+from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
 
 
 REWRITE_FEEDBACK: dict[str, str] = {
@@ -41,14 +43,22 @@ def _workflow_context(payload: dict[str, Any]) -> str:
 def _build_image_prompt(payload: dict[str, Any], *, platform: str, brand_name: str) -> str:
     use_case = str(payload.get('use_case') or '营销').strip()
     audience = str(payload.get('audience') or '目标用户').strip()
-    tone = str(payload.get('tone') or '清晰专业').strip()
     brief = str(payload.get('brief') or '').strip()
     aspect = str(payload.get('aspect_ratio') or '4:5').strip()
+    style_skill = str(payload.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID).strip()
+    style = resolve_style_skill(style_skill, payload.get('visual_style') or payload.get('tone'))
     detail = brief[:120] if brief else f'{brand_name} 核心卖点场景'
-    return (
-        f'{brand_name} 的{use_case}营销主视觉，渠道为{platform}，目标人群是{audience}，'
-        f'风格{tone}，画面需体现：{detail}，包含清晰产品场景和品牌规范，{aspect}'
+    subject = (
+        f'{brand_name} 的{use_case}营销主视觉，目标人群是{audience}，'
+        f'画面需体现：{detail}，包含清晰产品场景和品牌规范'
     )
+    return build_image_generation_prompt({
+        'prompt': subject,
+        'style': style,
+        'style_skill': style_skill,
+        'aspect_ratio': aspect,
+        'platform': platform,
+    })
 
 
 def _build_review_advice(payload: dict[str, Any], *, platform: str) -> list[str]:

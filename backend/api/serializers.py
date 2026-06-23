@@ -239,6 +239,7 @@ class AIConfigurationSerializer(serializers.ModelSerializer):
             'base_url',
             'model_name',
             'image_model_name',
+            'video_model_name',
             'config_scope',
             'config_scope_display',
             'billing_mode',

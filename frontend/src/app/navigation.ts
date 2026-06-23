@@ -12,6 +12,7 @@ import {
   PenLine,
   Settings,
   Sparkles,
+  Video,
   Workflow,
 } from 'lucide-react';
 import type { AppSection } from '../shared/stores/uiStore';
@@ -80,6 +81,12 @@ export const NAV_SECTIONS: NavSection[] = [
         hint: '文字转配音稿',
         icon: Mic,
       },
+      {
+        id: 'video',
+        label: '做视频',
+        hint: 'AI 生成短视频',
+        icon: Video,
+      },
     ],
   },
   {
@@ -136,6 +143,18 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+/** 主工作区占满视口、避免页面级滚动的 Tab */
+export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [
+  'copy',
+  'image',
+  'storyboard',
+  'audio',
+  'video',
+  'content',
+  'builder',
+  'config',
+];
+
 export const TAB_META: Record<
   AppSection,
   { title: string; subtitle: string; primaryAction?: string }
@@ -173,6 +192,11 @@ export const TAB_META: Record<
     subtitle: '输入要朗读的文字，点「运行配音 Agent」',
     primaryAction: '运行配音 Agent',
   },
+  video: {
+    title: '做视频',
+    subtitle: '填写视频主题与画面描述，点「运行视频 Agent」生成短视频',
+    primaryAction: '运行视频 Agent',
+  },
   projects: {
     title: '我的项目',
     subtitle: '管理品牌记忆、文件夹与 campaign',
@@ -199,7 +223,7 @@ export const TAB_META: Record<
   },
   config: {
     title: 'AI 设置',
-    subtitle: '配置 API Key；文本与图片可分开选服务商',
+    subtitle: '配置 API Key；文本、图片与视频可分开选服务商',
     primaryAction: '保存并激活',
   },
 };

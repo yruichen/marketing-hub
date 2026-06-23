@@ -15,6 +15,7 @@ const sectionToPath: Record<AppSection, string> = {
   image: '/generation/image',
   storyboard: '/generation/storyboard',
   audio: '/generation/audio',
+  video: '/generation/video',
 };
 
 export function pathForSection(section: AppSection) {
@@ -34,6 +35,7 @@ export function sectionFromPath(pathname: string): AppSection {
   if (pathname.startsWith('/generation/image')) return 'image';
   if (pathname.startsWith('/generation/storyboard')) return 'storyboard';
   if (pathname.startsWith('/generation/audio')) return 'audio';
+  if (pathname.startsWith('/generation/video')) return 'video';
   if (pathname.startsWith('/generation')) return 'content';
   return 'brainstorm';
 }

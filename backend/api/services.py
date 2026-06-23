@@ -184,6 +184,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
         prompt_tokens = 0
         completion_tokens = 0
         cost_usd = Decimal('0')
+        fallback_used = False
         if task.task_type == 'copy':
             gateway = AIModelGateway.execute(
                 organization=task.organization,
@@ -195,6 +196,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         elif task.task_type == 'image':
             gateway = AIModelGateway.execute(
                 organization=task.organization,
@@ -206,6 +208,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         elif task.task_type == 'storyboard':
             gateway = AIModelGateway.execute(
                 organization=task.organization,
@@ -217,6 +220,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         elif task.task_type == 'audio':
             gateway = AIModelGateway.execute(
                 organization=task.organization,
@@ -228,6 +232,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         elif task.task_type == 'video':
             gateway = AIModelGateway.execute(
                 organization=task.organization,
@@ -239,6 +244,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         elif task.task_type == 'rag_search':
             query = payload.get('query', '').strip()
             results = []
@@ -273,9 +279,41 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             result, logs = gateway.payload, gateway.logs
             provider, model_name = gateway.provider, gateway.model_name
             prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
+        elif task.task_type == 'image_prompt':
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='image_prompt',
+                payload=payload,
+                prompt_key='marketing.image_prompt.system',
+            )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
+        elif task.task_type == 'review':
+            gateway = AIModelGateway.execute(
+                organization=task.organization,
+                role=membership_role(task.requested_by, task.organization),
+                task_type='review',
+                payload=payload,
+                prompt_key='marketing.review.system',
+            )
+            result, logs = gateway.payload, gateway.logs
+            provider, model_name = gateway.provider, gateway.model_name
+            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
+            fallback_used = gateway.fallback_used
         else:
             raise ValueError(f'Unsupported task type: {task.task_type}')
 
+        if fallback_used:
+            logs = [*logs, 'gateway:warning=使用了演示数据，非真实 API 生成结果']
+            if isinstance(result, dict):
+                result = {**result, 'is_demo_fallback': True}
+        asset = create_asset_from_task_result(task, result)
+        if isinstance(result, dict) and asset is not None:
+            result = {**result, 'asset_id': asset.id}
         task.result = {'data': result, 'logs': logs}
         task.status = 'succeeded'
         task.completed_at = timezone.now()
@@ -295,7 +333,6 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             total_tokens=task.token_count,
             cost_usd=task.cost_usd,
         )
-        create_asset_from_task_result(task, result)
         return task
     except Exception as exc:
         task.status = 'failed'
@@ -305,7 +342,6 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
         raise
 
 
-@transaction.atomic
 def create_generation_task(
     *,
     task_type: str,
@@ -334,7 +370,10 @@ def create_generation_task(
     )
 
     if run_now:
-        run_generation_task(task)
+        try:
+            run_generation_task(task)
+        except Exception:
+            task.refresh_from_db()
     record_audit_log(
         action='generation_create',
         actor=user,
@@ -399,6 +438,31 @@ def queue_generation_task(task: GenerationTask):
     task.celery_task_id = async_result.id
     task.save(update_fields=['celery_task_id', 'updated_at'])
     return async_result
+
+
+def _run_generation_task_by_id(task_id: int) -> None:
+    from api.models import GenerationTask
+
+    task = GenerationTask.objects.filter(pk=task_id).first()
+    if not task:
+        return
+    try:
+        run_generation_task(task)
+    except Exception:
+        # run_generation_task persists failed status before re-raising
+        return
+
+
+def schedule_generation_task(task: GenerationTask):
+    """Queue work without blocking the HTTP response when Celery runs eagerly."""
+    from django.conf import settings
+
+    if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', True):
+        import threading
+
+        threading.Thread(target=_run_generation_task_by_id, args=(task.id,), daemon=True).start()
+        return None
+    return queue_generation_task(task)
 
 
 def create_asset_from_payload(
@@ -552,7 +616,7 @@ def _merge_upstream_video_params(upstream: list[dict[str, Any]]) -> dict[str, An
     for item in upstream:
         if not isinstance(item, dict):
             continue
-        for key in ('scenes', 'video_topic', 'total_duration_seconds', 'audio_url', 'duration_seconds'):
+        for key in ('scenes', 'video_topic', 'total_duration_seconds', 'audio_url', 'duration_seconds', 'image_url'):
             value = item.get(key)
             if value not in (None, '', []):
                 merged[key] = value
@@ -585,11 +649,14 @@ def _compose_image_prompt_text(
     manual_prompt = str(config.get('prompt') or '').strip()
     ai_text = ''
     if task_data:
-        paragraphs = task_data.get('paragraphs') or []
-        if isinstance(paragraphs, list) and paragraphs:
-            ai_text = '\n'.join(str(item).strip() for item in paragraphs if str(item).strip())
-        elif task_data.get('title'):
-            ai_text = str(task_data.get('title')).strip()
+        if task_data.get('prompt'):
+            ai_text = str(task_data.get('prompt')).strip()
+        else:
+            paragraphs = task_data.get('paragraphs') or []
+            if isinstance(paragraphs, list) and paragraphs:
+                ai_text = '\n'.join(str(item).strip() for item in paragraphs if str(item).strip())
+            elif task_data.get('title'):
+                ai_text = str(task_data.get('title')).strip()
     base = manual_prompt or ai_text or upstream_text or str(brand_context.get('selling_points') or '').strip()
     parts = [part for part in (skill_text, base) if part]
     return '\n'.join(parts)
@@ -602,23 +669,33 @@ def _reshape_image_prompt_output(
     upstream_text: str,
     brand_context: dict[str, Any],
 ) -> dict[str, Any]:
-    style_skill_id = str(config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID).strip()
+    style_skill_id = str(
+        config.get('style_skill') or task_data.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
+    ).strip()
     style_text = resolve_style_skill(style_skill_id, config.get('style'))
-    prompt = _compose_image_prompt_text(
-        config,
-        upstream_text=upstream_text,
-        brand_context=brand_context,
-        task_data=task_data,
-    )
+    aspect_ratio = str(config.get('aspect_ratio') or task_data.get('aspect_ratio') or '1:1').strip()
+    negative_prompt = str(config.get('negative_prompt') or task_data.get('negative_prompt') or '').strip()
+
+    prompt = str(task_data.get('prompt') or '').strip()
+    if not prompt:
+        prompt = _compose_image_prompt_text(
+            config,
+            upstream_text=upstream_text,
+            brand_context=brand_context,
+            task_data=task_data,
+        )
+    manual_prompt = str(config.get('prompt') or '').strip()
+    if manual_prompt and manual_prompt not in prompt:
+        prompt = f'{manual_prompt}\n{prompt}'
+
     return {
         'prompt': prompt,
-        'negative_prompt': str(config.get('negative_prompt') or '').strip(),
-        'aspect_ratio': str(config.get('aspect_ratio') or '1:1').strip(),
+        'prompt_zh': str(task_data.get('prompt_zh') or '').strip(),
+        'negative_prompt': negative_prompt,
+        'aspect_ratio': aspect_ratio,
         'style_skill': style_skill_id,
         'style': style_text,
-        'title': task_data.get('title'),
-        'paragraphs': task_data.get('paragraphs') or [],
-        'tags': task_data.get('tags') or [],
+        'composition_notes': str(task_data.get('composition_notes') or '').strip(),
     }
 
 
@@ -649,7 +726,8 @@ def build_payload_for_node(
         prompt = str(merged.get('prompt') or config.get('prompt') or upstream_text or '').strip()
         if not prompt:
             prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
-        style = resolve_style_skill(merged.get('style_skill'), merged.get('style') or config.get('style') or brand_context.get('visual_style'))
+        style_skill_id = merged.get('style_skill') or config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
+        style = resolve_style_skill(style_skill_id, merged.get('style') or config.get('style') or brand_context.get('visual_style'))
         aspect_ratio = str(merged.get('aspect_ratio') or config.get('aspect_ratio') or '1:1').strip()
         negative_prompt = str(merged.get('negative_prompt') or '').strip()
         if negative_prompt:
@@ -657,6 +735,7 @@ def build_payload_for_node(
         return {
             'prompt': f'{prompt}{feedback_text}',
             'style': style,
+            'style_skill': style_skill_id,
             'aspect_ratio': aspect_ratio,
             'workflow_context': context_text,
         }
@@ -691,29 +770,33 @@ def build_payload_for_node(
             'query': config.get('query') or upstream_text or '',
         }
     if node_type == 'image_prompt':
-        skill_text = resolve_style_skill(config.get('style_skill'), config.get('style'))
+        skill_id = config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
+        skill_text = resolve_style_skill(skill_id, config.get('style'))
         manual_prompt = str(config.get('prompt') or '').strip()
-        product_description = manual_prompt or upstream_text or brand_context.get('selling_points') or ''
+        subject = manual_prompt or upstream_text or brand_context.get('selling_points') or ''
         negative_prompt = str(config.get('negative_prompt') or '').strip()
         extra_feedback = feedback
         if negative_prompt:
             extra_feedback = f'{feedback}\n负面提示词: {negative_prompt}'.strip()
         return {
             'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
-            'product_description': product_description,
-            'tone': f'风格Skill: {skill_text}, 画幅: {config.get("aspect_ratio", "1:1")}',
-            'platform': 'image_prompt',
+            'subject': subject,
+            'style': skill_text,
+            'style_skill': skill_id,
+            'aspect_ratio': str(config.get('aspect_ratio') or '1:1').strip(),
+            'platform': str(config.get('platform') or '小红书').strip(),
+            'negative_prompt': negative_prompt,
+            'upstream_text': upstream_text,
             'workflow_context': context_text,
             'feedback': extra_feedback,
-            'style_skill': config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID,
-            'negative_prompt': negative_prompt,
         }
     if node_type == 'image_generation':
         merged = _merge_upstream_image_params(upstream)
         prompt = str(merged.get('prompt') or upstream_text or '').strip()
         if not prompt:
             prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
-        style = resolve_style_skill(merged.get('style_skill'), merged.get('style') or brand_context.get('visual_style'))
+        style_skill_id = merged.get('style_skill') or config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
+        style = resolve_style_skill(style_skill_id, merged.get('style') or brand_context.get('visual_style'))
         aspect_ratio = str(merged.get('aspect_ratio') or '1:1').strip()
         negative_prompt = str(merged.get('negative_prompt') or '').strip()
         if negative_prompt:
@@ -721,6 +804,7 @@ def build_payload_for_node(
         return {
             'prompt': f'{prompt}{feedback_text}',
             'style': style,
+            'style_skill': style_skill_id,
             'aspect_ratio': aspect_ratio,
             'workflow_context': context_text,
         }
@@ -733,22 +817,34 @@ def build_payload_for_node(
             duration = int(str(config.get('duration_cap') or merged.get('total_duration_seconds') or 30).strip())
         except (ValueError, TypeError):
             duration = 30
+        image_url = str(merged.get('image_url') or config.get('image_url') or '').strip()
         return {
             'video_topic': config.get('video_topic') or merged.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or 'Marketing video',
             'scenes': scenes,
             'audio_url': str(merged.get('audio_url') or ''),
+            'image_url': image_url,
             'aspect_ratio': str(config.get('aspect_ratio') or '9:16').strip(),
             'duration': duration,
-            'model': config.get('model') or '',
+            'model': config.get('model') or 'agnes-video-v2.0',
             'workflow_context': context_text,
             'feedback': feedback,
         }
     if node_type == 'review':
+        upstream_title = ''
+        upstream_tags: list[str] = []
+        for item in upstream:
+            if isinstance(item, dict):
+                if item.get('title'):
+                    upstream_title = str(item.get('title'))
+                if isinstance(item.get('tags'), list):
+                    upstream_tags = [str(t) for t in item.get('tags')]
         return {
-            'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
-            'product_description': upstream_text or '',
-            'tone': f"审核模式: 检查违禁词({config.get('forbidden_words', '')}), 频道规则({config.get('channel_rules', '')})",
-            'platform': 'review',
+            'content_title': upstream_title,
+            'content_body': upstream_text or '',
+            'tags': upstream_tags,
+            'forbidden_words': str(config.get('forbidden_words') or '').strip(),
+            'channel_rules': str(config.get('channel_rules') or '').strip(),
+            'platform': str(config.get('platform') or brand_context.get('platform') or '小红书').strip(),
             'workflow_context': context_text,
             'feedback': feedback,
         }

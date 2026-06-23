@@ -15,11 +15,11 @@ import {
 } from 'lucide-react';
 import { apiFetch } from './hooks/useApi';
 import { sectionFromPath } from './app/routes';
-import { TAB_META } from './app/navigation';
+import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
 import { AssetsLibrary } from './features/assets';
-import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel } from './features/generation';
+import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from './features/generation';
 import type { CreationContent } from './features/generation';
 import { ContentPackagePanel, buildContentPackage } from './features/content-package';
 import type { ContentPackage } from './features/generation';
@@ -265,7 +265,7 @@ export default function App() {
   }, [selectProjectScope, username, setActiveTab, triggerToast]);
 
   const handleShareToCommunity = useCallback(async (
-    type: 'copy' | 'image' | 'storyboard' | 'audio',
+    type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video',
     title: string,
     content: CreationContent,
     imageUrl = '',
@@ -345,8 +345,10 @@ export default function App() {
     );
   }
 
+  const isFullHeightTab = FULL_HEIGHT_WORKSPACE_TABS.includes(activeTab);
+
   return (
-    <div className={`min-h-screen xl:h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
+    <div className={`h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
 
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -380,73 +382,68 @@ export default function App() {
       )}
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`min-w-0 xl:h-full flex flex-col overflow-y-auto w-full xl:my-6 z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'p-4 md:p-8'}`}>
+      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-4 md:px-5 pt-5 md:pt-6 pb-3 md:pb-4'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
-          <header className="flex flex-col gap-4 mb-8 pb-4 border-b border-[var(--editorial-stroke)]">
-            <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg md:text-xl font-bold text-[var(--editorial-text)] serif-header">
+          <header className="shrink-0 mb-3 pb-3 border-b border-[var(--editorial-stroke)] space-y-2.5">
+            <div className="flex items-center justify-between gap-3 min-h-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <h2 className="text-sm md:text-base font-bold text-[var(--editorial-text)] serif-header whitespace-nowrap shrink-0">
                   {TAB_META[activeTab]?.title || '工作台'}
                 </h2>
-                <p className="text-[11px] text-[var(--editorial-text-gray)] mt-2 leading-relaxed max-w-2xl">
+                <span className="hidden md:inline text-[10px] text-[var(--editorial-text-gray)] truncate">
                   {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
-                </p>
-                {TAB_META[activeTab]?.primaryAction && (
-                  <p className="text-[10px] text-[var(--editorial-accent-blue)] font-bold mt-1">
-                    主操作按钮文案：「{TAB_META[activeTab].primaryAction}」（一般在页面左侧或顶部）
-                  </p>
-                )}
+                </span>
               </div>
 
-              <div className="flex flex-col md:flex-row md:items-center gap-3">
-                <label className="relative min-w-[260px] flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-[var(--editorial-text-gray)]" aria-hidden="true" />
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="relative hidden lg:flex items-center w-[200px] xl:w-[220px]">
+                  <Search className="absolute left-2.5 h-3.5 w-3.5 text-[var(--editorial-text-gray)]" aria-hidden="true" />
                   <input
                     value={globalSearch}
                     onChange={(event) => setGlobalSearch(event.target.value)}
-                    className="w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-9 pr-3 py-2 text-xs focus:outline-none"
-                    placeholder="搜索项目、brief、品牌记忆、资产或标签"
+                    className="w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-8 pr-2 py-1.5 text-[10px] focus:outline-none"
+                    placeholder="搜索项目、brief、资产…"
                     aria-label="全局搜索"
                   />
                 </label>
-                <button type="button" onClick={() => setShowOnboarding(true)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] flex items-center gap-1.5" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
+                <button type="button" onClick={() => setShowOnboarding(true)} className="border border-[var(--editorial-stroke)] px-2 py-1.5 text-[10px] font-black hover:bg-[var(--editorial-unselected)] flex items-center gap-1" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
                   <BookOpen className="h-3.5 w-3.5" />
-                  引导
+                  <span className="hidden sm:inline">引导</span>
                 </button>
-                <button type="button" onClick={() => setRightPanelOpen(!rightPanelOpen)} className="border border-[var(--editorial-stroke)] p-2 hover:bg-[var(--editorial-unselected)]" title="显示或隐藏右侧上下文" aria-label="显示或隐藏右侧上下文">
-                  <PanelRight className="h-4 w-4" />
+                <button type="button" onClick={() => setRightPanelOpen(!rightPanelOpen)} className="border border-[var(--editorial-stroke)] p-1.5 hover:bg-[var(--editorial-unselected)]" title="显示或隐藏右侧上下文" aria-label="显示或隐藏右侧上下文">
+                  <PanelRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-bold font-mono">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1 flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[9px] font-bold font-mono">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5 flex items-center gap-1">
                   <BriefcaseBusiness className="h-3 w-3" />
                   {workspaceScope?.organization.name || 'Marketing Hub'}
                 </span>
                 <span className="text-[var(--editorial-text-gray)]">/</span>
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1">
+                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5">
                   {workspaceScope?.project.name || 'Core Launch'}
                 </span>
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1">
+                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5">
                   {workspaceScope?.campaign.name || 'Product Launch'}
                 </span>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5"><ListChecks className="h-3.5 w-3.5" /> 队列 {dashboardSnapshot?.metrics.queued_tasks ?? 0}</span>
-                <span className="flex items-center gap-1.5"><Bell className="h-3.5 w-3.5" /> 通知 {dashboardSnapshot?.metrics.failed_tasks ?? 0}</span>
-                <span className="flex items-center gap-1.5"><UserCircle className="h-3.5 w-3.5" /> {username || 'ROOT'}</span>
-                <span className={`h-2 w-2 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} title={apiLive ? '后端服务正常' : '后端服务未确认'}></span>
+              <div className="flex items-center gap-2.5 text-[var(--editorial-text-gray)]">
+                <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" /> 队列 {dashboardSnapshot?.metrics.queued_tasks ?? 0}</span>
+                <span className="flex items-center gap-1"><Bell className="h-3 w-3" /> 通知 {dashboardSnapshot?.metrics.failed_tasks ?? 0}</span>
+                <span className="hidden sm:flex items-center gap-1"><UserCircle className="h-3 w-3" /> {username || 'ROOT'}</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} title={apiLive ? '后端服务正常' : '后端服务未确认'}></span>
               </div>
             </div>
           </header>
         )}
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
-        <div className={`grid grid-cols-1 ${showInlineRightPanel ? 'xl:grid-cols-[minmax(0,1fr)_320px]' : ''} gap-6 z-0 items-start`}>
-          <div className="space-y-6 min-w-0">
+        <div className={`grid grid-cols-1 ${showInlineRightPanel ? 'xl:grid-cols-[minmax(0,1fr)_300px]' : ''} gap-4 mt-1 z-0 flex-1 min-h-0 overflow-hidden ${isFullHeightTab ? 'items-stretch' : ''}`}>
+          <div className={`min-w-0 h-full min-h-0 ${isFullHeightTab ? 'overflow-hidden' : 'overflow-y-auto'} ${isFullHeightTab ? '' : 'space-y-4 pr-1'}`}>
             {activeTab === 'projects' && (
               <ProjectManager
                 organization={workspaceScope?.organization || null}
@@ -583,6 +580,22 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'video' && (
+              <VideoPanel
+                workspaceScope={workspaceScope}
+                username={username}
+                loading={loading}
+                setLoading={setLoading}
+                agentLogs={agentLogs}
+                setAgentLogs={setAgentLogs}
+                setLatestTask={setLatestTask}
+                triggerToast={triggerToast}
+                fetchDashboard={async () => { await fetchDashboard(); }}
+                onWorkspaceRefresh={fetchWorkspaceBootstrap}
+                onShare={handleShareToCommunity}
+              />
+            )}
+
             {activeTab === 'community' && (
               <CommunityPage
                 workspaceScope={workspaceScope}
@@ -633,10 +646,11 @@ export default function App() {
           )}
         </div>
 
-        {/* Paper style footer */}
-        <footer className="w-full border-t border-[var(--editorial-stroke)]/45 py-4 mt-6 flex flex-col md:flex-row justify-between items-center gap-4 text-[9px] font-mono font-bold text-[var(--editorial-text-gray)] uppercase">
-          <span>© 2026 MARKETING-HUB DRAFTBOOK INC. ALL RIGHTS RESERVED.</span>
-          <div className="flex gap-4">
+        {/* Paper style footer — 全屏工作 Tab 隐藏以节省纵向空间 */}
+        {!isFullHeightTab && activeTab !== 'brainstorm' && (
+        <footer className="shrink-0 w-full border-t border-[var(--editorial-stroke)]/45 py-2 mt-2 flex flex-col md:flex-row justify-between items-center gap-2 text-[8px] font-mono font-bold text-[var(--editorial-text-gray)] uppercase">
+          <span>© 2026 MARKETING-HUB DRAFTBOOK INC.</span>
+          <div className="flex gap-3">
             <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[TERMS]</a>
             <span>//</span>
             <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[PRIVACY]</a>
@@ -644,6 +658,7 @@ export default function App() {
             <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[SUPPORT]</a>
           </div>
         </footer>
+        )}
 
       </main>
 

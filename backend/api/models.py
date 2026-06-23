@@ -141,9 +141,11 @@ class GenerationTask(models.Model):
     TASK_TYPES = [
         ('copy', 'Marketing Copywriting'),
         ('image', 'Social Media Image'),
+        ('image_prompt', 'Image Prompt Engineering'),
         ('storyboard', 'Storyboard Script'),
         ('audio', 'AI Voiceover'),
         ('video', 'Marketing Video'),
+        ('review', 'Content Review'),
         ('rag_search', 'Semantic Retrieval'),
         ('custom_agent', 'Custom Agent'),
         ('brainstorm', 'Workflow Brainstorm'),
@@ -271,6 +273,7 @@ class AIConfiguration(models.Model):
         ('text', 'Text Generation'),
         ('image', 'Image Generation'),
         ('audio', 'Audio Generation'),
+        ('video', 'Video Generation'),
     ]
 
     organization = models.ForeignKey(
@@ -286,6 +289,7 @@ class AIConfiguration(models.Model):
     base_url = models.CharField(max_length=255, blank=True, default='')
     model_name = models.CharField(max_length=100, blank=True, default='')
     image_model_name = models.CharField(max_length=100, blank=True, default='')
+    video_model_name = models.CharField(max_length=100, blank=True, default='')
     config_scope = models.CharField(max_length=16, choices=CONFIG_SCOPE_CHOICES, default='all')
     billing_mode = models.CharField(max_length=20, choices=BILLING_MODE_CHOICES, default='platform')
     is_active = models.BooleanField(default=True)
@@ -365,6 +369,7 @@ class CommunityCreation(models.Model):
         ('image', 'Social Media Image'),
         ('storyboard', 'Storyboard Script'),
         ('audio', 'AI Voiceover'),
+        ('video', 'AI Video'),
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='community_creations', null=True, blank=True)

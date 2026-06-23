@@ -1,10 +1,13 @@
-import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
 import { useGenerationTask } from './useGenerationTask';
 import type { CreationContent, ImageOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import {
+  DEFAULT_IMAGE_STYLE_SKILL_ID,
+  IMAGE_STYLE_SKILLS,
+} from '../workflows/imageStyleSkills';
 
 interface ImagePanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -34,16 +37,16 @@ export function ImagePanel({
   onCopy,
 }: ImagePanelProps) {
   const [imageInput, setImageInput] = useState({
-    prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, raw visual balance',
+    prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
     aspectRatio: '1:1',
-    style: 'minimalist',
+    styleSkill: DEFAULT_IMAGE_STYLE_SKILL_ID,
   });
   const [imageOutput, setImageOutput] = useState<ImageOutput>({
-    prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, raw visual balance',
-    style: 'minimalist',
+    prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
+    style: IMAGE_STYLE_SKILLS[1].skill,
     aspectRatio: '1:1',
     image_url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
-    revised_prompt: 'A hand-drawn desk sketch, elegant ink borders, minimalist layouts, styled in minimalist editorial aesthetic, low contrast natural lighting, matte visual details, 1:1 aspect ratio'
+    revised_prompt: 'A refined product desktop scene with bright natural light, styled for Xiaohongshu lifestyle marketing, 1:1 aspect ratio',
   });
 
   const { submitQueuedGeneration } = useGenerationTask({
@@ -60,7 +63,7 @@ export function ImagePanel({
     'image',
     {
       prompt: imageInput.prompt,
-      style: imageInput.style,
+      style_skill: imageInput.styleSkill,
       aspect_ratio: imageInput.aspectRatio,
     },
     setImageOutput,
@@ -69,13 +72,10 @@ export function ImagePanel({
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <div className="generation-workspace">
       {/* Left Input Slate */}
-      <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
-        <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
-          <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
-        </div>
-
+      <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
+        <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// VISUAL STICKY SLATE</h3>
 
         <div className="flex flex-col gap-2">
@@ -114,16 +114,17 @@ export function ImagePanel({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">艺术线条风格 Style</label>
+            <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">风格 Skill</label>
             <select
-              value={imageInput.style}
-              onChange={(e) => setImageInput({ ...imageInput, style: e.target.value })}
+              value={imageInput.styleSkill}
+              onChange={(e) => setImageInput({ ...imageInput, styleSkill: e.target.value })}
               className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
             >
-              <option value="neo-brutalism">新粗野主义</option>
-              <option value="3d">3D 拟真手办</option>
-              <option value="minimalist">极简极白</option>
-              <option value="cinematic">电影感写实</option>
+              {IMAGE_STYLE_SKILLS.map((skill) => (
+                <option key={skill.id} value={skill.id}>
+                  {skill.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -138,11 +139,14 @@ export function ImagePanel({
           ) : null}
           <span>{loading ? 'AGENT DESIGNING...' : '运行视觉设计 Agent'}</span>
         </button>
+        </div>
+
+        <AgentTerminal logs={agentLogs} className="shrink-0" />
       </div>
 
       {/* Right Output Preview */}
-      <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
-        <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 min-h-[350px] transform rotate-[-0.5deg]">
+      <div className="generation-workspace__results">
+        <div className="generation-workspace__preview bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-10 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 transform rotate-[-0.5deg] h-full">
           <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-2">
             <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
               <span>VISUAL POLAROID IMAGE</span>
@@ -201,8 +205,6 @@ export function ImagePanel({
             <span>RATIO: {imageOutput.aspectRatio || imageOutput.aspect_ratio}</span>
           </div>
         </div>
-
-        <AgentTerminal logs={agentLogs} />
       </div>
     </div>
   );

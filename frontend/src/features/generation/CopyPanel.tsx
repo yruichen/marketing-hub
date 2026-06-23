@@ -1,4 +1,3 @@
-import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
 import { useGenerationTask } from './useGenerationTask';
@@ -45,7 +44,7 @@ export function CopyPanel({
     title: '🔥 救命！这个 Marketing-Hub 真的绝了！后悔没早点发现！',
     paragraphs: [
       '家人们谁懂啊！今天必须给你们安利这个神仙单品：【Marketing-Hub】！它的核心功能是 AI 营销场景全能助手，秒级生成爆款图文，简直是创作者和打工人的福利！😭',
-      '用了一段时间，感觉整个工作流都顺畅了！在爆款活泼的风格调校下，操作起来非常有仪式感，幸福感直接拉满。✨',
+      '用了一段时间，从打开到出稿全程丝滑，细节打磨得很到位，那种越用越顺手的爽感真的会上瘾。✨',
       '姐妹们听我的，闭眼入不踩雷！早买早享受，别怪我没提醒你们哦～'
     ],
     tags: ['安利神仙单品', '好物分享', '高颜值实用', 'Marketing-Hub', '宝藏工具'],
@@ -76,13 +75,10 @@ export function CopyPanel({
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+    <div className="generation-workspace">
       {/* Left Input Slate */}
-      <div className="col-span-1 lg:col-span-5 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial paper-sheet-1 flex flex-col gap-6 relative">
-        <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
-          <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
-        </div>
-
+      <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
+        <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// PARAMETERS SLATE</h3>
 
         <div className="flex flex-col gap-1.5">
@@ -146,11 +142,14 @@ export function CopyPanel({
           ) : null}
           <span>{loading ? 'AGENT RUNNING...' : '运行文案编排 Agent'}</span>
         </button>
+        </div>
+
+        <AgentTerminal logs={agentLogs} className="shrink-0" />
       </div>
 
       {/* Right Output Sheet */}
-      <div className="col-span-1 lg:col-span-7 flex flex-col gap-6">
-        <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 pb-12 shadow-editorial paper-sheet-2 relative flex flex-col gap-6 min-h-[350px] transform rotate-[0.5deg] transition-all">
+      <div className="generation-workspace__results">
+        <div className="generation-workspace__preview bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 pb-10 shadow-editorial paper-sheet-2 relative flex flex-col gap-4 transform rotate-[0.5deg] transition-all h-full">
           <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)] pb-3">
             <span className="text-[10px] font-black text-[var(--editorial-text-gray)] flex items-center gap-1 font-mono uppercase">
               <span>TYPED MANUSCRIPT PREVIEW</span>
@@ -194,8 +193,6 @@ export function CopyPanel({
             <span>MODEL: MANUSCRIPT-V2</span>
           </div>
         </div>
-
-        <AgentTerminal logs={agentLogs} />
       </div>
     </div>
   );
