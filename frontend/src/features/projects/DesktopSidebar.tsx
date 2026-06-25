@@ -25,7 +25,7 @@ export function DesktopSidebar({
   return (
     <aside className="desktop-sidebar">
       <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] px-4 py-3">
-        <h3 className="text-[10px] font-black uppercase tracking-wider">收藏</h3>
+        <h3 className="text-[10px] font-black uppercase tracking-wider">项目范围</h3>
         <button
           type="button"
           onClick={onRefresh}
@@ -82,9 +82,9 @@ export function DesktopSidebar({
       <div className="flex-1" />
 
       <div className="border-t border-dashed border-[var(--editorial-stroke)]/30 p-3 text-[9px] text-[var(--editorial-text-gray)] leading-relaxed">
-        拖动项目到文件夹可移动。
+        选择范围会筛选中间列表。
         <br />
-        右键图标查看更多操作。
+        项目移动请在详情中修改文件夹。
       </div>
     </aside>
   );

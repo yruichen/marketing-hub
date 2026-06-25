@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { ArrowUpRight, Sparkles } from 'lucide-react';
 import { useUnderlineProgress } from './useUnderlineProgress';
 
 interface IdeaInputProps {
@@ -27,34 +27,42 @@ export function IdeaInput({ value, onChange, onSubmit }: IdeaInputProps) {
   };
 
   return (
-    <div className="relative">
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        onKeyDown={handleKeyDown}
-        placeholder="e.g., Launch a minimalist coffee brand targeting Gen Z on Xiaohongshu..."
-        className="w-full bg-transparent border-b-2 border-[var(--editorial-stroke)] pb-3 text-lg md:text-xl font-sans text-[var(--editorial-text)] placeholder:text-[var(--editorial-text-gray)]/50 focus:outline-none focus:border-neoYellow transition-colors"
-      />
-      <div
-        className="brainstorm-underline"
-        style={{ width: `${underlineWidth}%` }}
-      />
-      <div className="flex items-center justify-between mt-10">
-        <span className="font-mono text-[9px] text-[var(--editorial-text-gray)] uppercase tracking-wider">
-          Press Enter to brainstorm
+    <div className={`brainstorm-input ${isFocused ? 'is-focused' : ''}`}>
+      <div className="brainstorm-input__meta">
+        <span>Simple idea</span>
+        <span>{value.trim().length}/180</span>
+      </div>
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          maxLength={180}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          onKeyDown={handleKeyDown}
+          placeholder="一个产品、一个人群、一个渠道，先写下来。"
+          className="brainstorm-input__field"
+        />
+        <div
+          className="brainstorm-underline"
+          style={{ width: `${underlineWidth}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 mt-7">
+        <span className="brainstorm-input__signal">
+          <Sparkles size={13} />
+          workflow seed
         </span>
         <button
           type="button"
           onClick={onSubmit}
           disabled={!value.trim()}
-          className="btn-editorial-primary flex items-center gap-2 px-6 py-3 rounded-none font-bold text-[11px] uppercase tracking-[0.15em] disabled:opacity-40 disabled:cursor-not-allowed hover:translate-y-[-1px] transition-transform"
+          className="brainstorm-input__submit btn-editorial-primary"
         >
-          <Sparkles size={14} />
           Ignite
+          <ArrowUpRight size={14} />
         </button>
       </div>
     </div>

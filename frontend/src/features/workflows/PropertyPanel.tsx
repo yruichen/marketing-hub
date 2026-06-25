@@ -10,6 +10,7 @@ interface PropertyPanelProps {
   draftStatus?: string;
   runPreview: { stepCount: number; estimatedCost: string; estimatedMinutes: number };
   lastTasks: GenerationTaskRecord[];
+  onTidyLayout: () => void;
   onSelectNode: (id: string) => void;
 }
 
@@ -39,6 +40,39 @@ function executionOrder(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowN
   return order;
 }
 
+function pipelineTone(status?: string, active = false) {
+  if (active || status === 'running') return {
+    border: 'border-blue-500',
+    bg: 'bg-blue-50/80',
+    text: 'text-blue-700',
+    rail: 'bg-blue-500',
+  };
+  if (status === 'succeeded') return {
+    border: 'border-emerald-400',
+    bg: 'bg-emerald-50/70',
+    text: 'text-emerald-700',
+    rail: 'bg-emerald-500',
+  };
+  if (status === 'failed') return {
+    border: 'border-rose-400',
+    bg: 'bg-rose-50/70',
+    text: 'text-rose-700',
+    rail: 'bg-rose-500',
+  };
+  if (status === 'queued') return {
+    border: 'border-amber-300',
+    bg: 'bg-amber-50/60',
+    text: 'text-amber-700',
+    rail: 'bg-amber-400',
+  };
+  return {
+    border: 'border-[var(--editorial-stroke)]/40',
+    bg: 'bg-[var(--editorial-paper)]',
+    text: 'text-[var(--editorial-text-gray)]',
+    rail: 'bg-[var(--editorial-stroke)]/25',
+  };
+}
+
 export function PropertyPanel({
   nodes,
   edges,
@@ -47,6 +81,7 @@ export function PropertyPanel({
   draftStatus,
   runPreview,
   lastTasks,
+  onTidyLayout,
   onSelectNode,
 }: PropertyPanelProps) {
   const orderedNodes = executionOrder(nodes, edges);
@@ -67,15 +102,41 @@ export function PropertyPanel({
     .map((t) => ({ id: `task-${t.id}`, label: `任务 #${t.id} (${t.task_type})`, message: t.error_message }));
 
   const allErrors = [...nodeErrors, ...taskErrors.filter((t) => !nodeErrors.some((n) => n.message === t.message))];
+  const runningNode = orderedNodes.find((n) => n.status === 'running' || n.status === 'queued') || null;
+  const isolatedNodes = nodes.filter((node) => !edges.some((edge) => edge.source === node.id || edge.target === node.id));
+  const missingConfigNodes = nodes.filter((node) => {
+    if (node.type === 'copy') return !node.config?.tone || !node.config?.platform;
+    if (node.type === 'image_prompt') return !node.config?.style_skill && !node.config?.prompt;
+    if (node.type === 'custom_agent') return !node.config?.prompt;
+    return false;
+  });
+  const summaryText =
+    nodes.length === 0
+      ? '暂无节点'
+      : failedCount > 0
+      ? `${succeededCount} 成功 · ${failedCount} 失败`
+      : succeededCount === nodes.length && nodes.length > 0
+      ? `全部 ${nodes.length} 个节点成功`
+      : `${nodes.length} 个节点待运行`;
 
   return (
     <aside className="border-l border-[var(--editorial-stroke)] p-4 space-y-4 bg-[var(--editorial-paper)] min-w-0 max-h-[calc(100vh-260px)] min-h-[400px] overflow-y-auto">
       <div className="border border-[var(--editorial-stroke)] p-3">
-        <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase mb-2">运行预览</h4>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">运行</h4>
+          <span className="text-[9px] font-black text-[var(--editorial-text)]">{summaryText}</span>
+        </div>
         <div className="grid grid-cols-3 gap-2 text-[10px]">
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">节点</span><b>{runPreview.stepCount}</b></div>
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">预计耗时</span><b>{runPreview.estimatedMinutes} 分钟</b></div>
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">预计成本</span><b>{runPreview.estimatedCost}</b></div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Object.entries(statusLabels).map(([key, label]) => (
+            <span key={key} className="flex items-center gap-1 text-[9px] text-[var(--editorial-text-gray)]">
+              <span className={`h-1.5 w-1.5 rounded-full ${nodeStatusDotClass(key)}`} />{label}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -94,18 +155,31 @@ export function PropertyPanel({
           <div className="mb-3">
             <div className="flex items-center justify-between text-[9px] text-[var(--editorial-text-gray)] mb-1.5">
               <span>{succeededCount} 成功 · {failedCount} 失败 · {runningCount} 进行中</span>
-              <span>{isRunning && progressPercent < 100 ? '…' : `${progressPercent}%`}</span>
+              <span>{progressPercent}%</span>
             </div>
-            <div className="h-1.5 bg-[var(--editorial-bg)] border border-[var(--editorial-stroke)]/40 overflow-hidden">
+            <div className="h-2 bg-[var(--editorial-bg)] border border-[var(--editorial-stroke)]/40 overflow-hidden">
               <div
-                className={`h-full transition-all duration-300 ${failedCount > 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                style={{ width: `${isRunning && progressPercent === 0 ? 8 : progressPercent}%` }}
+                className={`h-full transition-all duration-500 ${failedCount > 0 ? 'bg-rose-500' : isRunning ? 'bg-blue-500 workflow-flow-bar' : 'bg-emerald-500'}`}
+                style={{
+                  width: `${isRunning && progressPercent === 0 ? 10 : progressPercent}%`,
+                  backgroundImage: isRunning ? 'linear-gradient(90deg, rgba(255,255,255,.22) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.22) 75%, transparent 75%, transparent)' : undefined,
+                  backgroundSize: isRunning ? '18px 18px' : undefined,
+                }}
               />
             </div>
             {draftStatus && draftStatus !== 'draft' && (
               <p className="mt-2 text-[9px] text-[var(--editorial-text-gray)]">
                 工作流状态：<span className="font-black">{draftStatus}</span>
               </p>
+            )}
+            {runningNode && (
+              <button
+                type="button"
+                onClick={() => onSelectNode(runningNode.id)}
+                className="mt-2 w-full border border-blue-300 bg-blue-50/70 px-2.5 py-2 text-left text-[10px] text-blue-700 hover:bg-blue-50"
+              >
+                正在生成：<span className="font-black">{runningNode.label}</span>
+              </button>
             )}
           </div>
         )}
@@ -130,29 +204,73 @@ export function PropertyPanel({
               const status = node.status || 'idle';
               const statusLabel = statusLabels[status] || status;
               const isSelected = node.id === selectedNodeId;
+              const isActive = node.id === runningNode?.id;
+              const tone = pipelineTone(status, isActive);
               return (
-                <button
-                  key={node.id}
-                  type="button"
-                  onClick={() => onSelectNode(node.id)}
-                  className={`w-full text-left border px-2.5 py-2 transition-colors ${
-                    isSelected
-                      ? 'border-[var(--editorial-accent-blue)] bg-[var(--editorial-unselected)]/50'
-                      : 'border-[var(--editorial-stroke)]/40 hover:bg-[var(--editorial-unselected)]/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 text-[10px]">
-                    <span className="text-[8px] text-[var(--editorial-text-gray)] w-4 shrink-0">{index + 1}</span>
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${nodeStatusDotClass(status)} ${status === 'running' ? 'animate-pulse' : ''}`} />
-                    <span className="font-black truncate flex-1">{node.label}</span>
-                    <span className="text-[8px] text-[var(--editorial-text-gray)] shrink-0">{statusLabel}</span>
+                <button key={node.id} type="button" onClick={() => onSelectNode(node.id)} className="w-full text-left group">
+                  <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-2">
+                    <div className="relative flex justify-center">
+                      {index < orderedNodes.length - 1 && (
+                        <span className={`absolute top-5 bottom-[-12px] w-0.5 ${status === 'succeeded' ? 'bg-emerald-500' : 'bg-[var(--editorial-stroke)]/20'}`} />
+                      )}
+                      <span className={`relative z-10 mt-2 h-4 w-4 rounded-full border border-[var(--editorial-paper)] ${tone.rail} ${isActive ? 'animate-pulse ring-2 ring-blue-200' : ''}`} />
+                    </div>
+                    <div className={`border px-2.5 py-2 transition-colors ${tone.border} ${tone.bg} ${isSelected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : 'group-hover:bg-[var(--editorial-unselected)]/30'}`}>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <span className="text-[8px] text-[var(--editorial-text-gray)] w-4 shrink-0">{index + 1}</span>
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${nodeStatusDotClass(status)} ${status === 'running' ? 'animate-pulse' : ''}`} />
+                        <span className="font-black truncate flex-1">{node.label}</span>
+                        <span className={`text-[8px] shrink-0 ${tone.text}`}>{isActive ? '正在处理' : statusLabel}</span>
+                      </div>
+                      {status === 'queued' && isRunning && (
+                        <p className="mt-1.5 ml-6 text-[9px] text-amber-700 leading-snug">等待上游节点完成</p>
+                      )}
+                      {status === 'succeeded' && (
+                        <p className="mt-1.5 ml-6 text-[9px] text-emerald-700 leading-snug">已产出结果</p>
+                      )}
+                      {status === 'failed' && node.error_message && (
+                        <p className="mt-1.5 ml-6 text-[9px] text-rose-600 leading-snug line-clamp-2">{node.error_message}</p>
+                      )}
+                      {isActive && (
+                        <div className="mt-2 ml-6 h-1 overflow-hidden bg-blue-100 border border-blue-200">
+                          <div className="h-full w-2/3 bg-blue-500 workflow-flow-sweep" />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {status === 'failed' && node.error_message && (
-                    <p className="mt-1.5 ml-6 text-[9px] text-rose-600 leading-snug line-clamp-2">{node.error_message}</p>
-                  )}
                 </button>
               );
             })
+          )}
+        </div>
+      </div>
+
+      <div className="border border-[var(--editorial-stroke)] p-3">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">检查</h4>
+          <button type="button" onClick={onTidyLayout} disabled={nodes.length === 0} className="border border-[var(--editorial-stroke)] px-2 py-1.5 text-[9px] font-black hover:bg-[var(--editorial-unselected)] disabled:opacity-40">
+            整理布局
+          </button>
+        </div>
+        <div className="space-y-2 text-[10px]">
+          <div className="flex items-center justify-between border border-[var(--editorial-stroke)]/40 px-2.5 py-2">
+            <span className="text-[var(--editorial-text-gray)]">连线</span>
+            <b>{edges.length}</b>
+          </div>
+          {isolatedNodes.length > 0 && (
+            <div className="border border-amber-300/70 bg-amber-50/60 px-2.5 py-2 text-amber-800">
+              {isolatedNodes.length} 个节点未连接
+            </div>
+          )}
+          {missingConfigNodes.length > 0 && (
+            <div className="border border-amber-300/70 bg-amber-50/60 px-2.5 py-2 text-amber-800">
+              {missingConfigNodes.length} 个节点配置不完整
+            </div>
+          )}
+          {isolatedNodes.length === 0 && missingConfigNodes.length === 0 && nodes.length > 0 && (
+            <div className="border border-emerald-300/70 bg-emerald-50/60 px-2.5 py-2 text-emerald-700">
+              基础检查通过
+            </div>
           )}
         </div>
       </div>

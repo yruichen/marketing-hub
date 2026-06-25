@@ -9,6 +9,7 @@ import {
   BookOpen,
   BriefcaseBusiness,
   ListChecks,
+  Menu,
   PanelRight,
   Search,
   UserCircle,
@@ -67,6 +68,7 @@ export default function App() {
   } = useUiStore();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => storedDarkMode);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
   const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
@@ -79,7 +81,7 @@ export default function App() {
   });
 
   const activeTab = activeSection;
-  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !sidebarCollapsed;
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
 
@@ -134,6 +136,9 @@ export default function App() {
 
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
+    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
+      setSidebarCollapsed(true);
+    }
   }, [setActiveSection]);
 
   const triggerToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -348,7 +353,7 @@ export default function App() {
   const isFullHeightTab = FULL_HEIGHT_WORKSPACE_TABS.includes(activeTab);
 
   return (
-    <div className={`h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[240px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
+    <div className={`h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[220px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
 
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -371,70 +376,97 @@ export default function App() {
 
       {/* 左侧导航 */}
       {sidebarOpen && (
-        <AppSidebar
-          activeTab={activeTab}
-          onNavigate={setActiveTab}
-          darkMode={darkMode}
-          onToggleDarkMode={() => setDarkMode(!darkMode)}
-          username={username}
-          onLogout={handleLogout}
-        />
+        <>
+          {activeTab !== 'brainstorm' && (
+            <button
+              type="button"
+              className="fixed inset-0 z-30 bg-black/20 xl:hidden"
+              onClick={() => setSidebarCollapsed(true)}
+              aria-label="关闭侧栏遮罩"
+            />
+          )}
+          <AppSidebar
+            activeTab={activeTab}
+            onNavigate={setActiveTab}
+            darkMode={darkMode}
+            onToggleDarkMode={() => setDarkMode(!darkMode)}
+            username={username}
+            onLogout={handleLogout}
+          />
+        </>
       )}
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-4 md:px-5 pt-5 md:pt-6 pb-3 md:pb-4'}`}>
+      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-4 pt-3 md:pt-4 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
-          <header className="shrink-0 mb-3 pb-3 border-b border-[var(--editorial-stroke)] space-y-2.5">
-            <div className="flex items-center justify-between gap-3 min-h-0">
+          <header className="shrink-0 mb-3 border-b border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]">
+            <div className="flex min-w-0 items-center gap-2 pb-2">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed((prev) => !prev)}
+                className="h-8 w-8 shrink-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] inline-flex items-center justify-center hover:bg-[var(--editorial-unselected)]"
+                title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
+                aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <h2 className="text-sm md:text-base font-bold text-[var(--editorial-text)] serif-header whitespace-nowrap shrink-0">
                   {TAB_META[activeTab]?.title || '工作台'}
                 </h2>
-                <span className="hidden md:inline text-[10px] text-[var(--editorial-text-gray)] truncate">
+                <span className="hidden md:inline text-[10px] text-[var(--editorial-text-gray)] truncate min-w-0">
                   {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <label className="relative hidden lg:flex items-center w-[200px] xl:w-[220px]">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <label className="relative hidden lg:flex items-center w-[190px] xl:w-[220px]">
                   <Search className="absolute left-2.5 h-3.5 w-3.5 text-[var(--editorial-text-gray)]" aria-hidden="true" />
                   <input
                     value={globalSearch}
                     onChange={(event) => setGlobalSearch(event.target.value)}
-                    className="w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-8 pr-2 py-1.5 text-[10px] focus:outline-none"
+                    className="h-8 w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-8 pr-2 text-[10px] focus:outline-none"
                     placeholder="搜索项目、brief、资产…"
                     aria-label="全局搜索"
                   />
                 </label>
-                <button type="button" onClick={() => setShowOnboarding(true)} className="border border-[var(--editorial-stroke)] px-2 py-1.5 text-[10px] font-black hover:bg-[var(--editorial-unselected)] flex items-center gap-1" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
+                <button type="button" onClick={() => setShowOnboarding(true)} className="h-8 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] inline-flex items-center gap-1 whitespace-nowrap" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
                   <BookOpen className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">引导</span>
                 </button>
-                <button type="button" onClick={() => setRightPanelOpen(!rightPanelOpen)} className="border border-[var(--editorial-stroke)] p-1.5 hover:bg-[var(--editorial-unselected)]" title="显示或隐藏右侧上下文" aria-label="显示或隐藏右侧上下文">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelOpen(!rightPanelOpen)}
+                  disabled={activeTab === 'builder'}
+                  className={`h-8 w-8 border border-[var(--editorial-stroke)] inline-flex items-center justify-center hover:bg-[var(--editorial-unselected)] disabled:opacity-40 disabled:hover:bg-[var(--editorial-paper)] ${rightPanelOpen && activeTab !== 'builder' ? 'bg-[var(--editorial-stroke)] text-[var(--editorial-bg)]' : 'bg-[var(--editorial-paper)]'}`}
+                  title={activeTab === 'builder' ? '工作流页使用内置右侧面板' : '显示或隐藏右侧上下文'}
+                  aria-label={activeTab === 'builder' ? '工作流页使用内置右侧面板' : '显示或隐藏右侧上下文'}
+                >
                   <PanelRight className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[9px] font-bold font-mono">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5 flex items-center gap-1">
+            <div className="flex min-w-0 items-center justify-between gap-3 pb-2 text-[9px] font-bold font-mono">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pr-2">
+                <span className="h-6 shrink-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 flex items-center gap-1">
                   <BriefcaseBusiness className="h-3 w-3" />
                   {workspaceScope?.organization.name || 'Marketing Hub'}
                 </span>
-                <span className="text-[var(--editorial-text-gray)]">/</span>
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5">
+                <span className="shrink-0 text-[var(--editorial-text-gray)]">/</span>
+                <span className="h-6 max-w-[220px] shrink-0 truncate border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 inline-flex items-center">
                   {workspaceScope?.project.name || 'Core Launch'}
                 </span>
-                <span className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 py-0.5">
+                <span className="h-6 max-w-[200px] shrink-0 truncate border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 inline-flex items-center">
                   {workspaceScope?.campaign.name || 'Product Launch'}
                 </span>
               </div>
-              <div className="flex items-center gap-2.5 text-[var(--editorial-text-gray)]">
-                <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" /> 队列 {dashboardSnapshot?.metrics.queued_tasks ?? 0}</span>
-                <span className="flex items-center gap-1"><Bell className="h-3 w-3" /> 通知 {dashboardSnapshot?.metrics.failed_tasks ?? 0}</span>
-                <span className="hidden sm:flex items-center gap-1"><UserCircle className="h-3 w-3" /> {username || 'ROOT'}</span>
+              <div className="flex shrink-0 items-center gap-2 text-[var(--editorial-text-gray)]">
+                <span className="hidden sm:flex items-center gap-1"><ListChecks className="h-3 w-3" /> 队列 {dashboardSnapshot?.metrics.queued_tasks ?? 0}</span>
+                <span className="hidden sm:flex items-center gap-1"><Bell className="h-3 w-3" /> 通知 {dashboardSnapshot?.metrics.failed_tasks ?? 0}</span>
+                <span className="hidden md:flex items-center gap-1"><UserCircle className="h-3 w-3" /> {username || 'ROOT'}</span>
                 <span className={`h-1.5 w-1.5 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} title={apiLive ? '后端服务正常' : '后端服务未确认'}></span>
               </div>
             </div>
@@ -476,7 +508,7 @@ export default function App() {
                   onComplete={(draftId) => {
                     setSidebarToggled(true);
                     setActiveSection('builder');
-                    navigate(`/workflows?draft=${draftId}`, { replace: true });
+                    navigate(`/workflows?draft=${draftId}&from=brainstorm`, { replace: true });
                   }}
                   onToggleSidebar={() => setSidebarToggled((prev) => !prev)}
                 />

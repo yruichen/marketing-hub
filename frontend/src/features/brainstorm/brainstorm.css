@@ -4,6 +4,14 @@
    ======================================================================== */
 
 /* 背景闪烁粒子：active 状态才显示 + 动效 */
+.brainstorm-stage {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--editorial-stroke) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--editorial-stroke) 4%, transparent) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: center;
+}
+
 .brainstorm-sparkles {
   position: absolute;
   inset: 0;
@@ -50,13 +58,317 @@
   background: var(--editorial-accent-yellow);
   transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
-  /* 落到 input 自带 border-b-2 下方，100% 时也不会视觉上"撞"到 Ignite */
-  z-index: -1;
+  z-index: 1;
 }
 
 /* 欢迎语小入场 */
 .brainstorm-welcome {
   animation: brainstorm-fade-up 0.6s ease-out 0.15s both;
+}
+
+.brainstorm-brandline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.12em 0.2em;
+  letter-spacing: 0;
+}
+
+.brainstorm-brandline__word,
+.brainstorm-brandline__simple,
+.brainstorm-brandline__up {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: brainstorm-brand-rise 0.46s ease-out both;
+}
+
+.brainstorm-brandline__up {
+  padding: 0.02em 0.14em 0.08em;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-accent-yellow);
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
+  transform: translateY(10px) rotate(-2deg);
+}
+
+.brainstorm-brandline__simple {
+  font-style: italic;
+}
+
+.brainstorm-handline {
+  position: relative;
+  display: inline-block;
+  max-width: min(100%, 38rem);
+  margin-top: 1.1rem;
+  color: var(--editorial-text-muted);
+  font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+  font-size: clamp(1.1rem, 2vw, 1.55rem);
+  line-height: 1.35;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0;
+  transform: rotate(-1deg);
+  animation:
+    brainstorm-handline-ink 1.15s steps(34, end) 0.52s both,
+    brainstorm-handline-settle 0.45s ease-out 0.52s both;
+}
+
+.brainstorm-handline::after {
+  content: "";
+  position: absolute;
+  left: 0.05em;
+  right: 0.05em;
+  bottom: 0.08em;
+  height: 1.5px;
+  background: var(--editorial-stroke);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: brainstorm-handline-underline 0.52s ease-out 1.38s both;
+}
+
+.brainstorm-scope {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  border-top: 1px solid color-mix(in srgb, var(--editorial-stroke) 24%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--editorial-stroke) 24%, transparent);
+  padding: 0.45rem 0.9rem;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--editorial-text-gray);
+  animation: brainstorm-fade-up 0.5s ease-out 0.55s both;
+}
+
+.brainstorm-input {
+  border: 1.5px solid var(--editorial-stroke);
+  background: color-mix(in srgb, var(--editorial-paper) 92%, transparent);
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
+  padding: 1rem;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.brainstorm-input.is-focused {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 var(--editorial-stroke);
+  background: var(--editorial-paper);
+}
+
+.brainstorm-input__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.brainstorm-input__field {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--editorial-stroke);
+  padding: 0 0 0.85rem;
+  color: var(--editorial-text);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  line-height: 1.5;
+  outline: none;
+}
+
+.brainstorm-input__field::placeholder {
+  color: color-mix(in srgb, var(--editorial-text-gray) 58%, transparent);
+}
+
+.brainstorm-input__signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.brainstorm-input__submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0 1.35rem;
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.brainstorm-starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 1.2rem;
+}
+
+.brainstorm-starters__chip {
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--editorial-stroke) 48%, transparent);
+  background: color-mix(in srgb, var(--editorial-paper) 78%, transparent);
+  padding: 0.48rem 0.7rem;
+  color: var(--editorial-text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: brainstorm-fade-up 0.36s ease-out both;
+}
+
+.brainstorm-starters__chip:hover {
+  border-color: var(--editorial-stroke);
+  background: var(--editorial-accent-yellow);
+  color: var(--editorial-text);
+}
+
+.brainstorm-progress {
+  max-width: 44rem;
+  margin: 0 auto;
+}
+
+.brainstorm-flow {
+  position: relative;
+  height: 0.7rem;
+  max-width: 34rem;
+  margin: 0 auto 1.8rem;
+  overflow: hidden;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+}
+
+.brainstorm-flow__fill {
+  height: 100%;
+  min-width: 1rem;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      var(--editorial-stroke) 0,
+      var(--editorial-stroke) 8px,
+      var(--editorial-accent-yellow) 8px,
+      var(--editorial-accent-yellow) 16px
+    );
+  transition: width 0.55s ease;
+  animation: brainstorm-flow-slide 0.75s linear infinite;
+}
+
+.brainstorm-progress__step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--editorial-stroke) 28%, transparent);
+  background: color-mix(in srgb, var(--editorial-paper) 76%, transparent);
+  padding: 0.75rem 0.85rem;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.brainstorm-progress__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+}
+
+.brainstorm-progress__mark.is-active {
+  background: var(--editorial-accent-yellow);
+}
+
+.brainstorm-handoff {
+  animation: brainstorm-fade-up 0.36s ease-out both;
+}
+
+.brainstorm-handoff__graph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 2.5rem auto 1.75rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.brainstorm-handoff__step {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.brainstorm-handoff__node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 86px;
+  justify-content: center;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-paper);
+  box-shadow: 2px 2px 0 var(--editorial-stroke);
+  padding: 0.6rem 0.7rem;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: brainstorm-node-in 0.38s ease-out both;
+}
+
+.brainstorm-handoff__edge {
+  width: clamp(18px, 5vw, 48px);
+  height: 1.5px;
+  background: var(--editorial-stroke);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: brainstorm-edge-in 0.32s ease-out both;
+}
+
+.brainstorm-handoff__ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--editorial-stroke) 40%, transparent);
+  background: color-mix(in srgb, var(--editorial-paper) 78%, var(--editorial-accent-yellow));
+  padding: 0.55rem 0.8rem;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: brainstorm-fade-up 0.32s ease-out 0.72s both;
+}
+
+@keyframes brainstorm-node-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brainstorm-edge-in {
+  to {
+    transform: scaleX(1);
+  }
 }
 
 @keyframes brainstorm-fade-up {
@@ -70,6 +382,65 @@
   }
 }
 
+@keyframes brainstorm-brand-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes brainstorm-handline-ink {
+  from {
+    max-width: 0;
+    opacity: 1;
+  }
+  to {
+    max-width: min(100%, 38rem);
+    opacity: 1;
+  }
+}
+
+@keyframes brainstorm-handline-settle {
+  from {
+    transform: translateY(5px) rotate(-2deg);
+  }
+  to {
+    transform: translateY(0) rotate(-1deg);
+  }
+}
+
+@keyframes brainstorm-handline-underline {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes brainstorm-flow-slide {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 32px 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .brainstorm-handline {
+    white-space: normal;
+    animation:
+      brainstorm-fade-up 0.45s ease-out 0.52s both,
+      brainstorm-handline-settle 0.45s ease-out 0.52s both;
+  }
+
+  .brainstorm-input {
+    padding: 0.85rem;
+  }
+
+  .brainstorm-input__submit {
+    padding: 0 1rem;
+  }
+}
+
 /* 减少动效偏好 */
 @media (prefers-reduced-motion: reduce) {
   .brainstorm-sparkles.is-active .brainstorm-sparkles__dot {
@@ -78,6 +449,32 @@
   }
   .brainstorm-welcome {
     animation: none;
+  }
+  .brainstorm-brandline__word,
+  .brainstorm-brandline__simple,
+  .brainstorm-brandline__up,
+  .brainstorm-handline,
+  .brainstorm-handline::after,
+  .brainstorm-scope,
+  .brainstorm-starters__chip,
+  .brainstorm-flow__fill {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .brainstorm-handline {
+    max-width: min(100%, 38rem);
+  }
+  .brainstorm-handline::after {
+    transform: scaleX(1);
+  }
+  .brainstorm-handoff,
+  .brainstorm-handoff__node,
+  .brainstorm-handoff__edge,
+  .brainstorm-handoff__ready {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
   .brainstorm-underline {
     transition: none;

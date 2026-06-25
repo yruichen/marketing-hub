@@ -13,6 +13,7 @@ from typing import Any
 
 from django.db.models import Q
 
+from ai_gateway.prompt_catalog import PROMPT_ASSETS, prompt_registry_snapshot
 from ai_gateway.prompts import (
     AGNES_VIDEO_DEFAULT_FRAME_RATE,
     aspect_ratio_to_size,
@@ -65,17 +66,7 @@ MODEL_CAPABILITIES = {
     'mock': {'provider': 'mock', 'capabilities': CAPABILITY_REGISTRY['mock']},
 }
 
-PROMPT_REGISTRY = {
-    'marketing.copy.system': {'version': '2026-06-12', 'template': '营销文案生成'},
-    'marketing.storyboard.system': {'version': '2026-06-12', 'template': '短视频分镜策划'},
-    'marketing.image.system': {'version': '2026-06-12', 'template': '营销配图生成'},
-    'marketing.image_prompt.system': {'version': '2026-06-12', 'template': '文生图提示词工程'},
-    'marketing.review.system': {'version': '2026-06-12', 'template': '内容合规审核'},
-    'marketing.audio.system': {'version': '2026-06-12', 'template': '配音脚本优化'},
-    'marketing.video.system': {'version': '2026-06-12', 'template': '营销视频生成'},
-    'marketing.custom_agent.system': {'version': '2026-06-12', 'template': '自定义营销智能体'},
-    'marketing.brainstorm.system': {'version': '2026-06-12', 'template': '工作流灵感风暴'},
-}
+PROMPT_REGISTRY = prompt_registry_snapshot()
 
 JSON_RESPONSE_TASK_TYPES = frozenset({
     'copy', 'storyboard', 'custom_agent', 'brainstorm', 'image_prompt', 'review', 'audio',
@@ -851,8 +842,9 @@ class AIModelGateway:
         prompt_key: str,
         fallback_provider: str = 'mock',
     ) -> GatewayResponse:
+        prompt_asset = PROMPT_ASSETS.get(prompt_key)
         messages = cls._build_messages(task_type, payload, prompt_key)
-        prompt = f"{PROMPT_REGISTRY.get(prompt_key, {}).get('template', '')}\n{json.dumps(payload, ensure_ascii=False)}"
+        prompt = f"{(prompt_asset.template if prompt_asset else '')}\n{json.dumps(payload, ensure_ascii=False)}"
         if messages:
             prompt = '\n'.join(message['content'] for message in messages)
         SafetyPolicy.validate(prompt)
@@ -869,7 +861,17 @@ class AIModelGateway:
         adapter_cls = cls._resolve_adapter(provider, task_type)
         adapter = adapter_cls(config) if config is not None else MockProviderAdapter(None)
 
-        logs = [f'gateway:provider={provider}', f'gateway:model={model_name}', f'gateway:prompt_key={prompt_key}']
+        logs = [
+            f'gateway:provider={provider}',
+            f'gateway:model={model_name}',
+            f'gateway:prompt_key={prompt_key}',
+        ]
+        if prompt_asset:
+            logs.extend([
+                f'gateway:prompt_version={prompt_asset.version}',
+                f'gateway:prompt_owner={prompt_asset.owner}',
+                f'gateway:prompt_risk={prompt_asset.risk}',
+            ])
         if logs_prefix:
             logs.append(logs_prefix)
         if messages:

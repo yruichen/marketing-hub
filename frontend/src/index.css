@@ -160,6 +160,32 @@
   background-size: 16px 16px;
 }
 
+.workflow-flow-bar {
+  animation: workflow-flow-stripes 0.8s linear infinite;
+}
+
+.workflow-flow-sweep {
+  animation: workflow-flow-sweep 1.1s ease-in-out infinite;
+}
+
+@keyframes workflow-flow-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 18px 0;
+  }
+}
+
+@keyframes workflow-flow-sweep {
+  0% {
+    transform: translateX(-90%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}
+
 /* Custom Editorial Range Input Slider */
 .editorial-slider {
   -webkit-appearance: none;

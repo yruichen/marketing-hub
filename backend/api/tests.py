@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User
+from decimal import Decimal
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, Campaign, Membership, Organization, Project, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, Campaign, GenerationTask, Membership, Organization, Project, UsageEvent, WorkflowTemplate, WorkspaceDraft
 
 
 class WorkspaceUpgradeTests(APITestCase):
@@ -180,3 +181,83 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['draft']['name'], 'Forked Flow')
         self.assertEqual(response.data['template']['fork_count'], 1)
+
+    def test_billing_plans_include_usage_summary_and_project_count_after_update(self):
+        UsageEvent.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            provider='mock',
+            model_name='mock-copy',
+            prompt_tokens=80,
+            completion_tokens=20,
+            total_tokens=100,
+            cost_usd=Decimal('0.0123'),
+        )
+
+        response = self.client.get('/api/billing/plans/?organization=test-org')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['project_count'], 1)
+        self.assertIn('usage_summary', response.data)
+        self.assertEqual(response.data['usage_summary']['total_tokens'], 100)
+        self.assertEqual(response.data['recent_usage'][0]['provider'], 'mock')
+
+        response = self.client.post('/api/billing/plans/', {
+            'organization': 'test-org',
+            'plan': 'pro',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['current_plan'], 'pro')
+        self.assertEqual(response.data['project_count'], 1)
+        self.assertIn('usage_by_provider', response.data)
+
+    def test_dashboard_includes_visualization_snapshot(self):
+        task = GenerationTask.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            requested_by=self.user,
+            task_type='copy',
+            status='succeeded',
+            token_count=100,
+            cost_usd=Decimal('0.0123'),
+        )
+        UsageEvent.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            generation_task=task,
+            provider='mock',
+            model_name='mock-copy',
+            prompt_tokens=80,
+            completion_tokens=20,
+            total_tokens=100,
+            cost_usd=Decimal('0.0123'),
+        )
+        Asset.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            asset_type='document',
+            title='Launch Copy',
+        )
+        WorkspaceDraft.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            name='Dashboard Flow',
+            nodes=[],
+            edges=[],
+            status='completed',
+        )
+
+        response = self.client.get('/api/dashboard/?organization=test-org')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['metrics']['task_count'], 1)
+        self.assertEqual(response.data['metrics']['success_rate'], 100)
+        self.assertEqual(response.data['tasks_by_status']['succeeded'], 1)
+        self.assertEqual(response.data['asset_type_counts']['document'], 1)
+        self.assertEqual(response.data['usage_by_provider'][0]['provider'], 'mock')
+        self.assertEqual(len(response.data['usage_trend']), 7)
+        self.assertEqual(response.data['workspace_health']['completed_drafts'], 1)
+        self.assertEqual(response.data['recent_tasks'][0]['id'], task.id)

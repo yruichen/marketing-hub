@@ -6,7 +6,8 @@ from django.test import Client, SimpleTestCase
 from rest_framework.test import APITestCase
 
 from ai_gateway.content_package import assemble_content_package
-from ai_gateway.services import ModelPolicy
+from ai_gateway.prompt_catalog import PROMPT_ASSETS, get_prompt_asset, prompt_registry_snapshot
+from ai_gateway.services import AIModelGateway, ModelPolicy
 from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
@@ -46,6 +47,30 @@ class CopyPromptTests(SimpleTestCase):
         )
         self.assertEqual(normalized['title'], 'Test Title')
         self.assertEqual(normalized['platform'], 'WeChat')
+
+
+class PromptCatalogTests(SimpleTestCase):
+    def test_prompt_catalog_tracks_required_metadata(self):
+        asset = get_prompt_asset('marketing.copy.system')
+        self.assertIsNotNone(asset)
+        self.assertEqual(asset.task_type, 'copy')
+        self.assertTrue(asset.version.startswith('2026-06-25'))
+        self.assertGreaterEqual(len(asset.quality_bar), 3)
+        self.assertIn('marketing.review.system', prompt_registry_snapshot())
+
+    def test_prompt_catalog_covers_content_generation_prompts(self):
+        required_keys = {
+            'marketing.copy.system',
+            'marketing.storyboard.system',
+            'marketing.image.system',
+            'marketing.image_prompt.system',
+            'marketing.review.system',
+            'marketing.audio.system',
+            'marketing.video.system',
+            'marketing.custom_agent.system',
+            'marketing.brainstorm.system',
+        }
+        self.assertTrue(required_keys.issubset(set(PROMPT_ASSETS)))
 
 
 class StoryboardPromptTests(SimpleTestCase):
@@ -139,6 +164,24 @@ class ModelPolicyTests(APITestCase):
         self.assertEqual(text_config.provider, 'openai')
         self.assertEqual(image_config.provider, 'agnes')
         self.assertEqual(image_config.image_model_name, 'agnes-image-2.0-flash')
+
+    def test_gateway_logs_prompt_catalog_metadata(self):
+        AIConfiguration.objects.filter(is_active=True).update(is_active=False)
+        response = AIModelGateway.execute(
+            organization=None,
+            role='admin',
+            task_type='copy',
+            payload={
+                'brand_name': 'Launchbook',
+                'product_description': 'AI marketing workspace',
+                'tone': 'concise',
+                'platform': 'Xiaohongshu',
+            },
+            prompt_key='marketing.copy.system',
+        )
+        self.assertIn('gateway:prompt_version=2026-06-25.v1', response.logs)
+        self.assertIn('gateway:prompt_owner=content-generation', response.logs)
+        self.assertIn('gateway:prompt_risk=medium', response.logs)
 
 
 class ImagePromptEngineTests(SimpleTestCase):
