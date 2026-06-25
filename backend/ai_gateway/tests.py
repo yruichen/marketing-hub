@@ -2,12 +2,12 @@ import asyncio
 import json
 
 from django.contrib.auth.models import User
-from django.test import Client, SimpleTestCase
+from django.test import Client, SimpleTestCase, override_settings
 from rest_framework.test import APITestCase
 
 from ai_gateway.content_package import assemble_content_package
 from ai_gateway.prompt_catalog import PROMPT_ASSETS, get_prompt_asset, prompt_registry_snapshot
-from ai_gateway.services import AIModelGateway, ModelPolicy
+from ai_gateway.services import AIModelGateway, ModelPolicy, NonRetryableGatewayError
 from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
@@ -182,6 +182,24 @@ class ModelPolicyTests(APITestCase):
         self.assertIn('gateway:prompt_version=2026-06-25.v1', response.logs)
         self.assertIn('gateway:prompt_owner=content-generation', response.logs)
         self.assertIn('gateway:prompt_risk=medium', response.logs)
+
+    @override_settings(AI_ALLOW_MOCK_PROVIDER=False)
+    def test_gateway_rejects_mock_provider_when_disabled(self):
+        AIConfiguration.objects.filter(is_active=True).update(is_active=False)
+
+        with self.assertRaises(NonRetryableGatewayError):
+            AIModelGateway.execute(
+                organization=None,
+                role='admin',
+                task_type='copy',
+                payload={
+                    'brand_name': 'Launchbook',
+                    'product_description': 'AI marketing workspace',
+                    'tone': 'concise',
+                    'platform': 'Xiaohongshu',
+                },
+                prompt_key='marketing.copy.system',
+            )
 
 
 class ImagePromptEngineTests(SimpleTestCase):

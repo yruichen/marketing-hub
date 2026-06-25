@@ -11,9 +11,9 @@
   <p>
     <a href="./docs/README.md">Docs</a>
     ·
-    <a href="./docs/workflow_ux_improvement_plan.md">Workflow Plan</a>
+    <a href="./docs/plans/workflow_ux_improvement_plan.md">Workflow Plan</a>
     ·
-    <a href="./docs/ai_content_generation_prompt_governance.md">Prompt Governance</a>
+    <a href="./docs/architecture/ai_content_generation_prompt_governance.md">Prompt Governance</a>
   </p>
 </div>
 
@@ -135,6 +135,13 @@ Backend:
 DJANGO_SECRET_KEY=
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=
+CSRF_TRUSTED_ORIGINS=
+CORS_ALLOW_ALL_ORIGINS=
+ALLOW_UNAUTHENTICATED_API=
+SESSION_COOKIE_SECURE=
+CSRF_COOKIE_SECURE=
+SECURE_SSL_REDIRECT=
+SECURE_HSTS_SECONDS=
 
 DATABASE_URL=
 POSTGRES_DB=
@@ -148,6 +155,10 @@ CELERY_BROKER_URL=
 CELERY_RESULT_BACKEND=
 CELERY_TASK_ALWAYS_EAGER=
 CELERY_TASK_EAGER_PROPAGATES=
+
+MARKETING_HUB_BOOTSTRAP_DEMO=
+AI_ALLOW_MOCK_PROVIDER=
+AI_ALLOW_MOCK_FALLBACK=
 ```
 
 Frontend:
@@ -177,12 +188,14 @@ npm run test
 
 ## Documentation
 
+- [Engineering Playbook](./ENGINEERING_PLAYBOOK.md)
 - [Docs Index](./docs/README.md)
-- [Development Workflow](./docs/development_workflow.md)
-- [Backend Modularization](./docs/backend_modularization.md)
-- [Workflow UX Improvement Plan](./docs/workflow_ux_improvement_plan.md)
-- [Global AI Assistant Upgrade Plan](./docs/global_ai_assistant_upgrade_plan.md)
-- [AI Content Generation Prompt Governance](./docs/ai_content_generation_prompt_governance.md)
+- [Development Workflow](./docs/operations/development_workflow.md)
+- [Backend Modularization](./docs/architecture/backend_modularization.md)
+- [Workflow UX Improvement Plan](./docs/plans/workflow_ux_improvement_plan.md)
+- [Global AI Assistant Upgrade Plan](./docs/architecture/global_ai_assistant_upgrade_plan.md)
+- [AI Content Generation Prompt Governance](./docs/architecture/ai_content_generation_prompt_governance.md)
+- [Brand Memory Long-Term Evolution Plan](./docs/plans/brand_memory_long_term_evolution_plan.md)
 
 ## Repository Notes
 

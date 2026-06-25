@@ -22,7 +22,7 @@
 
 ### 后续
 
-- 详见 `docs/upgrade_execution_report.md`。
+- 详见 `docs/archive/reports/upgrade_execution_report.md`。
 
 ## 2026-05-30 Celery 异步任务管线升级
 

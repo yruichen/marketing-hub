@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.conf import settings
 from django.db.models.signals import post_migrate
 
 
@@ -10,13 +11,13 @@ def create_demo_user_and_config(sender, **kwargs):
     from ai_gateway.services import AGNES_DEFAULT_BASE_URL, AGNES_DEFAULT_MODEL
     from api.models import AIConfiguration
 
-    # Create demo ROOT user
-    if not User.objects.filter(username='ROOT').exists():
+    # Create demo ROOT user only for local/dev bootstrap.
+    if settings.MARKETING_HUB_BOOTSTRAP_DEMO and not User.objects.filter(username='ROOT').exists():
         User.objects.create_superuser('ROOT', 'root@marketinghub.local', '123')
         print("--- Demo Superuser 'ROOT' with password '123' created. ---")
 
-    # Create Default AI Configuration if not exists
-    if not AIConfiguration.objects.filter(provider='mock').exists():
+    # Create Default AI Configuration for local/demo runs only.
+    if settings.MARKETING_HUB_BOOTSTRAP_DEMO and not AIConfiguration.objects.filter(provider='mock').exists():
         AIConfiguration.objects.create(
             provider='mock',
             api_key='',
@@ -29,7 +30,7 @@ def create_demo_user_and_config(sender, **kwargs):
 
     agnes_key = os.getenv('AGNES_API_KEY', '').strip()
     if agnes_key:
-        auto_activate = os.getenv('AGNES_AUTO_ACTIVATE', 'true').lower() == 'true'
+        auto_activate = os.getenv('AGNES_AUTO_ACTIVATE', 'true' if settings.DEBUG else 'false').lower() == 'true'
         config, _ = AIConfiguration.objects.update_or_create(
             provider='agnes',
             organization=None,
