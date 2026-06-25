@@ -30,6 +30,8 @@ export function AudioPanel({
   fetchDashboard,
   onShare,
 }: AudioPanelProps) {
+  void _loading;
+  void _setLoading;
   const [audioInput, setAudioInput] = useState({
     text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
     voiceId: 'female_warm',

@@ -39,6 +39,8 @@ export function ContentPackagePanel({
   onCopy,
   onApplyContentPackage,
 }: ContentPackagePanelProps) {
+  void _loading;
+  void _setLoading;
   const [contentBrief, setContentBrief] = useState(onboarding.brief);
   const [contentPackage, setContentPackage] = useState<ContentPackage>(defaultContentPackage);
   const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>(defaultContentPackage.version);

@@ -34,6 +34,7 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     useAssets(organizationSlug, filter, PAGE_SIZE);
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null);
   const [dialog, setDialog] = useState<DialogState>({ mode: 'closed' });
+  const [recentCount, setRecentCount] = useState(0);
 
   // 监听工作流运行完成事件，自动刷新
   useEffect(() => {
@@ -45,10 +46,17 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const typeCounts = data?.type_counts;
-  const recentCount = items.filter((asset) => {
-    const created = new Date(asset.created_at).getTime();
-    return Number.isFinite(created) && Date.now() - created < 1000 * 60 * 60 * 24 * 7;
-  }).length;
+
+  useEffect(() => {
+    const now = Date.now();
+    const sevenDaysAgo = now - 1000 * 60 * 60 * 24 * 7;
+    setRecentCount(
+      items.filter((asset) => {
+        const created = new Date(asset.created_at).getTime();
+        return Number.isFinite(created) && created >= sevenDaysAgo;
+      }).length,
+    );
+  }, [items]);
 
   const handleFilterChange = (next: AssetFilterState) => {
     setFilter(next);

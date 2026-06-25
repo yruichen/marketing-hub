@@ -32,6 +32,8 @@ export function CopyPanel({
   onShare,
   onCopy,
 }: CopyPanelProps) {
+  void _loading;
+  void _setLoading;
   const [copyInput, setCopyInput] = useState({
     brandName: 'Marketing-Hub',
     description: 'AI 营销场景全能助手，秒级生成爆款图文',

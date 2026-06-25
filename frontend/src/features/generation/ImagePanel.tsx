@@ -36,6 +36,8 @@ export function ImagePanel({
   onShare,
   onCopy,
 }: ImagePanelProps) {
+  void _loading;
+  void _setLoading;
   const [imageInput, setImageInput] = useState({
     prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
     aspectRatio: '1:1',

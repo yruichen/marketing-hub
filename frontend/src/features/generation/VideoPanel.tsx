@@ -32,6 +32,8 @@ export function VideoPanel({
   onWorkspaceRefresh,
   onShare,
 }: VideoPanelProps) {
+  void _loading;
+  void _setLoading;
   const [videoInput, setVideoInput] = useState({
     topic: 'Marketing Hub 品牌宣传片',
     prompt: '清晨阳光透过落地窗，咖啡杯旁一本杂志缓缓翻开，镜头推近展示精致排版与文案，电影感光影，流畅运镜，广告级画质。',

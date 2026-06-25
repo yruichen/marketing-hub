@@ -30,6 +30,8 @@ export function StoryboardPanel({
   fetchDashboard,
   onShare,
 }: StoryboardPanelProps) {
+  void _loading;
+  void _setLoading;
   const [storyboardInput, setStoryboardInput] = useState({
     topic: '创意手账设计的日常',
     duration: 30,
