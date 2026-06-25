@@ -1,128 +1,103 @@
 <a name="readme-top"></a>
 
-<!-- PROJECT LOGO -->
-<br />
 <div align="center">
-  <a href="https://github.com/yruichen/marketing-hub">
-    <img src="https://img.icons8.com/color/150/000000/bullish.png" alt="Logo" width="80" height="80">
-  </a>
+  <img src="./docs/images/brand-mark.svg" alt="Marketing Hub brand mark" width="96" height="96" />
 
-  <h3 align="center">Marketing Hub</h3>
+  <h1>Marketing Hub</h1>
 
-  <p align="center">
-    A modular SaaS workspace for marketing content generation, workflow orchestration, project management, and community sharing.
-    <br />
-    <a href="./docs/README.md"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="#quick-start">View Demo</a>
+  <p><strong>BLOW UP YOUR SIMPLE IDEA</strong></p>
+  <p>一个面向营销内容生产、工作流编排、项目资产沉淀和 AI 成本治理的工作台。</p>
+
+  <p>
+    <a href="./docs/README.md">Docs</a>
     ·
-    <a href="https://github.com/yruichen/marketing-hub/issues">Report Bug</a>
+    <a href="./docs/workflow_ux_improvement_plan.md">Workflow Plan</a>
     ·
-    <a href="https://github.com/yruichen/marketing-hub/issues">Request Feature</a>
+    <a href="./docs/ai_content_generation_prompt_governance.md">Prompt Governance</a>
   </p>
 </div>
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#screenshots">Screenshots</a></li>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li><a href="#repository-layout">Repository Layout</a></li>
-    <li><a href="#features">Features</a></li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#docker-compose">Docker Compose</a></li>
-        <li><a href="#local-development">Local Development</a></li>
-      </ul>
-    </li>
-    <li><a href="#environment-variables">Environment Variables</a></li>
-    <li><a href="#development-standards">Development Standards</a></li>
-    <li><a href="#verification">Verification</a></li>
-  </ol>
-</details>
+## Product
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+Marketing Hub 把一个简单想法扩展成可执行的营销生产链路：
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+- 从“灵感风暴”输入一句想法，生成品牌上下文和 workflow 草稿。
+- 在可视化工作流中编排文案、图片提示词、配图、分镜、配音、视频和审核节点。
+- 用“我的项目”管理项目、文件夹、活动、收藏、资产和品牌记忆。
+- 在首页和计费页查看任务、成本、Token、Provider、成功率和工作区健康度。
+- 通过 AI Gateway 统一模型配置、BYOK、fallback、成本审计和 Prompt 版本治理。
 
-Marketing Hub is designed to centralize and automate marketing operations. It combines a visual workflow builder with AI-powered agents, comprehensive project management through folders and tags, and a collaborative community sharing ecosystem.
+## Screenshots
 
-### Screenshots
+| Brainstorm | Dashboard |
+| --- | --- |
+| ![Brainstorm](./docs/images/main_window.png) | ![Dashboard](./docs/images/dashboard.png) |
 
-| Workflow Canvas | Project Management |
-| :---: | :---: |
-| <img src="./docs/images/workflow.png" alt="Workflow Canvas" /> | <img src="./docs/images/project.png" alt="Project Manager" /> |
+| Workflow | Projects |
+| --- | --- |
+| ![Workflow](./docs/images/workflow.png) | ![Projects](./docs/images/project.png) |
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+| Billing |
+| --- |
+| ![Billing](./docs/images/billing.png) |
 
-### Built With
+## Core Modules
 
-This project is built atop modern web technologies and frameworks:
+| Module | What it does |
+| --- | --- |
+| 灵感风暴 | 将一句 idea 转为结构化品牌上下文和可运行 workflow 草稿。 |
+| 首页 | 展示任务总量、成功率、Token、成本、趋势、Provider 成本和工作区健康度。 |
+| AI 内容生成 | 覆盖内容包、文案、图片、分镜、配音和视频生成。 |
+| 工作流 | React Flow 画布、节点 IO schema、自动布局、运行进度、失败重试和只读分享。 |
+| 我的项目 | 项目列表、文件夹、收藏、详情 Inspector、当前项目切换和资产入口。 |
+| 计费与用量 | 套餐、项目额度、BYOK 抵扣、Provider 成本和最近用量。 |
+| AI 设置 | 多 provider 配置、模型选择、组织级密钥和能力 lane。 |
 
-* [![React][React.js]][React-url]
-* [![Vite][Vite.js]][Vite-url]
-* [![TypeScript][TypeScript]][TypeScript-url]
-* [![Tailwind][Tailwind]][Tailwind-url]
-* [![Django][Django]][Django-url]
-* [![PostgreSQL][PostgreSQL]][Postgres-url]
-* [![Redis][Redis]][Redis-url]
-* [![Celery][Celery]][Celery-url]
+## Architecture
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- REPOSITORY LAYOUT -->
-## Repository Layout
-
-- **[`frontend/`](./frontend)** - React application (React 19, Vite, TypeScript, Tailwind)
-- **[`backend/`](./backend)** - Django monolith split into modular domain apps
-- **[`docs/`](./docs)** - Architecture, development, and product documentation
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- FEATURES -->
-## Features
-
-- **Visual Workflow Canvas:** Custom agents and node I/O schema editing.
-- **Project Structure:** Folder-based project management with customizable tags and statuses.
-- **Billing & Subscriptions:** Flexible subscription plans alongside BYOK (Bring Your Own Key) model configurations.
-- **Community ecosystem:** Publishing features and brand inspiration search.
-- **Task Orchestration:** Async generation tasks with ledger-style tracking.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- GETTING STARTED -->
-## Getting Started
-
-To get a local copy up and running, follow these steps.
-
-### Docker Compose
-
-The fastest way to run all services:
-
-```bash
-docker-compose up --build -d
+```text
+marketing-hub/
+  backend/        Django 3-domain SaaS backend, AI Gateway, workflow runtime
+  frontend/       React 19 + Vite SPA, feature modules, React Flow canvas
+  docs/           Product plans, architecture notes, prompt governance, pitch materials
 ```
 
-**Services Available At:**
+Backend domain apps:
+
+- `api`: shared models, serializers, contracts, RBAC, services, Celery tasks.
+- `workspaces`: organizations, projects, folders, campaigns, drafts, templates, dashboard.
+- `generation`: AI generation endpoints and workflow run/retry APIs.
+- `ai_gateway`: provider adapters, model policy, cost calculator, prompt catalog.
+- `billing`: plan limits, project quotas and usage summary.
+- `community`: publishing, likes and inspiration search.
+- `accounts`: session login and membership management.
+
+Frontend entry:
+
+- `frontend/src/App.tsx`
+- `frontend/src/features/*`
+- `frontend/src/components/WorkflowBuilder.tsx`
+- `frontend/src/shared/*`
+
+## Quick Start
+
+### Docker
+
+```bash
+docker compose up
+```
+
+Services:
+
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
+- Backend API: `http://localhost:8000/api`
 - PostgreSQL: `5432`
 - Redis: `6379`
 
 ### Local Development
 
-If you prefer to run services natively for active development:
+Backend:
 
-**Backend Setup**
 ```bash
 cd backend
 uv sync
@@ -130,31 +105,38 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
-**Frontend Setup**
+Frontend:
+
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-**Celery Worker** (Start in a separate terminal)
+Worker:
+
 ```bash
 cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Demo account:
 
-<!-- ENVIRONMENT VARIABLES -->
-## Environment Variables
+```text
+username: ROOT
+password: 123
+```
 
-Backend reads these common variables. Make sure they are set in your `.env` file or environment:
+## Environment
+
+Backend:
 
 ```env
 DJANGO_SECRET_KEY=
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=
 
+DATABASE_URL=
 POSTGRES_DB=
 POSTGRES_USER=
 POSTGRES_PASSWORD=
@@ -164,63 +146,48 @@ POSTGRES_PORT=
 REDIS_URL=
 CELERY_BROKER_URL=
 CELERY_RESULT_BACKEND=
-
-OBJECT_STORAGE_BACKEND=
-OBJECT_STORAGE_BUCKET=
+CELERY_TASK_ALWAYS_EAGER=
+CELERY_TASK_EAGER_PROPAGATES=
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Frontend:
 
-<!-- DEVELOPMENT STANDARDS -->
-## Development Standards
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
+```
 
-We adhere to the following architecture principles to keep the codebase maintainable:
-
-- Keep domain logic in the matching Django app.
-- Keep `api` as the compatibility and shared-model layer.
-- Put shared contracts in `backend/api/contracts.py`.
-- Put serializers in `backend/api/serializers.py`.
-- Put request-scoped helpers in `backend/api/scope.py`.
-- **Avoid** adding new business views in `api/views.py`.
-
-See the full [Backend Module Guide](./backend/README.md) and [Backend Architecture](./backend/ARCHITECTURE.md).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-<!-- VERIFICATION -->
 ## Verification
 
-Recommended checks before merging into the main branch:
+Backend:
 
 ```bash
-# Backend checks
-cd backend && uv run python manage.py check
-cd backend && uv run python manage.py test
-
-# Frontend checks
-cd frontend && npm run lint
-cd frontend && npm run build
+cd backend
+uv run python manage.py check
+uv run python manage.py test
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Frontend:
 
+```bash
+cd frontend
+npm run lint
+npm run build
+npm run test
+```
 
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[product-screenshot]: ./docs/images/main_window.png
-[React.js]: https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB
-[React-url]: https://reactjs.org/
-[Vite.js]: https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white
-[Vite-url]: https://vitejs.dev/
-[TypeScript]: https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white
-[TypeScript-url]: https://www.typescriptlang.org/
-[Tailwind]: https://img.shields.io/badge/tailwindcss-%2338B2AC.svg?style=for-the-badge&logo=tailwind-css&logoColor=white
-[Tailwind-url]: https://tailwindcss.com/
-[Django]: https://img.shields.io/badge/django-%23092E20.svg?style=for-the-badge&logo=django&logoColor=white
-[Django-url]: https://www.djangoproject.com/
-[PostgreSQL]: https://img.shields.io/badge/postgresql-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white
-[Postgres-url]: https://www.postgresql.org/
-[Redis]: https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white
-[Redis-url]: https://redis.io/
-[Celery]: https://img.shields.io/badge/celery-%2337814A.svg?style=for-the-badge&logo=celery&logoColor=white
-[Celery-url]: https://docs.celeryq.dev/
+## Documentation
+
+- [Docs Index](./docs/README.md)
+- [Development Workflow](./docs/development_workflow.md)
+- [Backend Modularization](./docs/backend_modularization.md)
+- [Workflow UX Improvement Plan](./docs/workflow_ux_improvement_plan.md)
+- [Global AI Assistant Upgrade Plan](./docs/global_ai_assistant_upgrade_plan.md)
+- [AI Content Generation Prompt Governance](./docs/ai_content_generation_prompt_governance.md)
+
+## Repository Notes
+
+- This repository intentionally keeps product docs and pitch materials under `docs/`.
+- Generated/runtime artifacts stay out of Git through `.gitignore`: `node_modules/`, `dist/`, `.venv/`, `db.sqlite3`, `.env`, `.DS_Store`, caches and Python bytecode.
+- The current product visual direction is editorial, minimal, monochrome-first, with yellow used as a small activation signal.
+
+<p align="right"><a href="#readme-top">Back to top</a></p>
