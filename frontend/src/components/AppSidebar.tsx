@@ -19,21 +19,22 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-[var(--editorial-stroke)] bg-[var(--editorial-bg)] shadow-editorial-lg xl:shadow-none xl:static xl:w-auto xl:h-full xl:min-h-0 xl:overflow-hidden flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0">
+    <aside className="fixed inset-y-0 left-0 z-40 w-[272px] border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none xl:static xl:w-auto xl:h-full xl:min-h-0 xl:overflow-hidden flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0">
       <div className="flex min-h-0 flex-1 flex-col gap-5">
-        <div className="flex flex-col gap-1 select-none">
+        <div className="select-none rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 px-3 py-3 shadow-[var(--shadow-panel)]">
+          <div className="mb-2 h-1.5 w-10 rounded-full bg-[var(--brand-accent)]" />
           <h1 className="serif-header text-lg font-bold tracking-tight text-[var(--editorial-text)]">
             Marketing-Hub
           </h1>
-          <p className="text-[10px] text-[var(--editorial-text-gray)] font-semibold leading-snug">
-            营销内容工作台
+          <p className="mt-1 text-[10px] text-[var(--editorial-text-gray)] font-semibold leading-snug">
+            Creative marketing operating system
           </p>
         </div>
 
         <nav className="flex flex-col gap-4 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
-              <p className="text-[9px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)] mb-2 px-1">
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--editorial-text-gray)] mb-2 px-2">
                 {section.title}
               </p>
               <div className="flex flex-col gap-0.5">
@@ -46,12 +47,13 @@ export function AppSidebar({
                       type="button"
                       onClick={() => onNavigate(item.id)}
                       title={item.hint}
-                      className={`w-full text-left px-2.5 py-2 text-[11px] transition-all cursor-pointer flex items-center gap-2 border rounded-sm ${
+                      className={`group relative w-full text-left px-2.5 py-2.5 text-[11px] transition-all cursor-pointer flex items-center gap-2 border rounded-lg ${
                         isActive
-                          ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial-sm text-[var(--editorial-text)]'
-                          : 'border-transparent text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] hover:bg-[var(--editorial-paper)]/70'
+                          ? 'border-[var(--border-default)] bg-[var(--surface-active)] text-[var(--editorial-text)] shadow-[var(--shadow-panel)]'
+                          : 'border-transparent text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] hover:bg-[var(--surface-hover)]'
                       }`}
                     >
+                      {isActive && <span className="absolute left-1 top-2 bottom-2 w-1 rounded-full bg-[var(--brand-accent-strong)]" aria-hidden="true" />}
                       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                         <span className="font-black truncate">{item.label}</span>
@@ -68,32 +70,32 @@ export function AppSidebar({
         </nav>
       </div>
 
-      <div className="pt-3 border-t border-dashed border-[var(--editorial-stroke)]/40 space-y-3 font-mono">
+      <div className="pt-3 border-t border-dashed border-[var(--border-subtle)] space-y-3 font-mono">
         <div className="flex items-center justify-between text-[10px]">
           <span className="font-bold text-[var(--editorial-text-gray)]">深色模式</span>
           <button
             type="button"
             onClick={onToggleDarkMode}
             aria-label="切换深色模式"
-            className="h-5 w-10 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] relative transition-all active:scale-95 cursor-pointer"
+            className="h-6 w-11 rounded-full border border-[var(--border-default)] bg-[var(--surface-panel)] relative transition-all active:scale-95 cursor-pointer"
           >
             <div
-              className={`h-3 w-3 bg-[var(--editorial-stroke)] absolute top-0.5 transition-all ${
+              className={`h-4 w-4 rounded-full bg-[var(--brand-accent)] absolute top-0.5 shadow-[0_2px_8px_rgba(0,0,0,0.22)] transition-all ${
                 darkMode ? 'right-0.5' : 'left-0.5'
               }`}
             />
           </button>
         </div>
-        <div className="text-xs font-bold flex flex-col gap-1">
+        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 p-2.5 text-xs font-bold flex flex-col gap-1">
           <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
-          <span className="text-[8px] bg-[var(--editorial-unselected)] text-[var(--editorial-text-gray)] px-1 py-0.5 inline-block w-fit">
+          <span className="text-[8px] rounded-full bg-[var(--surface-muted)] text-[var(--editorial-text-gray)] px-2 py-0.5 inline-block w-fit">
             管理员
           </span>
         </div>
         <button
           type="button"
           onClick={onLogout}
-          className="w-full text-left py-1.5 text-[10px] text-rose-500 font-bold transition-all hover:underline cursor-pointer"
+          className="w-full rounded-lg border border-transparent px-2 py-1.5 text-left text-[10px] text-[var(--danger-accent)] font-bold transition-all hover:border-[var(--border-subtle)] hover:bg-[var(--surface-hover)] cursor-pointer"
         >
           退出登录
         </button>

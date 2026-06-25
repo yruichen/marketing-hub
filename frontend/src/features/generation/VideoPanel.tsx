@@ -22,8 +22,8 @@ interface VideoPanelProps {
 export function VideoPanel({
   workspaceScope,
   username,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   agentLogs,
   setAgentLogs,
   setLatestTask,
@@ -32,6 +32,8 @@ export function VideoPanel({
   onWorkspaceRefresh,
   onShare,
 }: VideoPanelProps) {
+  void _loading;
+  void _setLoading;
   const [videoInput, setVideoInput] = useState({
     topic: 'Marketing Hub 品牌宣传片',
     prompt: '清晨阳光透过落地窗，咖啡杯旁一本杂志缓缓翻开，镜头推近展示精致排版与文案，电影感光影，流畅运镜，广告级画质。',
@@ -49,8 +51,10 @@ export function VideoPanel({
   const [videoPlaybackError, setVideoPlaybackError] = useState('');
   const [videoPollHint, setVideoPollHint] = useState('');
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const { submitVideoGeneration } = useGenerationTask({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
     triggerToast,
@@ -91,7 +95,7 @@ export function VideoPanel({
   };
 
   return (
-    <div className="generation-workspace">
+    <div className="generation-workspace generation-workspace--with-result">
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// VIDEO STICKY SLATE</h3>
@@ -161,13 +165,13 @@ export function VideoPanel({
         <button
           type="button"
           onClick={handleGenerateVideo}
-          disabled={loading}
+          disabled={isRunning}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
-          {loading ? (
+          {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
           ) : null}
-          <span>{loading ? 'AGENT RENDERING...' : '运行视频生成 Agent'}</span>
+          <span>{isRunning ? 'AGENT RENDERING...' : '运行视频生成 Agent'}</span>
         </button>
         </div>
 
@@ -197,7 +201,7 @@ export function VideoPanel({
             </div>
           )}
 
-          {loading && !videoOutput.video_url ? (
+          {isRunning && !videoOutput.video_url ? (
             <div className="w-full aspect-video editorial-loader-bar flex flex-col items-center justify-center gap-3">
               <span className="font-mono text-[9px] font-black text-black bg-[var(--editorial-accent-yellow)] border border-black px-2 py-0.5 animate-pulse">
                 VIDEO RENDER IN PROGRESS...

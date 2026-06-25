@@ -25,6 +25,10 @@ const TYPES: AssetTypeFilter[] = ['all', 'image', 'audio', 'video', 'document'];
 export function AssetFilter({ filter, onChange, typeCounts, total }: AssetFilterProps) {
   return (
     <div className="assets-filter">
+      <div className="assets-filter__label">
+        <span>素材类型</span>
+        <strong>{total}</strong>
+      </div>
       <div className="assets-filter__chips">
         {TYPES.map((t) => {
           const Icon = TYPE_ICON[t];
@@ -38,7 +42,7 @@ export function AssetFilter({ filter, onChange, typeCounts, total }: AssetFilter
               className={`assets-filter__chip ${active ? 'is-active' : ''}`}
             >
               <Icon className="h-3.5 w-3.5" />
-              <span>{t === 'all' ? '全部' : ASSET_TYPE_LABELS[t]}</span>
+              <span>{t === 'all' ? '全部素材' : ASSET_TYPE_LABELS[t]}</span>
               {count > 0 ? <span className="assets-filter__count">{count}</span> : null}
             </button>
           );
@@ -49,7 +53,7 @@ export function AssetFilter({ filter, onChange, typeCounts, total }: AssetFilter
         <input
           value={filter.search}
           onChange={(e) => onChange({ ...filter, search: e.target.value })}
-          placeholder="搜索标题 / 标签"
+          placeholder="搜索标题、标签或产出类型"
         />
         {filter.search ? (
           <button

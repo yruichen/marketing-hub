@@ -21,8 +21,8 @@ interface AudioPanelProps {
 export function AudioPanel({
   workspaceScope,
   username,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   agentLogs,
   setAgentLogs,
   setLatestTask,
@@ -30,6 +30,8 @@ export function AudioPanel({
   fetchDashboard,
   onShare,
 }: AudioPanelProps) {
+  void _loading;
+  void _setLoading;
   const [audioInput, setAudioInput] = useState({
     text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
     voiceId: 'female_warm',
@@ -44,8 +46,10 @@ export function AudioPanel({
     estimated_audio_duration_seconds: 8.8
   });
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const { submitQueuedGeneration } = useGenerationTask({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
     triggerToast,
@@ -54,20 +58,22 @@ export function AudioPanel({
     fetchDashboard,
   });
 
-  const handleGenerateAudio = () => submitQueuedGeneration<AudioOutput>(
-    'audio',
-    {
-      text: audioInput.text,
-      voice_id: audioInput.voiceId,
-      speed: audioInput.speed,
-    },
-    setAudioOutput,
-    '[0.00s] [INFO] Initializing queued Editorial Audio Synthesis Pipeline...',
-    '配音异步任务执行完毕'
-  );
+  const handleGenerateAudio = () => {
+    return submitQueuedGeneration<AudioOutput>(
+      'audio',
+      {
+        text: audioInput.text,
+        voice_id: audioInput.voiceId,
+        speed: audioInput.speed,
+      },
+      setAudioOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Audio Synthesis Pipeline...',
+      '配音异步任务执行完毕'
+    );
+  };
 
   return (
-    <div className="generation-workspace">
+    <div className="generation-workspace generation-workspace--with-result">
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// AUDIO STICKY SLATE</h3>
@@ -128,13 +134,13 @@ export function AudioPanel({
 
         <button
           onClick={handleGenerateAudio}
-          disabled={loading}
+          disabled={isRunning}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
-          {loading ? (
+          {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
           ) : null}
-          <span>{loading ? 'AGENT SYNTHESIZING...' : '运行配音合成 Agent'}</span>
+          <span>{isRunning ? 'AGENT SYNTHESIZING...' : '运行配音合成 Agent'}</span>
         </button>
         </div>
 
@@ -158,12 +164,12 @@ export function AudioPanel({
           <div className="bg-[var(--editorial-bg)]/20 border border-[var(--editorial-stroke)]/40 p-5 relative overflow-hidden flex flex-col gap-4 font-mono shadow-inner">
             <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)]/40 pb-2 text-[9px] text-[var(--editorial-text-gray)]">
               <span>AUDIO_SYNTH_DECK: [READY]</span>
-              <span className={loading ? "animate-pulse text-indigo-500 font-bold" : "text-emerald-600 font-bold"}>
-                {loading ? "RENDER_ACTIVE" : "STANDBY"}
+              <span className={isRunning ? "animate-pulse text-indigo-500 font-bold" : "text-emerald-600 font-bold"}>
+                {isRunning ? "RENDER_ACTIVE" : "STANDBY"}
               </span>
             </div>
 
-            {loading ? (
+            {isRunning ? (
               <div className="h-10 w-full editorial-loader-bar flex items-center justify-center border-none">
                 <span className="bg-[var(--editorial-accent-yellow)] text-black text-[8px] font-black border border-black px-2 py-0.5 animate-pulse">
                   SOUNDWAVE CALCULATING...
@@ -193,7 +199,7 @@ export function AudioPanel({
 
           <div className="border border-[var(--editorial-stroke)]/60 bg-[var(--editorial-bg)]/20 p-3">
             <span className="text-[8px] font-black text-[var(--editorial-text-gray)] uppercase block mb-1.5">// SOUND STREAM PLAYER</span>
-            {loading ? (
+            {isRunning ? (
               <div className="p-2 border border-[var(--editorial-stroke)]/40 text-[9px] text-center font-bold text-[var(--editorial-text-gray)] animate-pulse bg-[var(--editorial-paper)]">
                 LOADING STREAMING AUDIO PIPELINE...
               </div>

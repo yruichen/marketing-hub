@@ -22,8 +22,8 @@ interface CopyPanelProps {
 export function CopyPanel({
   workspaceScope,
   username,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   agentLogs,
   setAgentLogs,
   setLatestTask,
@@ -32,6 +32,8 @@ export function CopyPanel({
   onShare,
   onCopy,
 }: CopyPanelProps) {
+  void _loading;
+  void _setLoading;
   const [copyInput, setCopyInput] = useState({
     brandName: 'Marketing-Hub',
     description: 'AI 营销场景全能助手，秒级生成爆款图文',
@@ -51,8 +53,10 @@ export function CopyPanel({
     call_to_action: '👉 立即点击体验 Marketing-Hub，解锁你的创意生产力！'
   });
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const { submitQueuedGeneration } = useGenerationTask({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
     triggerToast,
@@ -61,21 +65,23 @@ export function CopyPanel({
     fetchDashboard,
   });
 
-  const handleGenerateCopy = () => submitQueuedGeneration<CopyOutput>(
-    'copy',
-    {
-      brand_name: copyInput.brandName,
-      product_description: copyInput.description,
-      tone: copyInput.tone,
-      platform: copyInput.platform,
-    },
-    setCopyOutput,
-    '[0.00s] [INFO] Initializing queued Editorial Copywriting Agent Workflow...',
-    '文案异步任务执行完毕'
-  );
+  const handleGenerateCopy = () => {
+    return submitQueuedGeneration<CopyOutput>(
+      'copy',
+      {
+        brand_name: copyInput.brandName,
+        product_description: copyInput.description,
+        tone: copyInput.tone,
+        platform: copyInput.platform,
+      },
+      setCopyOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Copywriting Agent Workflow...',
+      '文案异步任务执行完毕'
+    );
+  };
 
   return (
-    <div className="generation-workspace">
+    <div className="generation-workspace generation-workspace--with-result">
       {/* Left Input Slate */}
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
@@ -134,13 +140,13 @@ export function CopyPanel({
 
         <button
           onClick={handleGenerateCopy}
-          disabled={loading}
+          disabled={isRunning}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
-          {loading ? (
+          {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
           ) : null}
-          <span>{loading ? 'AGENT RUNNING...' : '运行文案编排 Agent'}</span>
+          <span>{isRunning ? 'AGENT RUNNING...' : '运行文案编排 Agent'}</span>
         </button>
         </div>
 

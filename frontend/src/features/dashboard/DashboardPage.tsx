@@ -79,10 +79,10 @@ function formatDateLabel(value: string) {
 }
 
 function statusClass(status: string) {
-  if (status === 'succeeded') return 'bg-emerald-100 text-emerald-800 border-emerald-900/30';
-  if (status === 'running') return 'bg-blue-100 text-blue-800 border-blue-900/30';
-  if (status === 'queued') return 'bg-yellow-100 text-yellow-800 border-yellow-900/30';
-  return 'bg-red-100 text-red-800 border-red-900/30';
+  if (status === 'succeeded') return 'bg-[color-mix(in_srgb,var(--success-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--success-accent)_44%,var(--border-default))]';
+  if (status === 'running') return 'bg-[color-mix(in_srgb,var(--info-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--info-accent)_44%,var(--border-default))]';
+  if (status === 'queued') return 'bg-[color-mix(in_srgb,var(--warning-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--warning-accent)_44%,var(--border-default))]';
+  return 'bg-[color-mix(in_srgb,var(--danger-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--danger-accent)_44%,var(--border-default))]';
 }
 
 function EmptyPanel({
@@ -97,10 +97,10 @@ function EmptyPanel({
   onAction: () => void;
 }) {
   return (
-    <div className="border border-dashed border-[var(--editorial-stroke)]/45 bg-[var(--editorial-unselected)]/35 p-4">
+    <div className="rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--surface-muted)]/55 p-4">
       <p className="text-sm font-black text-[var(--editorial-text)]">{title}</p>
       <p className="mt-1 text-xs leading-5 text-[var(--editorial-text-gray)]">{description}</p>
-      <button type="button" onClick={onAction} className="mt-3 inline-flex h-8 items-center gap-2 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-3 text-xs font-black hover:bg-[var(--editorial-accent-yellow)]">
+      <button type="button" onClick={onAction} className="mt-3 inline-flex h-8 items-center gap-2 rounded-full border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 text-xs font-black hover:bg-[var(--brand-accent-soft)]">
         {action}
         <ArrowRight className="h-3.5 w-3.5" />
       </button>
@@ -123,9 +123,9 @@ function Sparkline({ trend }: { trend: NonNullable<DashboardSnapshot['usage_tren
 
   return (
     <div className="h-28">
-      <svg viewBox="0 0 100 42" preserveAspectRatio="none" className="h-full w-full overflow-visible text-[var(--editorial-stroke)]">
+      <svg viewBox="0 0 100 42" preserveAspectRatio="none" className="h-full w-full overflow-visible text-[var(--brand-accent-strong)]">
         <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        <polygon points={`0,42 ${points} 100,42`} className="fill-blue-500/10" />
+        <polygon points={`0,42 ${points} 100,42`} className="fill-[var(--brand-accent)]/15" />
       </svg>
     </div>
   );
@@ -145,9 +145,9 @@ function MetricCard({
   tone: string;
 }) {
   return (
-    <div className="min-w-0 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4 shadow-editorial-sm">
+    <div className="min-w-0 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-4 shadow-[var(--shadow-panel)]">
       <div className="flex items-start justify-between gap-3">
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--editorial-stroke)] ${tone}`}>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border-subtle)] ${tone}`}>
           <Icon className="h-4 w-4" />
         </div>
         <span className="text-right text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">{label}</span>
@@ -202,11 +202,13 @@ export function DashboardPage({
 
   return (
     <div className="space-y-5">
-      <section className="border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-5 shadow-editorial paper-sheet-1">
+      <section className="relative overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)]">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_12%_0%,color-mix(in_srgb,var(--brand-accent)_18%,transparent),transparent_30%),radial-gradient(circle_at_92%_8%,color-mix(in_srgb,var(--editorial-accent-blue)_10%,transparent),transparent_28%)]" />
+        <div className="relative">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs font-black text-[var(--editorial-text-gray)]">
-              <span className="inline-flex h-7 items-center gap-2 border border-[var(--editorial-stroke)] bg-[var(--editorial-accent-yellow)] px-2 text-[var(--editorial-text)]">
+              <span className="inline-flex h-7 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--brand-accent)] px-3 text-black">
                 <Activity className="h-3.5 w-3.5" />
                 实时首页
               </span>
@@ -243,23 +245,24 @@ export function DashboardPage({
             </button>
           </div>
         </div>
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="任务总量" value={formatNumber(taskTotal)} detail={`${activeTasks} 个正在等待或运行`} icon={Activity} tone="bg-blue-100 text-blue-800" />
-        <MetricCard label="成功率" value={`${successRate.toFixed(1)}%`} detail={`${metrics?.successful_tasks ?? 0} 成功 / ${metrics?.failed_tasks ?? 0} 失败`} icon={CheckCircle2} tone="bg-emerald-100 text-emerald-800" />
-        <MetricCard label="Token 审计" value={formatNumber(metrics?.total_tokens ?? 0)} detail={`${providerRows.length || 1} 个 provider 产生用量`} icon={Database} tone="bg-purple-100 text-purple-800" />
-        <MetricCard label="成本估算" value={`$${formatUsd(metrics?.total_cost_usd)}`} detail={`${failureRate.toFixed(1)}% 失败任务占比`} icon={DollarSign} tone="bg-yellow-100 text-yellow-900" />
+        <MetricCard label="任务总量" value={formatNumber(taskTotal)} detail={`${activeTasks} 个正在等待或运行`} icon={Activity} tone="bg-[color-mix(in_srgb,var(--info-accent)_15%,var(--surface-elevated))] text-[var(--info-accent)]" />
+        <MetricCard label="成功率" value={`${successRate.toFixed(1)}%`} detail={`${metrics?.successful_tasks ?? 0} 成功 / ${metrics?.failed_tasks ?? 0} 失败`} icon={CheckCircle2} tone="bg-[color-mix(in_srgb,var(--success-accent)_15%,var(--surface-elevated))] text-[var(--success-accent)]" />
+        <MetricCard label="Token 审计" value={formatNumber(metrics?.total_tokens ?? 0)} detail={`${providerRows.length || 1} 个 provider 产生用量`} icon={Database} tone="bg-[color-mix(in_srgb,var(--brand-accent)_24%,var(--surface-elevated))] text-[var(--brand-accent-strong)]" />
+        <MetricCard label="成本估算" value={`$${formatUsd(metrics?.total_cost_usd)}`} detail={`${failureRate.toFixed(1)}% 失败任务占比`} icon={DollarSign} tone="bg-[color-mix(in_srgb,var(--warning-accent)_15%,var(--surface-elevated))] text-[var(--warning-accent)]" />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="xl:col-span-8 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-5 shadow-editorial-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-[var(--editorial-stroke)]/35 pb-3">
+        <div className="xl:col-span-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-panel)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dashed border-[var(--border-subtle)] pb-3">
             <div>
               <h3 className="text-sm font-black text-[var(--editorial-text)]">近 7 天用量趋势</h3>
               <p className="text-xs text-[var(--editorial-text-gray)]">按 UsageEvent 聚合 token、成本与调用次数</p>
             </div>
-            <span className="inline-flex h-7 items-center gap-2 border border-[var(--editorial-stroke)] px-2 text-xs font-black">
+            <span className="inline-flex h-7 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 text-xs font-black">
               <BarChart3 className="h-3.5 w-3.5" />
               {formatFullNumber(usageTrend.reduce((sum, item) => sum + item.total_tokens, 0))} tokens
             </span>
@@ -269,7 +272,7 @@ export function DashboardPage({
               <Sparkline trend={usageTrend} />
               <div className="mt-3 grid grid-cols-7 gap-2">
                 {usageTrend.map((item) => (
-                  <div key={item.date} className="min-w-0 border border-[var(--editorial-stroke)]/25 p-2 text-center">
+                  <div key={item.date} className="min-w-0 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)]/60 p-2 text-center">
                     <span className="block truncate text-[10px] font-black text-[var(--editorial-text-gray)]">{formatDateLabel(item.date)}</span>
                     <span className="mt-1 block truncate text-xs font-black">{formatNumber(item.total_tokens)}</span>
                     <span className="block truncate text-[10px] text-[var(--editorial-text-gray)]">${formatUsd(item.cost_usd)}</span>

@@ -26,8 +26,8 @@ interface ImagePanelProps {
 export function ImagePanel({
   workspaceScope,
   username,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   agentLogs,
   setAgentLogs,
   setLatestTask,
@@ -36,6 +36,8 @@ export function ImagePanel({
   onShare,
   onCopy,
 }: ImagePanelProps) {
+  void _loading;
+  void _setLoading;
   const [imageInput, setImageInput] = useState({
     prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
     aspectRatio: '1:1',
@@ -49,8 +51,10 @@ export function ImagePanel({
     revised_prompt: 'A refined product desktop scene with bright natural light, styled for Xiaohongshu lifestyle marketing, 1:1 aspect ratio',
   });
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const { submitQueuedGeneration } = useGenerationTask({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
     triggerToast,
@@ -59,20 +63,22 @@ export function ImagePanel({
     fetchDashboard,
   });
 
-  const handleGenerateImage = () => submitQueuedGeneration<ImageOutput>(
-    'image',
-    {
-      prompt: imageInput.prompt,
-      style_skill: imageInput.styleSkill,
-      aspect_ratio: imageInput.aspectRatio,
-    },
-    setImageOutput,
-    '[0.00s] [INFO] Initializing queued Editorial Sketch Image Agent Workflow...',
-    '视觉图片异步任务执行完毕'
-  );
+  const handleGenerateImage = () => {
+    return submitQueuedGeneration<ImageOutput>(
+      'image',
+      {
+        prompt: imageInput.prompt,
+        style_skill: imageInput.styleSkill,
+        aspect_ratio: imageInput.aspectRatio,
+      },
+      setImageOutput,
+      '[0.00s] [INFO] Initializing queued Editorial Sketch Image Agent Workflow...',
+      '视觉图片异步任务执行完毕'
+    );
+  };
 
   return (
-    <div className="generation-workspace">
+    <div className="generation-workspace generation-workspace--with-result">
       {/* Left Input Slate */}
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
@@ -131,13 +137,13 @@ export function ImagePanel({
 
         <button
           onClick={handleGenerateImage}
-          disabled={loading}
+          disabled={isRunning}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
-          {loading ? (
+          {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
           ) : null}
-          <span>{loading ? 'AGENT DESIGNING...' : '运行视觉设计 Agent'}</span>
+          <span>{isRunning ? 'AGENT DESIGNING...' : '运行视觉设计 Agent'}</span>
         </button>
         </div>
 
@@ -170,7 +176,7 @@ export function ImagePanel({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)] p-2 relative flex justify-center items-center overflow-hidden min-h-[220px]">
-              {loading ? (
+              {isRunning ? (
                 <div className="w-full h-full absolute inset-0 editorial-loader-bar flex flex-col items-center justify-center border-none">
                   <span className="font-mono text-[9px] font-black text-black bg-[var(--editorial-accent-yellow)] border border-black px-2 py-0.5 animate-pulse">
                     AIGC RENDERING ENGINE...

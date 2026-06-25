@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
-import { AssetGroup } from './AssetGroup';
+import { AssetCard } from './AssetCard';
 import { AssetPreviewModal } from './AssetPreviewModal';
 import { AssetFormDialog } from './AssetFormDialog';
 import { Pagination } from './Pagination';
 import { useAssets } from './useAssets';
-import { useAssetGroups } from './useAssetGroups';
 import type { AssetFilterState, AssetsLibraryProps } from './types';
 import type { AssetRecord } from '../../types/workspace';
 import './assets.css';
 
 const DEFAULT_FILTER: AssetFilterState = { type: 'all', search: '' };
 const PAGE_SIZE = 60;
+const EMPTY_ASSETS: AssetRecord[] = [];
 
 type DialogState =
   | { mode: 'closed' }
@@ -43,10 +43,25 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     return () => window.removeEventListener('mh:assets-updated', handler);
   }, [refresh]);
 
-  const items = data?.items ?? [];
+  const items = data?.items ?? EMPTY_ASSETS;
   const total = data?.total ?? 0;
-  const { groups } = useAssetGroups(items);
   const typeCounts = data?.type_counts;
+  const [timestamp, setTimestamp] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setTimestamp(Date.now());
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [items]);
+
+  const recentCount = useMemo(() => {
+    const sevenDaysAgo = timestamp - 1000 * 60 * 60 * 24 * 7;
+    return items.filter((asset) => {
+      const created = new Date(asset.created_at).getTime();
+      return Number.isFinite(created) && created >= sevenDaysAgo;
+    }).length;
+  }, [items, timestamp]);
 
   const handleFilterChange = (next: AssetFilterState) => {
     setFilter(next);
@@ -73,10 +88,25 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     <section className="assets-library">
       <header className="assets-library__header">
         <div>
+          <span className="assets-library__eyebrow">Brand asset wall</span>
           <h2 className="assets-library__title">资产库</h2>
           <p className="assets-library__subtitle">
-            共享资源库：文案、图片、音频、视频、智能体输出都集中在这里。
+            统一查看文案、图片、音频、视频和智能体沉淀；点击卡片即可进入沉浸预览。
           </p>
+        </div>
+        <div className="assets-library__stats" aria-label="资产统计">
+          <div>
+            <strong>{total}</strong>
+            <span>总资产</span>
+          </div>
+          <div>
+            <strong>{recentCount}</strong>
+            <span>近 7 天</span>
+          </div>
+          <div>
+            <strong>{typeCounts?.image ?? 0}</strong>
+            <span>图片</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -111,14 +141,15 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
 
       {items.length === 0 && !loading ? (
         <div className="assets-library__empty">
-          还没有资产。运行工作流或生成内容后，资产会自动沉淀到这里。
+          <strong>还没有可用资产</strong>
+          <span>运行工作流或生成内容后，文案、图片、音频、视频会自动沉淀到这里。</span>
         </div>
       ) : (
-        <div className="asset-groups">
-          {groups.map((group) => (
-            <AssetGroup
-              key={group.key}
-              group={group}
+        <div className="assets-library__grid assets-library__grid--wall">
+          {items.map((asset) => (
+            <AssetCard
+              key={asset.id}
+              asset={asset}
               onPreview={setPreviewAsset}
               onEdit={(a) => setDialog({ mode: 'edit', asset: a })}
               onDelete={handleDelete}

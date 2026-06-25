@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { Download, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, Copy, Download, ExternalLink, X } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
+import { assetTaskType, formatAssetPreviewText } from './assetContent';
 
 interface AssetPreviewModalProps {
   asset: AssetRecord;
@@ -23,8 +24,10 @@ const formatDate = (iso: string) => {
  */
 export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [copied, setCopied] = useState<'title' | 'url' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
+  const taskType = assetTaskType(asset);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -45,6 +48,16 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  };
+
+  const copy = async (text: string, field: 'title' | 'url') => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopied(field);
+      window.setTimeout(() => setCopied(null), 1400);
+    } catch {
+      setCopied(null);
+    }
   };
 
   return (
@@ -68,10 +81,24 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
             <span className="assets-preview__type" style={{ background: 'var(--asset-fg)', color: 'var(--asset-bg)' }}>
               {palette.formatLabel || asset.asset_type}
             </span>
-            <h3 className="assets-preview__title">{asset.title}</h3>
-            <span className="assets-preview__date">{formatDate(asset.created_at)}</span>
+            <div className="assets-preview__title-stack">
+              <h3 className="assets-preview__title">{asset.title}</h3>
+              <span className="assets-preview__date">{taskType} / {formatDate(asset.created_at)}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2">
+            {asset.source_url ? (
+              <a
+                href={asset.source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="assets-preview__download"
+                title="打开源文件"
+                aria-label="打开源文件"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            ) : null}
             <button
               type="button"
               onClick={download}
@@ -94,33 +121,67 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
           </div>
         </header>
 
-        <div className="assets-preview__body" style={{ background: 'var(--asset-bg)', color: 'var(--asset-fg)' }}>
-          {asset.asset_type === 'image' && asset.source_url ? (
-            <img src={asset.source_url} alt={asset.title} className="assets-preview__image" />
-          ) : null}
+        <div className="assets-preview__content">
+          <div className="assets-preview__body" style={{ background: 'var(--asset-bg)', color: 'var(--asset-fg)' }}>
+            {asset.asset_type === 'image' && asset.source_url ? (
+              <img src={asset.source_url} alt={asset.title} className="assets-preview__image" />
+            ) : null}
 
-          {asset.asset_type === 'audio' && asset.source_url ? (
-            <audio controls src={asset.source_url} className="assets-preview__audio">
-              <track kind="captions" />
-            </audio>
-          ) : null}
+            {asset.asset_type === 'audio' && asset.source_url ? (
+              <div className="assets-preview__player">
+                <Icon className="h-16 w-16" strokeWidth={1.2} />
+                <audio controls src={asset.source_url} className="assets-preview__audio">
+                  <track kind="captions" />
+                </audio>
+              </div>
+            ) : null}
 
-          {asset.asset_type === 'video' && asset.source_url ? (
-            <video controls src={asset.source_url} className="assets-preview__video">
-              <track kind="captions" />
-            </video>
-          ) : null}
+            {asset.asset_type === 'video' && asset.source_url ? (
+              <video controls src={asset.source_url} className="assets-preview__video">
+                <track kind="captions" />
+              </video>
+            ) : null}
 
-          {asset.asset_type === 'document' || (!asset.source_url && asset.asset_type !== 'image' && asset.asset_type !== 'audio' && asset.asset_type !== 'video') ? (
-            <div className="assets-preview__doc-placeholder">
-              <Icon className="h-16 w-16" strokeWidth={1.2} />
-              <pre className="assets-preview__text">{asset.title}</pre>
+            {asset.asset_type === 'document' || (!asset.source_url && asset.asset_type !== 'image' && asset.asset_type !== 'audio' && asset.asset_type !== 'video') ? (
+              <div className="assets-preview__doc-placeholder">
+                <Icon className="h-16 w-16" strokeWidth={1.2} />
+                <pre className="assets-preview__text">{formatAssetPreviewText(asset)}</pre>
+              </div>
+            ) : null}
+
+            {!asset.source_url && asset.asset_type !== 'document' ? (
+              <p className="assets-preview__empty">该资产没有可预览的源文件，但可以在右侧查看记录详情。</p>
+            ) : null}
+          </div>
+
+          <aside className="assets-preview__aside">
+            <div>
+              <span className="assets-preview__aside-label">标题</span>
+              <p className="assets-preview__aside-title">{asset.title}</p>
             </div>
-          ) : null}
-
-          {!asset.source_url && asset.asset_type !== 'document' ? (
-            <p className="assets-preview__empty">该资产没有可预览的源文件。</p>
-          ) : null}
+            <div className="assets-preview__detail-grid">
+              <div><span>类型</span><strong>{palette.formatLabel || asset.asset_type}</strong></div>
+              <div><span>来源</span><strong>{taskType}</strong></div>
+              <div><span>创建</span><strong>{formatDate(asset.created_at)}</strong></div>
+              <div><span>ID</span><strong>#{asset.id}</strong></div>
+            </div>
+            {asset.source_url ? (
+              <div>
+                <span className="assets-preview__aside-label">源文件</span>
+                <p className="assets-preview__url">{asset.source_url}</p>
+              </div>
+            ) : null}
+            <div className="assets-preview__quick-actions">
+              <button type="button" onClick={() => copy(asset.title, 'title')}>
+                {copied === 'title' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                复制标题
+              </button>
+              <button type="button" onClick={() => copy(asset.source_url, 'url')} disabled={!asset.source_url}>
+                {copied === 'url' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                复制链接
+              </button>
+            </div>
+          </aside>
         </div>
 
         {asset.tags.length > 0 ? (

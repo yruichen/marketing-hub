@@ -22,17 +22,30 @@ interface AssistantPanelProps {
  */
 export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
   const { open, setOpen, sessionId, setSessionId, pageContext } = useAssistant();
-  const sessions = useAssistantSessions();
-  const chat = useAssistantChat();
+  const {
+    sessions: sessionsList,
+    createSession,
+    deleteSession,
+    renameSession,
+    fetchMessages,
+  } = useAssistantSessions();
+  const {
+    messages,
+    sending,
+    error,
+    send,
+    loadHistory,
+    reset,
+  } = useAssistantChat();
 
   // Load history when the active session changes.
   useEffect(() => {
     let cancelled = false;
     if (sessionId !== null) {
       void (async () => {
-        const history = await sessions.fetchMessages(sessionId);
+        const history = await fetchMessages(sessionId);
         if (cancelled) return;
-        chat.loadHistory(
+        loadHistory(
           history
             .filter((m) => m.role === 'user' || m.role === 'assistant')
             .map((m) => ({
@@ -44,7 +57,7 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
         );
       })();
     } else {
-      chat.reset();
+      reset();
     }
     return () => {
       cancelled = true;
@@ -54,12 +67,12 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
     // would re-fire this effect (and any setState inside — loadHistory,
     // reset — would just re-trigger it). Depend on the stable
     // sub-callbacks and the actual session id instead.
-  }, [sessionId, chat.loadHistory, chat.reset, sessions.fetchMessages]);
+  }, [sessionId, fetchMessages, loadHistory, reset]);
 
   const onNewSession = useCallback(async () => {
-    const created = await sessions.createSession('新对话');
+    const created = await createSession('新对话');
     if (created) setSessionId(created.id);
-  }, [sessions, setSessionId]);
+  }, [createSession, setSessionId]);
 
   const onSelectSession = useCallback(
     (id: number) => setSessionId(id),
@@ -68,14 +81,14 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
 
   const onSend = useCallback(
     async (text: string) => {
-      await chat.send({
+      await send({
         text,
         sessionId,
         pageContext,
         onSessionId: (id) => setSessionId(id),
       });
     },
-    [chat.send, sessionId, pageContext, setSessionId],
+    [send, sessionId, pageContext, setSessionId],
   );
 
   return (
@@ -107,20 +120,20 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
         </div>
       </header>
 
-      {sessions.sessions.length > 0 ? (
+      {sessionsList.length > 0 ? (
         <div className="assistant-sessions">
-          {sessions.sessions.slice(0, 8).map((s) => (
+          {sessionsList.slice(0, 8).map((s) => (
             <SessionRow
               key={s.id}
               session={s}
               active={s.id === sessionId}
               onSelect={() => onSelectSession(s.id)}
               onDelete={() => {
-                void sessions.deleteSession(s.id);
+                void deleteSession(s.id);
                 if (s.id === sessionId) setSessionId(null);
               }}
               onRename={(title) => {
-                void sessions.renameSession(s.id, title);
+                void renameSession(s.id, title);
               }}
             />
           ))}
@@ -128,15 +141,15 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
       ) : null}
 
       <AssistantThread
-        messages={chat.messages}
-        sending={chat.sending}
+        messages={messages}
+        sending={sending}
         onNavigate={onNavigate}
       />
 
       <AssistantComposer
         onSend={onSend}
-        sending={chat.sending}
-        error={chat.error}
+        sending={sending}
+        error={error}
         disabled={!open}
       />
     </aside>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { RotateCcw, Trash2, X } from 'lucide-react';
-import { useReactFlow, useStore } from '@xyflow/react';
+import { useReactFlow } from '@xyflow/react';
 import type { WorkflowNode } from '../../types/workspace';
 import { nodeTypeLabels } from './constants';
 import { NodeConfigFields } from './NodeConfigFields';
@@ -46,7 +46,6 @@ export function NodeConfigPopover({
   onClose,
 }: NodeConfigPopoverProps) {
   const { getNode, flowToScreenPosition } = useReactFlow();
-  const [viewportX, viewportY, viewportZoom] = useStore((state) => state.transform);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const position = useMemo(() => {
@@ -61,7 +60,7 @@ export function NodeConfigPopover({
     const preferRight = right.x + PANEL_WIDTH <= window.innerWidth - 12;
     const base = preferRight ? right : leftSide.x > 12 ? leftSide : below;
     return clampPosition(base.x, base.y, panelMaxHeight());
-  }, [node, readOnly, getNode, flowToScreenPosition, viewportX, viewportY, viewportZoom]);
+  }, [node, readOnly, getNode, flowToScreenPosition]);
 
   if (!node || readOnly || !position) return null;
 
