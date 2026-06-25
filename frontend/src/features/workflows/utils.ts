@@ -113,3 +113,33 @@ export function schemasCompatible(source?: Record<string, string>, target?: Reco
   if (sourceTypes.has('Object') && targetTypes.has('Object')) return true;
   return [...sourceTypes].some((item) => targetTypes.has(item));
 }
+
+export function workflowExecutionOrder<T extends { id: string }>(
+  nodes: T[],
+  edges: Array<{ source: string; target: string }>,
+): T[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const inDegree = new Map(nodes.map((node) => [node.id, 0]));
+  const adj = new Map(nodes.map((node) => [node.id, [] as string[]]));
+  for (const edge of edges) {
+    if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
+    adj.get(edge.source)?.push(edge.target);
+    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+  }
+  const queue = nodes.filter((node) => (inDegree.get(node.id) || 0) === 0).map((node) => node.id);
+  const order: T[] = [];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const node = nodeById.get(id);
+    if (node) order.push(node);
+    for (const next of adj.get(id) || []) {
+      const degree = (inDegree.get(next) || 0) - 1;
+      inDegree.set(next, degree);
+      if (degree === 0) queue.push(next);
+    }
+  }
+  for (const node of nodes) {
+    if (!order.some((item) => item.id === node.id)) order.push(node);
+  }
+  return order;
+}

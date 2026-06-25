@@ -38,13 +38,13 @@ class ToolSpec:
                 ) from exc
             args = validated.model_dump()
         # Handlers may be sync or async. Wrap sync handlers so the agent
-        # loop can `await` uniformly. thread_sensitive=False lets tests
-        # run cleanly against in-memory SQLite (each thread gets its own
-        # connection); production with thread pools is unaffected.
+        # loop can `await` uniformly. Keep Django ORM work thread-sensitive:
+        # SQLite and transaction-wrapped tests can otherwise lock tables, and
+        # Django's connection handling is safer when ORM calls stay serialized.
         if inspect.iscoroutinefunction(self.handler):
             result = await self.handler(ctx, args)
         else:
-            result = await sync_to_async(self.handler, thread_sensitive=False)(ctx, args)
+            result = await sync_to_async(self.handler, thread_sensitive=True)(ctx, args)
         if not isinstance(result, dict):
             raise ToolValidationError(
                 f'Tool {self.name} must return a dict, got {type(result).__name__}'

@@ -1,23 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle2,
-  Clipboard,
-  ClipboardPaste,
-  Eye,
-  LayoutDashboard,
-  Lock,
-  PanelRightClose,
-  PanelRightOpen,
-  Play,
-  Plus,
-  Redo2,
-  Save,
-  Undo2,
-  X,
-} from 'lucide-react';
-import {
-  Background, BackgroundVariant, Controls, MarkerType, MiniMap,
-  ReactFlow, useReactFlow, addEdge,
+  useReactFlow, addEdge,
   useNodesState, useEdgesState,
   type Connection, type Edge,
 } from '@xyflow/react';
@@ -28,129 +11,29 @@ import type {
   WorkflowEdge, WorkflowNode, WorkspaceDraftRecord,
 } from '../types/workspace';
 import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, type NodeType } from '../features/workflows/constants';
-import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps } from '../features/workflows/types';
-import { schemasCompatible } from '../features/workflows/utils';
-import { WorkflowNodeComponent } from '../features/workflows/WorkflowNodeComponent';
-import { NodeConfigPopover } from '../features/workflows/NodeConfigPopover';
+import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps, type WorkflowSnapshot } from '../features/workflows/types';
+import { schemasCompatible, workflowExecutionOrder } from '../features/workflows/utils';
 import { PropertyPanel } from '../features/workflows/PropertyPanel';
-import { ContextMenu } from '../features/workflows/ContextMenu';
 import { CustomAgentDialog, type CustomAgentForm } from '../features/workflows/CustomAgentDialog';
 import { autoLayoutWorkflow, hasLayoutProblems } from '../features/workflows/layout';
+import { WorkflowBuilderCanvas } from '../features/workflows/WorkflowBuilderCanvas';
+import { WorkflowBuilderContextMenus } from '../features/workflows/WorkflowBuilderContextMenus';
+import {
+  WorkflowBuilderToolbar,
+  type SaveStatus,
+  type WorkflowLoadingState,
+} from '../features/workflows/WorkflowBuilderToolbar';
+import {
+  WorkflowConnectionHint,
+  WorkflowEmptyState,
+  WorkflowHandoffBanner,
+  WorkflowLoadingOverlay,
+} from '../features/workflows/WorkflowBuilderOverlays';
 
 import { wfToRF, rfToWF } from '../features/workflows/conversions';
 import type { FlowNode } from '../features/workflows/WorkflowNodeComponent';
 
 type RFNode = FlowNode;
-
-type WorkflowSnapshot = {
-  id: string;
-  label: string;
-  createdAt: string;
-  nodes: WorkflowNode[];
-  edges: WorkflowEdge[];
-  brandContext: BrandContext;
-  selectedNodeId: string;
-};
-
-const nodeTypes = { workflowNode: WorkflowNodeComponent };
-
-const defaultEdgeOpts = {
-  type: 'smoothstep' as const,
-  markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-  style: { stroke: '#64748b', strokeWidth: 2 },
-};
-
-type SaveStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'failed';
-
-const toolbarButtonClass = 'h-9 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-3 text-[9px] font-black inline-flex items-center justify-center gap-1.5 leading-none whitespace-nowrap hover:bg-[var(--editorial-unselected)] disabled:opacity-40 disabled:hover:bg-[var(--editorial-paper)]';
-const toolbarIconButtonClass = 'h-9 w-9 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] inline-flex items-center justify-center hover:bg-[var(--editorial-unselected)] disabled:opacity-40 disabled:hover:bg-[var(--editorial-paper)]';
-const toolbarPrimaryClass = 'h-9 min-w-[112px] border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] px-4 text-[10px] font-black uppercase inline-flex items-center justify-center gap-2 leading-none whitespace-nowrap hover:opacity-90 disabled:opacity-45';
-
-function workflowExecutionOrder(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const inDegree = new Map(nodes.map((node) => [node.id, 0]));
-  const adj = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  for (const edge of edges) {
-    if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) continue;
-    adj.get(edge.source)?.push(edge.target);
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
-  }
-  const queue = nodes.filter((node) => (inDegree.get(node.id) || 0) === 0).map((node) => node.id);
-  const order: WorkflowNode[] = [];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    const node = nodeById.get(id);
-    if (node) order.push(node);
-    for (const next of adj.get(id) || []) {
-      const degree = (inDegree.get(next) || 0) - 1;
-      inDegree.set(next, degree);
-      if (degree === 0) queue.push(next);
-    }
-  }
-  for (const node of nodes) {
-    if (!order.some((item) => item.id === node.id)) order.push(node);
-  }
-  return order;
-}
-
-function SaveStatusBadge({ status }: { status: SaveStatus }) {
-  const labels: Record<SaveStatus, string> = {
-    clean: '已保存',
-    dirty: '有未保存更改',
-    saving: '正在保存...',
-    saved: '已保存',
-    failed: '保存失败',
-  };
-  const tone =
-    status === 'failed'
-      ? 'text-rose-600'
-      : status === 'dirty'
-      ? 'text-amber-700'
-      : status === 'saving'
-      ? 'text-blue-600'
-      : 'text-emerald-700';
-
-  return (
-    <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase ${tone}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${status === 'failed' ? 'bg-rose-500' : status === 'dirty' ? 'bg-amber-500' : status === 'saving' ? 'bg-blue-500 animate-pulse' : 'bg-emerald-500'}`} />
-      {labels[status]}
-    </span>
-  );
-}
-
-function WorkflowHandoffBanner({
-  onRun,
-  onInspect,
-  onClose,
-}: {
-  onRun: () => void;
-  onInspect: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="absolute left-4 right-4 top-4 z-20 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-[10px] font-black uppercase tracking-wide text-[var(--editorial-text)]">
-          已根据你的灵感生成工作流草稿
-        </p>
-        <p className="text-[9px] text-[var(--editorial-text-gray)] mt-0.5">
-          可先检查节点配置，也可以直接运行。
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={onInspect} className="border border-[var(--editorial-stroke)] px-2.5 py-1.5 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">
-          检查第一个节点
-        </button>
-        <button type="button" onClick={onRun} className="btn-editorial-primary px-3 py-1.5 text-[9px] font-black uppercase">
-          运行工作流
-        </button>
-        <button type="button" onClick={onClose} className="border border-[var(--editorial-stroke)] p-1.5 hover:bg-[var(--editorial-unselected)]" title="关闭" aria-label="关闭提示">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // --- Main Component ---
 
@@ -169,7 +52,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [connectionSource, setConnectionSource] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [loadingState, setLoadingState] = useState<'idle' | 'saving' | 'running' | 'retrying' | 'loading'>('idle');
+  const [loadingState, setLoadingState] = useState<WorkflowLoadingState>('idle');
   const [lastTasks, setLastTasks] = useState<GenerationTaskRecord[]>([]);
   const [propertyPanelOpen, setPropertyPanelOpen] = useState(true);
   const [readOnly, setReadOnly] = useState(() => new URLSearchParams(window.location.search).get('share') === 'readonly');
@@ -738,80 +621,33 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   return (
     <div className="space-y-5 font-mono min-w-0">
       <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial overflow-hidden min-w-0">
-        {/* Toolbar Row 1: Project + Primary Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--editorial-stroke)]">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black uppercase truncate max-w-[260px]">{projectDetail?.name || project.name}</h3>
-              {readOnly && <span className="border border-[var(--editorial-stroke)] px-1.5 py-0.5 text-[8px] flex items-center gap-1"><Lock className="h-3 w-3" />只读</span>}
-              <SaveStatusBadge status={saveStatus} />
-            </div>
-            <span className="text-[9px] text-[var(--editorial-text-gray)]">{campaign?.name || 'Default Campaign'} / {draft?.status || 'draft'} / {selectedNodeIds.length} 个已选</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 max-w-full">
-            {primaryPresets.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button key={item.type} type="button" disabled={readOnly} onClick={() => addNode(item.type, item.label)} className={toolbarButtonClass}>
-                  <Icon className="h-3.5 w-3.5" />{item.label}
-                </button>
-              );
-            })}
-            <select
-              disabled={readOnly}
-              defaultValue=""
-              onChange={(e) => {
-                const item = presets.find((preset) => preset.type === e.target.value);
-                if (item) addNode(item.type, item.label);
-                e.currentTarget.value = '';
-              }}
-              className={`${toolbarButtonClass} appearance-none pr-7`}
-              aria-label="添加更多节点"
-            >
-              <option value="">+ 节点</option>
-              {secondaryPresets.map((item) => (
-                <option key={item.type} value={item.type}>{item.label}</option>
-              ))}
-            </select>
-            <button type="button" disabled={readOnly} onClick={() => setShowCustomAgent(true)} className={toolbarButtonClass}>
-              <Plus className="h-3.5 w-3.5" />新建智能体
-            </button>
-          </div>
-        </div>
-
-        {/* Toolbar Row 2: Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[var(--editorial-stroke)]/70 bg-[var(--editorial-bg)]">
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={undo} disabled={history.length === 0 || readOnly} className={toolbarIconButtonClass} title="撤销"><Undo2 className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={redo} disabled={future.length === 0 || readOnly} className={toolbarIconButtonClass} title="重做"><Redo2 className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={copySelection} disabled={selectedNodeIds.length === 0} className={toolbarIconButtonClass} title="复制"><Clipboard className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={pasteSelection} disabled={readOnly} className={toolbarIconButtonClass} title="粘贴"><ClipboardPaste className="h-3.5 w-3.5" /></button>
-            <button type="button" onClick={() => fitView({ padding: 0.18, duration: 180 })} className={toolbarIconButtonClass} title="适配视图"><CheckCircle2 className="h-3.5 w-3.5" /></button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'))} disabled={readOnly || saveStatus === 'saving'} className={toolbarButtonClass}>
-              <Save className="h-3.5 w-3.5" /> 保存
-            </button>
-            <button type="button" onClick={tidyLayout} disabled={readOnly || nodes.length === 0} className={toolbarButtonClass}>
-              <LayoutDashboard className="h-3.5 w-3.5" />整理布局
-            </button>
-            <button type="button" onClick={runWorkflow} disabled={loadingState !== 'idle' || readOnly} className={toolbarPrimaryClass}>
-              <Play className="h-4 w-4" />
-              {loadingState === 'running' ? '执行中…' : loadingState === 'retrying' ? '重试中…' : '运行工作流'}
-            </button>
-            <span className="h-9 inline-flex items-center gap-1.5 text-[9px] text-[var(--editorial-text-gray)] border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 leading-none">
-              <span className={`h-1.5 w-1.5 rounded-full ${draft?.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-              {draft?.status || 'draft'}
-            </span>
-            <button type="button" onClick={createReadOnlyShare} className={toolbarButtonClass}><Eye className="h-3.5 w-3.5" />只读分享</button>
-            {readOnly && (
-              <button type="button" onClick={() => setReadOnly(false)} className={toolbarButtonClass}>
-                退出只读
-              </button>
-            )}
-            <button type="button" onClick={() => setPropertyPanelOpen((v) => !v)} className={toolbarIconButtonClass} title="展开或收起右侧属性面板">{propertyPanelOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}</button>
-          </div>
-        </div>
+        <WorkflowBuilderToolbar
+          projectName={projectDetail?.name || project.name}
+          campaignName={campaign?.name || 'Default Campaign'}
+          draftStatus={draft?.status || 'draft'}
+          selectedCount={selectedNodeIds.length}
+          readOnly={readOnly}
+          saveStatus={saveStatus}
+          loadingState={loadingState}
+          propertyPanelOpen={propertyPanelOpen}
+          historyLength={history.length}
+          futureLength={future.length}
+          primaryPresets={primaryPresets}
+          secondaryPresets={secondaryPresets}
+          onAddNode={addNode}
+          onCreateCustomAgent={() => setShowCustomAgent(true)}
+          onUndo={undo}
+          onRedo={redo}
+          onCopySelection={copySelection}
+          onPasteSelection={pasteSelection}
+          onFitView={() => fitView({ padding: 0.18, duration: 180 })}
+          onSave={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'))}
+          onTidyLayout={tidyLayout}
+          onRunWorkflow={runWorkflow}
+          onCreateReadOnlyShare={createReadOnlyShare}
+          onExitReadOnly={() => setReadOnly(false)}
+          onTogglePropertyPanel={() => setPropertyPanelOpen((value) => !value)}
+        />
 
         {/* Canvas + Sidebar */}
         <div className={`grid grid-cols-1 ${propertyPanelOpen ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''} min-w-0`}>
@@ -827,86 +663,38 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
                 onClose={() => setShowHandoffBanner(false)}
               />
             )}
-            {connectionSource && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-3 py-1.5 text-[10px] font-black shadow-editorial-sm">
-                点击目标节点完成连接 · ESC 取消
-              </div>
-            )}
-            {loadingState === 'loading' && (
-              <div className="absolute inset-0 z-10 bg-[var(--editorial-bg)]/78 backdrop-blur-[1px] p-8">
-                <div className="grid grid-cols-3 gap-8 max-w-4xl">
-                  {[0, 1, 2].map((item) => (
-                    <div key={item} className="h-44 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial-sm opacity-70">
-                      <div className="h-8 border-b border-[var(--editorial-stroke)]/40 bg-[var(--editorial-unselected)]" />
-                      <div className="m-4 h-3 w-24 bg-[var(--editorial-unselected)]" />
-                      <div className="mx-4 mt-3 h-16 border border-dashed border-[var(--editorial-stroke)]/40" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {connectionSource && <WorkflowConnectionHint />}
+            {loadingState === 'loading' && <WorkflowLoadingOverlay />}
             {loadingState !== 'loading' && nodes.length === 0 && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                <div className="pointer-events-auto border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] shadow-editorial p-5 max-w-sm">
-                  <h4 className="text-xs font-black uppercase">还没有工作流节点</h4>
-                  <p className="mt-2 text-[10px] text-[var(--editorial-text-gray)]">从常用节点开始搭建当前项目的内容生产流程。</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => addNode('copy', '文案节点')} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">添加文案节点</button>
-                    <button type="button" onClick={() => addNode('image_prompt', '图片提示词')} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">添加图像节点</button>
-                  </div>
-                </div>
-              </div>
+              <WorkflowEmptyState
+                onAddCopy={() => addNode('copy', '文案节点')}
+                onAddImagePrompt={() => addNode('image_prompt', '图片提示词')}
+              />
             )}
-            <ReactFlow
+            <WorkflowBuilderCanvas
               nodes={rfNodesWithMeta}
               edges={renderedEdges}
-              nodeTypes={nodeTypes}
+              readOnly={readOnly}
+              selectedNode={selectedNode}
+              feedback={feedback}
+              loadingState={loadingState}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}
               isValidConnection={isValidConnection}
               onSelectionChange={handleSelectionChange}
-              onNodeClick={(_, node) => { setContextMenu(null); if (connectionSource && connectionSource !== node.id) connectToNode(node.id); else selectNode(node.id); }}
+              onNodeClick={(nodeId) => { setContextMenu(null); if (connectionSource && connectionSource !== nodeId) connectToNode(nodeId); else selectNode(nodeId); }}
               onPaneClick={() => { setContextMenu(null); setEdgeContextMenu(null); clearNodeSelection(); }}
-              onEdgeContextMenu={(_, edge) => {
-                _.preventDefault();
-                setEdgeContextMenu({ edgeId: edge.id, x: _.clientX, y: _.clientY });
-              }}
+              onEdgeContextMenu={(edgeId, x, y) => setEdgeContextMenu({ edgeId, x, y })}
               onNodeDragStart={() => { if (!readOnly) dragSnapshotRef.current = makeSnapshot('拖拽节点'); }}
               onNodeDragStop={() => { if (dragSnapshotRef.current) { pushSnapshot(dragSnapshotRef.current); dragSnapshotRef.current = null; } }}
-              defaultEdgeOptions={defaultEdgeOpts}
-              connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
-              fitView
-              fitViewOptions={{ padding: 0.18 }}
-              minZoom={0.2}
-              maxZoom={1.6}
-              nodesDraggable={!readOnly}
-              nodesConnectable={!readOnly}
-              elementsSelectable
-              selectionOnDrag
-              selectNodesOnDrag={false}
-              snapToGrid
-              snapGrid={[16, 16]}
-              deleteKeyCode={['Backspace', 'Delete']}
-              multiSelectionKeyCode={['Meta', 'Shift']}
-              className="editorial-grid min-w-0"
-            >
-              <Background color="var(--editorial-dot-color)" gap={16} size={1.2} variant={BackgroundVariant.Dots} />
-              <MiniMap pannable zoomable nodeStrokeColor="var(--editorial-stroke)" nodeColor="var(--editorial-paper)" />
-              <Controls showInteractive={false} />
-              <NodeConfigPopover
-                node={selectedNode}
-                readOnly={readOnly}
-                feedback={feedback}
-                loadingState={loadingState}
-                onUpdateNode={updateNode}
-                onUpdateConfig={updateSelectedConfig}
-                onSetFeedback={setFeedback}
-                onRetryNode={retryNode}
-                onRemoveNode={removeSelectedNode}
-                onClose={clearNodeSelection}
-              />
-            </ReactFlow>
+              onUpdateNode={updateNode}
+              onUpdateConfig={updateSelectedConfig}
+              onSetFeedback={setFeedback}
+              onRetryNode={retryNode}
+              onRemoveNode={removeSelectedNode}
+              onCloseNode={clearNodeSelection}
+            />
           </div>
           {propertyPanelOpen && (
             <PropertyPanel
@@ -924,12 +712,14 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
         </div>
       </section>
 
-      {contextMenu && (
-        <ContextMenu
-          nodeId={contextMenu.nodeId} x={contextMenu.x} y={contextMenu.y}
-          nodes={nodes} edges={edges} readOnly={readOnly}
-          onStartConnect={(id) => { setConnectionSource(id); setContextMenu(null); }}
-          onDuplicate={(id) => {
+      <WorkflowBuilderContextMenus
+        contextMenu={contextMenu}
+        edgeContextMenu={edgeContextMenu}
+        nodes={nodes}
+        edges={edges}
+        readOnly={readOnly}
+        onStartConnect={(id) => { setConnectionSource(id); setContextMenu(null); }}
+        onDuplicateNode={(id) => {
             const src = nodes.find((n) => n.id === id);
             if (!src) return;
             idCounterRef.current += 1;
@@ -939,42 +729,25 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
             const nn: WorkflowNode = { ...src, id: newId, label: `${src.label} (副本)`, x: src.x + 40, y: src.y + 40, config: { ...src.config }, output: {}, status: 'idle' };
             setRfNodes((prev) => [...prev, wfToRF(nn)]);
             setSelectedNodeId(newId);
-          }}
-          onConfigure={(id) => { selectNode(id); setPropertyPanelOpen(true); }}
-          onDelete={(id) => {
+        }}
+        onConfigureNode={(id) => { selectNode(id); setPropertyPanelOpen(true); }}
+        onDeleteNode={(id) => {
             if (readOnly) return;
             markHistory('删除节点');
             setRfNodes((prev) => prev.filter((n) => n.id !== id));
             setRfEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
             if (selectedNodeId === id) { setSelectedNodeId(''); setSelectedNodeIds([]); }
-          }}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
-
-      {/* Edge context menu */}
-      {edgeContextMenu && (
-        <div
-          className="fixed z-50 bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] shadow-editorial-sm py-1 min-w-[140px]"
-          style={{ left: edgeContextMenu.x, top: edgeContextMenu.y }}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <button
-            type="button"
-            className="w-full px-3 py-2 text-left text-[10px] font-bold text-red-600 hover:bg-red-50 flex items-center gap-2"
-            onClick={() => {
-              if (!readOnly) {
-                markHistory('删除连线');
-                markDirty();
-                setRfEdges((prev) => prev.filter((e) => e.id !== edgeContextMenu.edgeId));
-              }
-              setEdgeContextMenu(null);
-            }}
-          >
-            删除连线
-          </button>
-        </div>
-      )}
+        }}
+        onDeleteEdge={(edgeId) => {
+          if (!readOnly) {
+            markHistory('删除连线');
+            markDirty();
+            setRfEdges((prev) => prev.filter((e) => e.id !== edgeId));
+          }
+        }}
+        onCloseContextMenu={() => setContextMenu(null)}
+        onCloseEdgeContextMenu={() => setEdgeContextMenu(null)}
+      />
 
       {showCustomAgent && (
         <CustomAgentDialog

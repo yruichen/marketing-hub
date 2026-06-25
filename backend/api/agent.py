@@ -2,12 +2,17 @@
 DEPRECATED: Legacy direct LLM agent. Production code uses ai_gateway.services.AIModelGateway.
 Kept for reference only — do not import in new code.
 """
+import os
 import time
 import json
 import random
 import urllib.request
 import urllib.error
+from django.conf import settings
 from api.models import AIConfiguration
+
+if not settings.DEBUG and os.getenv('MARKETING_HUB_ENABLE_LEGACY_AGENT', 'false').lower() != 'true':
+    raise ImportError('api.agent is deprecated and disabled when DJANGO_DEBUG=False. Use ai_gateway.services.AIModelGateway.')
 
 class AgentLogger:
     """Accumulates step-by-step execution logs to display in the frontend agent console."""

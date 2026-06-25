@@ -7,7 +7,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Protocol
 
-from django.db import close_old_connections
+from asgiref.sync import sync_to_async
+from django.db import OperationalError, close_old_connections
 
 from api.audit import record_audit_log
 
@@ -539,7 +540,7 @@ class AssistantAgent:
                 yield AssistantStep(type='error', error=str(exc))
                 return
 
-            self._audit_step(ctx, {'usage': last_usage}, step_idx, last_usage)
+            await self._audit_step(ctx, {'usage': last_usage}, step_idx, last_usage)
 
             if not tool_calls:
                 yield AssistantStep(type='done', usage=last_usage)
@@ -569,6 +570,12 @@ class AssistantAgent:
                     result = await spec.invoke(ctx, parsed_args)
                 except KeyError:
                     result = {'error': f'unknown tool: {fn_name}'}
+                except OperationalError as exc:
+                    if 'database table is locked' in str(exc) or 'database is locked' in str(exc):
+                        logger.warning('Tool %s skipped because the database is locked.', fn_name)
+                    else:
+                        logger.exception('Tool %s failed', fn_name)
+                    result = {'error': str(exc)}
                 except Exception as exc:
                     logger.exception('Tool %s failed', fn_name)
                     result = {'error': str(exc)}
@@ -601,7 +608,7 @@ class AssistantAgent:
         text = msg.get('content') or ''
         return text, list(msg.get('tool_calls') or [])
 
-    def _audit_step(
+    async def _audit_step(
         self,
         ctx: ToolContext,
         response: dict[str, Any],
@@ -612,7 +619,7 @@ class AssistantAgent:
         # not pass an AnonymousUser as the actor — the FK rejects it.
         actor = ctx.user if (ctx.user is not None and getattr(ctx.user, 'is_authenticated', False)) else None
         try:
-            record_audit_log(
+            await sync_to_async(record_audit_log, thread_sensitive=True)(
                 action='assistant_step',
                 actor=actor,
                 organization=ctx.organization,
@@ -623,6 +630,11 @@ class AssistantAgent:
                     'usage': usage,
                 },
             )
+        except OperationalError as exc:
+            if 'database table is locked' in str(exc) or 'database is locked' in str(exc):
+                logger.warning('Skipped assistant audit step because the database is locked.')
+                return
+            logger.exception('Failed to audit assistant step')
         except Exception:
             logger.exception('Failed to audit assistant step')
 
