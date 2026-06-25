@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Check, Copy, Download, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, FileText, Pencil, Play, Trash2 } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
-import { getAssetPalette, detectDocFormat } from './assetVisuals';
+import { getAssetPalette } from './assetVisuals';
+import { assetTaskType, getAssetSummary } from './assetContent';
 
 interface AssetCardProps {
   asset: AssetRecord;
@@ -20,6 +21,9 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
   const [copiedField, setCopiedField] = useState<'url' | 'title' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
+  const taskType = assetTaskType(asset);
+  const summary = getAssetSummary(asset);
+  const dateLabel = formatAssetDate(asset.created_at);
 
   const copy = async (text: string, field: 'url' | 'title') => {
     try {
@@ -59,48 +63,61 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
 
   return (
     <article
-      className="asset-card"
+      className={`asset-card asset-card--${asset.asset_type}`}
       style={{
         ['--asset-bg' as string]: `var(${palette.cssVar}-bg, ${palette.fallbackBg})`,
         ['--asset-fg' as string]: `var(${palette.cssVar}-fg, ${palette.fallbackFg})`,
       }}
     >
-      <div
-        className="asset-card__media"
-        onClick={() => onPreview(asset)}
-        role="button"
-        tabIndex={0}
-        style={{ background: 'var(--asset-bg)', color: 'var(--asset-fg)' }}
-      >
-        {asset.asset_type === 'image' && asset.source_url ? (
-          <img src={asset.source_url} alt={asset.title} loading="lazy" />
-        ) : (
-          <div className="asset-card__placeholder">
-            <Icon className="h-12 w-12" strokeWidth={1.4} />
-            <span className="asset-card__placeholder-label">
-              {palette.formatLabel || asset.asset_type}
-            </span>
-            {asset.source_url ? (
-              <span className="asset-card__placeholder-url">{truncateUrl(asset.source_url)}</span>
-            ) : (
-              <span className="asset-card__placeholder-url">
-                {asset.asset_type === 'document'
-                  ? detectDocFormat(asset.source_url)
-                    ? `.${detectDocFormat(asset.source_url)}`
-                    : '（无 URL）'
-                  : '（无 URL）'}
-              </span>
-            )}
+      <button type="button" className="asset-card__open-zone" onClick={() => onPreview(asset)}>
+        <div
+          className="asset-card__media"
+          style={{ background: 'var(--asset-bg)', color: 'var(--asset-fg)' }}
+        >
+          {asset.asset_type === 'image' && asset.source_url ? (
+            <img src={asset.source_url} alt={asset.title} loading="lazy" />
+          ) : asset.asset_type === 'audio' ? (
+            <div className="asset-card__audio-preview">
+              <Icon className="h-9 w-9" strokeWidth={1.4} />
+              <div className="asset-card__wave" aria-hidden="true">
+                {Array.from({ length: 18 }).map((_, idx) => (
+                  <span key={idx} style={{ height: `${18 + ((idx * 11) % 42)}%` }} />
+                ))}
+              </div>
+            </div>
+          ) : asset.asset_type === 'video' ? (
+            <div className="asset-card__video-preview">
+              <div className="asset-card__play">
+                <Play className="h-5 w-5" fill="currentColor" />
+              </div>
+              <Icon className="h-12 w-12" strokeWidth={1.2} />
+            </div>
+          ) : (
+            <div className="asset-card__document-preview">
+              <FileText className="h-8 w-8" strokeWidth={1.4} />
+              <p>{summary}</p>
+            </div>
+          )}
+
+          <span className="asset-card__type">
+            {palette.formatLabel || asset.asset_type}
+          </span>
+          <span className="asset-card__open-hint">
+            打开预览 <ExternalLink className="h-3 w-3" />
+          </span>
+        </div>
+
+        <div className="asset-card__body">
+          <div className="asset-card__meta-row">
+            <span>{taskType}</span>
+            <span>{dateLabel}</span>
           </div>
-        )}
+          <h4 className="asset-card__title" title={asset.title}>{asset.title}</h4>
+          <p className="asset-card__summary">{summary}</p>
+        </div>
+      </button>
 
-        <span className="asset-card__type">
-          {palette.formatLabel || asset.asset_type}
-        </span>
-      </div>
-
-      <div className="asset-card__body">
-        <h4 className="asset-card__title" title={asset.title}>{asset.title}</h4>
+      <div className="asset-card__footer">
         {asset.tags.length > 0 ? (
           <div className="asset-card__tags">
             {asset.tags.slice(0, 3).map((t) => (
@@ -109,12 +126,7 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
             {asset.tags.length > 3 ? <span className="asset-card__tag">+{asset.tags.length - 3}</span> : null}
           </div>
         ) : null}
-      </div>
-
-      <div className="asset-card__actions">
-        <button type="button" onClick={() => onPreview(asset)} title="预览" aria-label="预览">
-          <Eye className="h-3.5 w-3.5" />
-        </button>
+        <div className="asset-card__actions">
         {onEdit ? (
           <button type="button" onClick={() => onEdit(asset)} title="编辑" aria-label="编辑">
             <Pencil className="h-3.5 w-3.5" />
@@ -125,17 +137,9 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
           onClick={() => copy(asset.source_url || asset.title, 'url')}
           title="复制链接"
           aria-label="复制链接"
-          disabled={!asset.source_url && asset.asset_type === 'document'}
+          disabled={!asset.source_url}
         >
           {copiedField === 'url' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          type="button"
-          onClick={() => copy(asset.title, 'title')}
-          title="复制标题"
-          aria-label="复制标题"
-        >
-          {copiedField === 'title' ? <Check className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
         </button>
         <button
           type="button"
@@ -159,12 +163,14 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         ) : null}
+        </div>
       </div>
     </article>
   );
 }
 
-function truncateUrl(url: string, max = 36): string {
-  if (url.length <= max) return url;
-  return url.slice(0, max - 3) + '...';
+function formatAssetDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }

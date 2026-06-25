@@ -15,7 +15,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { apiFetch } from './hooks/useApi';
-import { sectionFromPath } from './app/routes';
+import { pathForSection, sectionFromPath } from './app/routes';
 import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
@@ -136,10 +136,11 @@ export default function App() {
 
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
+    navigate(pathForSection(tab));
     if (typeof window !== 'undefined' && window.innerWidth < 1280) {
       setSidebarCollapsed(true);
     }
-  }, [setActiveSection]);
+  }, [navigate, setActiveSection]);
 
   const triggerToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setFeedbackMsg({ text, type });
@@ -353,11 +354,11 @@ export default function App() {
   const isFullHeightTab = FULL_HEIGHT_WORKSPACE_TABS.includes(activeTab);
 
   return (
-    <div className={`h-screen bg-[var(--editorial-bg)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[220px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
+    <div className={`h-screen bg-[var(--surface-canvas)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[236px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
 
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
-        <div className={`fixed top-6 right-6 z-50 px-5 py-4 border-1.5 border-[var(--editorial-stroke)] shadow-editorial bg-[var(--editorial-paper)] animate-in slide-in-from-top duration-200 font-mono text-xs font-semibold toast-${feedbackMsg.type}`}>
+        <div className={`fixed top-6 right-6 z-50 rounded-xl px-5 py-4 border border-[var(--border-default)] shadow-[var(--shadow-panel)] bg-[var(--surface-elevated)] animate-in slide-in-from-top duration-200 font-mono text-xs font-semibold toast-${feedbackMsg.type}`}>
           <span>{feedbackMsg.text}</span>
         </div>
       )}
@@ -397,16 +398,16 @@ export default function App() {
       )}
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-4 pt-3 md:pt-4 pb-3'}`}>
+      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
-          <header className="shrink-0 mb-3 border-b border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]">
+          <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 px-3 py-3 shadow-[var(--shadow-panel)] backdrop-blur">
             <div className="flex min-w-0 items-center gap-2 pb-2">
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
-                className="h-8 w-8 shrink-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] inline-flex items-center justify-center hover:bg-[var(--editorial-unselected)]"
+                className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
                 title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
                 aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
               >
@@ -428,12 +429,12 @@ export default function App() {
                   <input
                     value={globalSearch}
                     onChange={(event) => setGlobalSearch(event.target.value)}
-                    className="h-8 w-full bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] pl-8 pr-2 text-[10px] focus:outline-none"
+                    className="h-8 w-full rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-default)] pl-8 pr-2 text-[10px] focus:outline-none focus:border-[var(--brand-accent-strong)]"
                     placeholder="搜索项目、brief、资产…"
                     aria-label="全局搜索"
                   />
                 </label>
-                <button type="button" onClick={() => setShowOnboarding(true)} className="h-8 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] inline-flex items-center gap-1 whitespace-nowrap" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
+                <button type="button" onClick={() => setShowOnboarding(true)} className="h-8 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] px-2 text-[10px] font-black hover:bg-[var(--surface-hover)] inline-flex items-center gap-1 whitespace-nowrap" title="重新打开首次使用引导" aria-label="重新打开首次使用引导">
                   <BookOpen className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">引导</span>
                 </button>
@@ -441,7 +442,7 @@ export default function App() {
                   type="button"
                   onClick={() => setRightPanelOpen(!rightPanelOpen)}
                   disabled={activeTab === 'builder'}
-                  className={`h-8 w-8 border border-[var(--editorial-stroke)] inline-flex items-center justify-center hover:bg-[var(--editorial-unselected)] disabled:opacity-40 disabled:hover:bg-[var(--editorial-paper)] ${rightPanelOpen && activeTab !== 'builder' ? 'bg-[var(--editorial-stroke)] text-[var(--editorial-bg)]' : 'bg-[var(--editorial-paper)]'}`}
+                  className={`h-8 w-8 rounded-lg border border-[var(--border-default)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:hover:bg-[var(--surface-panel)] ${rightPanelOpen && activeTab !== 'builder' ? 'bg-[var(--brand-accent)] text-black' : 'bg-[var(--surface-elevated)]'}`}
                   title={activeTab === 'builder' ? '工作流页使用内置右侧面板' : '显示或隐藏右侧上下文'}
                   aria-label={activeTab === 'builder' ? '工作流页使用内置右侧面板' : '显示或隐藏右侧上下文'}
                 >
@@ -451,15 +452,15 @@ export default function App() {
             </div>
             <div className="flex min-w-0 items-center justify-between gap-3 pb-2 text-[9px] font-bold font-mono">
               <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pr-2">
-                <span className="h-6 shrink-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 flex items-center gap-1">
+                <span className="h-6 shrink-0 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 flex items-center gap-1">
                   <BriefcaseBusiness className="h-3 w-3" />
                   {workspaceScope?.organization.name || 'Marketing Hub'}
                 </span>
                 <span className="shrink-0 text-[var(--editorial-text-gray)]">/</span>
-                <span className="h-6 max-w-[220px] shrink-0 truncate border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 inline-flex items-center">
+                <span className="h-6 max-w-[220px] shrink-0 truncate rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 inline-flex items-center">
                   {workspaceScope?.project.name || 'Core Launch'}
                 </span>
-                <span className="h-6 max-w-[200px] shrink-0 truncate border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-1.5 inline-flex items-center">
+                <span className="h-6 max-w-[200px] shrink-0 truncate rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 inline-flex items-center">
                   {workspaceScope?.campaign.name || 'Product Launch'}
                 </span>
               </div>

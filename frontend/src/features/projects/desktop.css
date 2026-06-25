@@ -22,8 +22,8 @@
 
 /* 左侧 sidebar */
 .desktop-sidebar {
-  border-right: 1.5px solid var(--editorial-stroke);
-  background: var(--editorial-desk);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-sidebar);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -78,7 +78,10 @@
   background: transparent;
   width: 100%;
   text-align: left;
-  transition: background 0.1s ease, color 0.1s ease;
+  border-radius: 10px;
+  margin: 1px 8px;
+  width: calc(100% - 16px);
+  transition: background 0.12s ease, color 0.12s ease;
   height: 32px;
   white-space: nowrap;
 }
@@ -90,12 +93,12 @@
 }
 
 .desktop-sidebar__item:hover {
-  background: var(--editorial-unselected);
+  background: var(--surface-hover);
 }
 
 .desktop-sidebar__item--active {
-  background: var(--editorial-stroke);
-  color: var(--editorial-bg);
+  background: var(--surface-active);
+  color: var(--editorial-text);
 }
 
 .desktop-sidebar__item--active::before {
@@ -106,7 +109,8 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--editorial-accent-yellow);
+  background: var(--brand-accent-strong);
+  border-radius: 999px;
 }
 
 .desktop-sidebar__item--drop-target {
@@ -127,7 +131,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--editorial-bg);
+  background: var(--surface-canvas);
   /* macOS 桌面点阵 + 浅纸纹理 */
   background-image:
     radial-gradient(var(--editorial-dot-color) 1px, transparent 1px);
@@ -139,8 +143,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--editorial-stroke);
-  background: var(--editorial-paper);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
   flex-shrink: 0;
   min-width: 0;
   overflow-x: auto;
@@ -153,7 +157,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--editorial-stroke);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-elevated);
   padding: 4px 10px;
   max-width: 280px;
   min-width: 220px;
@@ -169,8 +175,9 @@
 }
 
 .desktop-toolbar__select {
-  border: 1px solid var(--editorial-stroke);
-  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--surface-elevated);
   padding: 4px 8px;
   font-size: 10px;
   font-family: inherit;
@@ -178,12 +185,13 @@
 }
 
 .desktop-toolbar__btn {
-  border: 1px solid var(--editorial-stroke);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
   padding: 5px 10px;
   min-height: 30px;
   font-size: 10px;
   font-weight: 800;
-  background: var(--editorial-paper);
+  background: var(--surface-elevated);
   color: var(--editorial-text);
   cursor: pointer;
   display: inline-flex;
@@ -196,12 +204,13 @@
 }
 
 .desktop-toolbar__btn:hover {
-  background: var(--editorial-unselected);
+  background: var(--surface-hover);
 }
 
 .desktop-toolbar__btn--primary {
-  background: var(--editorial-stroke);
-  color: var(--editorial-bg);
+  background: var(--brand-accent);
+  color: #0f120e;
+  border-color: color-mix(in srgb, var(--brand-accent-strong) 55%, var(--border-default));
 }
 
 .desktop-toolbar__btn--primary:hover {
@@ -210,15 +219,15 @@
 }
 
 .desktop-toolbar__btn--active {
-  background: var(--editorial-stroke);
-  color: var(--editorial-bg);
+  background: var(--surface-active);
+  color: var(--editorial-text);
 }
 
 .desktop-toolbar__divider {
   flex: 0 0 auto;
   width: 1px;
   height: 20px;
-  background: var(--editorial-stroke);
+  background: var(--border-default);
   opacity: 0.3;
 }
 
@@ -228,11 +237,12 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid var(--editorial-stroke);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
   padding: 4px 8px 4px 8px;
   font-size: 10px;
   font-family: inherit;
-  background: var(--editorial-paper);
+  background: var(--surface-elevated);
   color: var(--editorial-text);
   height: 28px;
   flex: 0 0 auto;
@@ -241,12 +251,12 @@
 }
 
 .desktop-toolbar__labeled-select:hover {
-  background: var(--editorial-unselected);
+  background: var(--surface-hover);
 }
 
 .desktop-toolbar__labeled-select--active {
-  border-color: var(--editorial-accent-blue);
-  background: rgba(37, 99, 235, 0.08);
+  border-color: var(--info-accent);
+  background: color-mix(in srgb, var(--info-accent) 12%, var(--surface-elevated));
 }
 
 .desktop-toolbar__labeled-select__label {
@@ -299,7 +309,9 @@
 }
 
 .desktop-icons__empty {
-  border: 1.5px dashed var(--editorial-stroke);
+  border: 1.5px dashed var(--border-default);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-panel) 62%, transparent);
   padding: 40px 20px;
   text-align: center;
   font-size: 11px;
@@ -315,19 +327,20 @@
   padding: 10px 6px;
   cursor: pointer;
   user-select: none;
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
+  border-radius: 16px;
   background: transparent;
   transition: all 0.1s ease;
   position: relative;
 }
 
 .desktop-icon:hover {
-  background: rgba(254, 240, 138, 0.18);
+  background: var(--surface-hover);
 }
 
 .desktop-icon--selected {
-  background: rgba(37, 99, 235, 0.12);
-  border-color: var(--editorial-accent-blue);
+  background: color-mix(in srgb, var(--info-accent) 12%, var(--surface-elevated));
+  border-color: var(--info-accent);
 }
 
 .desktop-icon--drop-target {
@@ -340,8 +353,9 @@
   right: 4px;
   width: 14px;
   height: 14px;
-  background: var(--editorial-accent-blue);
-  color: white;
+  border-radius: 999px;
+  background: var(--info-accent);
+  color: #fff;
   font-size: 9px;
   display: flex;
   align-items: center;
@@ -356,7 +370,45 @@
   align-items: center;
   justify-content: center;
   color: var(--editorial-text);
-  filter: drop-shadow(2px 2px 0 var(--editorial-stroke));
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.12));
+}
+
+.desktop-shell [class*='border-[var(--editorial-stroke)]'] {
+  border-color: var(--border-subtle);
+}
+
+.desktop-shell [class*='bg-[var(--editorial-paper)]'] {
+  background-color: var(--surface-panel);
+}
+
+.desktop-shell [class*='bg-[var(--editorial-bg)]'] {
+  background-color: var(--surface-canvas);
+}
+
+.desktop-shell button,
+.desktop-shell input,
+.desktop-shell textarea,
+.desktop-shell select {
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.desktop-shell input,
+.desktop-shell textarea,
+.desktop-shell select {
+  color: var(--editorial-text);
+}
+
+.desktop-shell button:focus-visible,
+.desktop-shell input:focus-visible,
+.desktop-shell textarea:focus-visible,
+.desktop-shell select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-accent) 56%, transparent);
+  outline-offset: 2px;
+}
+
+.desktop-shell .shadow-editorial,
+.desktop-shell .shadow-editorial-sm {
+  box-shadow: var(--shadow-panel);
 }
 
 .desktop-icon__name {

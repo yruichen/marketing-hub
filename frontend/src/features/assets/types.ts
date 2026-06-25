@@ -3,10 +3,10 @@ import type { AssetRecord, AssetType } from '../../types/workspace';
 export type { AssetRecord, AssetType } from '../../types/workspace';
 
 export const ASSET_TYPE_LABELS: Record<AssetType, string> = {
-  image: '图片',
+  image: '图片素材',
   audio: '音频',
   video: '视频',
-  document: '文档',
+  document: '文案/文档',
 };
 
 /**

@@ -31,8 +31,8 @@ export function ContentPackagePanel({
   workspaceScope,
   username,
   storyboardDuration,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   setAgentLogs,
   triggerToast,
   setActiveTab,
@@ -42,6 +42,7 @@ export function ContentPackagePanel({
   const [contentBrief, setContentBrief] = useState(onboarding.brief);
   const [contentPackage, setContentPackage] = useState<ContentPackage>(defaultContentPackage);
   const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>(defaultContentPackage.version);
+  const [isRunning, setIsRunning] = useState(false);
 
   const handleApplied = useCallback((pkg: ContentPackage) => {
     setContentPackage(pkg);
@@ -50,7 +51,7 @@ export function ContentPackagePanel({
   }, [onApplyContentPackage]);
 
   const { generate, rewrite } = useContentPackageActions({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     triggerToast,
     onApplied: handleApplied,
@@ -65,9 +66,13 @@ export function ContentPackagePanel({
     storyboardDuration,
   }), [onboarding, contentBrief, copyInput, workspaceScope, username, storyboardDuration]);
 
-  const generateContentPackage = () => generate(requestPayload);
+  const generateContentPackage = () => {
+    return generate(requestPayload);
+  };
 
-  const rewriteContentPackage = (mode: string) => rewrite(requestPayload, mode);
+  const rewriteContentPackage = (mode: string) => {
+    return rewrite(requestPayload, mode);
+  };
 
   const exportContentPackage = (format: string) => {
     const text = [
@@ -98,14 +103,15 @@ export function ContentPackagePanel({
   void buildContentPackage;
 
   return (
-    <div className="generation-workspace">
-      <section className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3">
-        <div className="flex items-center justify-between">
+    <div className="generation-workspace generation-workspace--with-result">
+      <section className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm relative">
+        <div className="generation-workspace__form-body">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-3">
           <div>
             <h3 className="text-sm font-black uppercase">内容包输入</h3>
             <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">一个 brief 生成标题、正文、标签、图片建议和分镜建议。</p>
           </div>
-          <button type="button" onClick={generateContentPackage} disabled={loading} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5">
+          <button type="button" onClick={generateContentPackage} disabled={isRunning} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5" />
             生成内容包
           </button>
@@ -168,9 +174,11 @@ export function ContentPackagePanel({
           <button type="button" onClick={() => setActiveTab('storyboard')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">分镜</button>
           <button type="button" onClick={() => setActiveTab('audio')} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">口播</button>
         </div>
+        </div>
       </section>
 
-      <section className="generation-workspace__results bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3 overflow-y-auto">
+      <section className="generation-workspace__results">
+        <div className="generation-workspace__preview bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3 overflow-y-auto">
         <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
           <div>
             <h3 className="text-sm font-black uppercase">{contentPackage.title}</h3>
@@ -215,6 +223,7 @@ export function ContentPackagePanel({
               <button type="button" onClick={() => setActiveTab('projects')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">保存到项目</button>
             </div>
           </div>
+        </div>
         </div>
       </section>
     </div>

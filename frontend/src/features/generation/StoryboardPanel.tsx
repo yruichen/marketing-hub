@@ -21,8 +21,8 @@ interface StoryboardPanelProps {
 export function StoryboardPanel({
   workspaceScope,
   username,
-  loading,
-  setLoading,
+  loading: _loading,
+  setLoading: _setLoading,
   agentLogs,
   setAgentLogs,
   setLatestTask,
@@ -61,8 +61,10 @@ export function StoryboardPanel({
     ]
   });
 
+  const [isRunning, setIsRunning] = useState(false);
+
   const { submitQueuedGeneration } = useGenerationTask({
-    setLoading,
+    setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
     triggerToast,
@@ -71,20 +73,22 @@ export function StoryboardPanel({
     fetchDashboard,
   });
 
-  const handleGenerateStoryboard = () => submitQueuedGeneration<StoryboardOutput>(
-    'storyboard',
-    {
-      video_topic: storyboardInput.topic,
-      duration: storyboardInput.duration,
-      target_audience: storyboardInput.audience,
-    },
-    setStoryboardOutput,
-    '[0.00s] [INFO] Initializing queued Storyboard Editorial Director Workflow...',
-    '分镜脚本异步任务执行完毕'
-  );
+  const handleGenerateStoryboard = () => {
+    return submitQueuedGeneration<StoryboardOutput>(
+      'storyboard',
+      {
+        video_topic: storyboardInput.topic,
+        duration: storyboardInput.duration,
+        target_audience: storyboardInput.audience,
+      },
+      setStoryboardOutput,
+      '[0.00s] [INFO] Initializing queued Storyboard Editorial Director Workflow...',
+      '分镜脚本异步任务执行完毕'
+    );
+  };
 
   return (
-    <div className="generation-workspace">
+    <div className="generation-workspace generation-workspace--with-result">
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// TIMELINE STICKY SLATE</h3>
@@ -128,13 +132,13 @@ export function StoryboardPanel({
 
         <button
           onClick={handleGenerateStoryboard}
-          disabled={loading}
+          disabled={isRunning}
           className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
         >
-          {loading ? (
+          {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
           ) : null}
-          <span>{loading ? 'AGENT DIRECTING...' : '运行分镜编排 Agent'}</span>
+          <span>{isRunning ? 'AGENT DIRECTING...' : '运行分镜编排 Agent'}</span>
         </button>
         </div>
 
@@ -156,7 +160,7 @@ export function StoryboardPanel({
           </div>
 
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
-            {loading ? (
+            {isRunning ? (
               <div className="w-full h-32 editorial-loader-bar flex flex-col items-center justify-center">
                 <span className="font-mono text-[9px] font-black text-black bg-[var(--editorial-accent-yellow)] border border-black px-2 py-0.5 animate-pulse">
                   STORYBOARD SEGMENTING IN PROGRESS...

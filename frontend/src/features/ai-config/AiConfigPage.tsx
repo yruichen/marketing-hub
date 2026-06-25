@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
+import { KeyRound, PlugZap, Sparkles } from 'lucide-react';
 import { useAiConfig } from './useAiConfig';
 import {
   providerDefaultScope,
@@ -28,316 +28,244 @@ export function AiConfigPage({
     setActiveConfigForm,
     showKey,
     setShowKey,
-    billingPlans,
     loading,
     fetchConfigs,
-    fetchBillingPlans,
     handleSaveConfig,
-    handleSelectPlan,
   } = useAiConfig({ workspaceScope, username, triggerToast, onWorkspaceRefresh });
 
   useEffect(() => {
     void fetchConfigs();
-    void fetchBillingPlans();
-  }, [fetchConfigs, fetchBillingPlans]);
+  }, [fetchConfigs]);
+
+  const availableScopes = Object.entries(configScopeLabels).filter(([value]) => {
+    if (value === 'image' && !providerSupportsImageConfig(activeConfigForm.provider)) return false;
+    if (value === 'video' && !providerSupportsVideoConfig(activeConfigForm.provider)) return false;
+    if (activeConfigForm.provider === 'anthropic' && value !== 'text') return false;
+    return true;
+  });
+
+  const showTextModel = activeConfigForm.provider !== 'mock'
+    && activeConfigForm.config_scope !== 'image'
+    && activeConfigForm.config_scope !== 'video';
+  const showImageModel = activeConfigForm.provider !== 'mock'
+    && providerSupportsImageConfig(activeConfigForm.provider)
+    && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'image');
+  const showVideoModel = activeConfigForm.provider !== 'mock'
+    && providerSupportsVideoConfig(activeConfigForm.provider)
+    && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'video');
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start font-mono">
-      <form onSubmit={handleSaveConfig} className="col-span-1 lg:col-span-6 bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative flex flex-col gap-5">
-        <div className="flex justify-center border-b border-[var(--editorial-stroke)] pb-4">
-          <Sparkles className="h-6 w-6 text-[var(--editorial-text)]" />
+    <div className="grid h-full min-h-0 grid-cols-1 gap-5 overflow-hidden font-mono xl:grid-cols-[minmax(0,1fr)_360px]">
+      <form
+        onSubmit={handleSaveConfig}
+        className="min-h-0 overflow-y-auto rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-panel)]"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
+          <div>
+            <span className="inline-flex h-7 items-center rounded-full bg-[var(--brand-accent)] px-3 text-[9px] font-black uppercase tracking-[0.16em] text-black">
+              AI Gateway
+            </span>
+            <h3 className="serif-header mt-3 text-2xl font-black text-[var(--editorial-text)]">模型接口设置</h3>
+            <p className="mt-1 max-w-2xl text-xs leading-6 text-[var(--editorial-text-gray)]">
+              这里只管理 Provider、用途、模型名和 API Key。套餐、额度、成本请到「计费」页查看。
+            </p>
+          </div>
+          <Sparkles className="h-6 w-6 shrink-0 text-[var(--brand-accent-strong)]" />
         </div>
 
-        <h3 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
-          <span>模型接口与自有密钥</span>
-        </h3>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+            1. 服务商
+            <select
+              value={activeConfigForm.provider}
+              onChange={(event) => {
+                const provider = event.target.value;
+                setActiveConfigForm({
+                  ...activeConfigForm,
+                  provider,
+                  config_scope: providerDefaultScope(provider),
+                });
+              }}
+              className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-bold text-[var(--editorial-text)] focus:outline-none"
+            >
+              <option value="mock">演示模式</option>
+              <option value="agnes">Agnes AI</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">选择服务商</label>
-          <select
-            value={activeConfigForm.provider}
-            onChange={(e) => {
-              const provider = e.target.value;
-              setActiveConfigForm({
+          <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+            2. 用途
+            <select
+              value={activeConfigForm.config_scope}
+              onChange={(event) => setActiveConfigForm({
                 ...activeConfigForm,
-                provider,
-                config_scope: providerDefaultScope(provider),
-              });
-            }}
-            className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
-          >
-            <option value="mock">演示模式</option>
-            <option value="agnes">Agnes AI</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-          </select>
+                config_scope: event.target.value as 'all' | 'text' | 'image' | 'audio' | 'video',
+              })}
+              className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-bold text-[var(--editorial-text)] focus:outline-none"
+            >
+              {availableScopes.map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">配置用途</label>
-          <select
-            value={activeConfigForm.config_scope}
-            onChange={(e) => setActiveConfigForm({
-              ...activeConfigForm,
-              config_scope: e.target.value as 'all' | 'text' | 'image' | 'audio' | 'video',
-            })}
-            className="bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-bold cursor-pointer appearance-none animate-none"
-          >
-            {Object.entries(configScopeLabels)
-              .filter(([value]) => {
-                if (value === 'image' && !providerSupportsImageConfig(activeConfigForm.provider)) return false;
-                if (value === 'video' && !providerSupportsVideoConfig(activeConfigForm.provider)) return false;
-                if (activeConfigForm.provider === 'anthropic' && value !== 'text') return false;
-                return true;
-              })
-              .map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <p className="text-[9px] text-[var(--editorial-text-gray)] leading-relaxed">
-            不同用途可分别保存并同时激活。例如：OpenAI 仅文本 + Agnes 仅图片 + Agnes 仅视频。
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           {[
-            { id: 'platform', label: '使用平台额度' },
-            { id: 'byok', label: '使用自有密钥' },
+            { id: 'platform', label: '演示/平台托管', hint: '无需填 Key' },
+            { id: 'byok', label: '自有 API Key', hint: '走自己的模型账户' },
           ].map((mode) => (
             <button
               key={mode.id}
               type="button"
               onClick={() => setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id })}
-              className={`border px-3 py-2 text-[10px] font-black ${
+              className={`rounded-2xl border px-3 py-3 text-left transition-all ${
                 activeConfigForm.billing_mode === mode.id
-                  ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]'
-                  : 'border-[var(--editorial-stroke)]/40'
+                  ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)] text-[var(--editorial-text)]'
+                  : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
               }`}
             >
-              {mode.label}
+              <span className="block text-[11px] font-black">{mode.label}</span>
+              <span className="mt-1 block text-[9px] font-bold">{mode.hint}</span>
             </button>
           ))}
         </div>
 
         {activeConfigForm.provider !== 'mock' && (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">API KEY 密钥</label>
+          <div className="mt-5 space-y-4">
+            <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+              3. API Key
               <div className="relative">
                 <input
-                  type={showKey ? "text" : "password"}
+                  type={showKey ? 'text' : 'password'}
                   value={activeConfigForm.api_key}
-                  onChange={(e) => setActiveConfigForm({ ...activeConfigForm, api_key: e.target.value })}
-                  className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                  placeholder="请输入 API Key（留空则保留已保存的密钥）"
+                  onChange={(event) => setActiveConfigForm({ ...activeConfigForm, api_key: event.target.value })}
+                  className="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 pr-16 text-xs text-[var(--editorial-text)] focus:outline-none"
+                  placeholder="留空则保留已保存的密钥"
                 />
                 <button
                   type="button"
                   onClick={() => setShowKey(!showKey)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-[9px] text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)] cursor-pointer font-bold"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]"
                 >
-                  {showKey ? '[HIDE]' : '[SHOW]'}
+                  {showKey ? '隐藏' : '显示'}
                 </button>
               </div>
-            </div>
+            </label>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                <span>自定义代理网关 Base URL</span>
-                <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">可选配置</span>
-              </label>
+            <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+              Base URL（可选）
               <input
                 type="url"
                 value={activeConfigForm.base_url}
-                onChange={(e) => setActiveConfigForm({ ...activeConfigForm, base_url: e.target.value })}
-                className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                placeholder={
-                  activeConfigForm.provider === 'agnes'
-                    ? 'https://apihub.agnes-ai.com/v1'
-                    : 'e.g. https://api.openai-proxy.org/v1'
-                }
+                onChange={(event) => setActiveConfigForm({ ...activeConfigForm, base_url: event.target.value })}
+                className="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                placeholder={activeConfigForm.provider === 'agnes' ? 'https://apihub.agnes-ai.com/v1' : 'https://api.example.com/v1'}
               />
+            </label>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {showTextModel && (
+                <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+                  文本模型
+                  <input
+                    type="text"
+                    value={activeConfigForm.model_name}
+                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, model_name: event.target.value })}
+                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    placeholder={activeConfigForm.provider === 'anthropic' ? 'claude-3-5-sonnet' : activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'}
+                  />
+                </label>
+              )}
+              {showImageModel && (
+                <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+                  图片模型
+                  <input
+                    type="text"
+                    value={activeConfigForm.image_model_name}
+                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, image_model_name: event.target.value })}
+                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    placeholder={activeConfigForm.provider === 'agnes' ? 'agnes-image-2.0-flash' : 'dall-e-3'}
+                  />
+                </label>
+              )}
+              {showVideoModel && (
+                <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+                  视频模型
+                  <input
+                    type="text"
+                    value={activeConfigForm.video_model_name}
+                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, video_model_name: event.target.value })}
+                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    placeholder="agnes-video-v2.0"
+                  />
+                </label>
+              )}
             </div>
-
-            {activeConfigForm.config_scope !== 'image' && activeConfigForm.config_scope !== 'video' && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                  <span>文本模型名称</span>
-                  <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">文案 / 分镜</span>
-                </label>
-                <input
-                  type="text"
-                  value={activeConfigForm.model_name}
-                  onChange={(e) => setActiveConfigForm({ ...activeConfigForm, model_name: e.target.value })}
-                  className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                  placeholder={
-                    activeConfigForm.provider === 'agnes'
-                      ? 'agnes-2.0-flash'
-                      : activeConfigForm.provider === 'gemini'
-                        ? 'gemini-1.5-flash'
-                        : activeConfigForm.provider === 'anthropic'
-                          ? 'claude-3-5-sonnet'
-                          : 'gpt-4o-mini'
-                  }
-                />
-              </div>
-            )}
-
-            {providerSupportsImageConfig(activeConfigForm.provider)
-              && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'image') && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                  <span>图片模型名称</span>
-                  <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">图片任务专用</span>
-                </label>
-                <input
-                  type="text"
-                  value={activeConfigForm.image_model_name}
-                  onChange={(e) => setActiveConfigForm({ ...activeConfigForm, image_model_name: e.target.value })}
-                  className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                  placeholder={
-                    activeConfigForm.provider === 'agnes'
-                      ? 'agnes-image-2.0-flash'
-                      : activeConfigForm.provider === 'openai'
-                        ? 'dall-e-3'
-                        : 'image-model'
-                  }
-                />
-              </div>
-            )}
-
-            {providerSupportsVideoConfig(activeConfigForm.provider)
-              && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'video') && (
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider flex items-center justify-between font-mono">
-                  <span>视频模型名称</span>
-                  <span className="text-[8px] text-[var(--editorial-text-gray)] lowercase tracking-normal">视频任务专用</span>
-                </label>
-                <input
-                  type="text"
-                  value={activeConfigForm.video_model_name}
-                  onChange={(e) => setActiveConfigForm({ ...activeConfigForm, video_model_name: e.target.value })}
-                  className="w-full bg-transparent border-b-1.5 border-[var(--editorial-stroke)] text-[var(--editorial-text)] py-2 text-xs focus:outline-none font-mono"
-                  placeholder={
-                    activeConfigForm.provider === 'agnes'
-                      ? 'agnes-video-v2.0'
-                      : 'mock-video'
-                  }
-                />
-              </div>
-            )}
-          </>
+          </div>
         )}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full btn-editorial-primary py-3 rounded-none font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
+          className="btn-editorial-primary mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider"
         >
-          {loading ? (
-            <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-          ) : null}
-          <span>保存并激活配置</span>
+          {loading ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : null}
+          保存并激活配置
         </button>
       </form>
 
-      <div className="col-span-1 lg:col-span-6 flex flex-col gap-6 font-mono">
-        <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-6 shadow-editorial relative flex flex-col gap-4">
-          <h4 className="text-sm font-black text-[var(--editorial-text)] border-b border-[var(--editorial-stroke)] pb-2 flex items-center gap-2 font-mono uppercase">
-            <span>订阅与接口状态</span>
-          </h4>
+      <aside className="min-h-0 overflow-y-auto rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-panel)]">
+        <h4 className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3 text-sm font-black uppercase text-[var(--editorial-text)]">
+          <PlugZap className="h-4 w-4 text-[var(--brand-accent-strong)]" />
+          当前接口状态
+        </h4>
 
-          {billingPlans && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {(['free', 'pro', 'enterprise'] as const).map((planKey) => {
-                const plan = billingPlans.plans[planKey];
-                const active = billingPlans.current_plan === planKey;
-                return (
-                  <button
-                    key={planKey}
-                    type="button"
-                    onClick={() => handleSelectPlan(planKey)}
-                    className={`text-left border-1.5 p-3 transition-all ${
-                      active
-                        ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/40 shadow-editorial-sm'
-                        : 'border-dashed border-[var(--editorial-stroke)]/40 hover:border-[var(--editorial-stroke)]'
-                    }`}
-                  >
-                    <span className="block text-xs font-black">{plan.name}</span>
-                    <span className="block mt-2 text-[9px] text-[var(--editorial-text-gray)]">
-                      {plan.project_limit >= 9999 ? '不限项目' : `${plan.project_limit} 个项目`} / {plan.storage_gb}GB
-                    </span>
-                    <span className="block mt-1 text-[9px] text-[var(--editorial-text-gray)]">
-                      自有密钥抵扣 {plan.byok_discount}
-                    </span>
-                  </button>
-                );
-              })}
-              <div className="md:col-span-3 text-[10px] text-[var(--editorial-text-gray)]">
-                当前项目数：{billingPlans.project_count} / {billingPlans.current_limits.project_limit >= 9999 ? '不限' : billingPlans.current_limits.project_limit}
+        <div className="mt-4 space-y-3">
+          {aiConfigs.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4 text-xs leading-6 text-[var(--editorial-text-gray)]">
+              暂无已保存配置。选择服务商和用途后保存，即可在这里看到启用状态。
+            </div>
+          ) : aiConfigs.map((config) => (
+            <div
+              key={config.id}
+              className={`rounded-2xl border p-4 ${
+                config.is_active
+                  ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)]'
+                  : 'border-dashed border-[var(--border-subtle)] bg-[var(--surface-elevated)]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-[var(--editorial-text)]">{config.provider_display}</span>
+                <span className={`rounded-full px-2 py-1 text-[8px] font-black ${config.is_active ? 'bg-[var(--brand-accent)] text-black' : 'border border-dashed border-[var(--border-subtle)] text-[var(--editorial-text-gray)]'}`}>
+                  {config.is_active ? 'ACTIVE' : 'STANDBY'}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[8px] font-bold uppercase text-[var(--editorial-text-gray)]">
+                <span>{config.config_scope_display || configScopeLabels[config.config_scope || 'all']}</span>
+                <span>Key: {config.api_key_masked || 'Unset'}</span>
+                {config.model_name ? <span>Text: {config.model_name}</span> : null}
+                {config.image_model_name ? <span>Image: {config.image_model_name}</span> : null}
+                {config.video_model_name ? <span>Video: {config.video_model_name}</span> : null}
+                <span>{config.billing_mode === 'byok' ? '自有 Key' : '平台托管'}</span>
               </div>
             </div>
-          )}
-
-          <div className="space-y-3">
-            {aiConfigs.map((config) => (
-              <div key={config.id} className={`p-4 border-1.5 flex items-center justify-between ${
-                config.is_active
-                  ? 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/40 text-[var(--editorial-text)]'
-                  : 'border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] text-[var(--editorial-text-gray)]'
-              }`}>
-                <div>
-                  <span className="text-xs font-black block">{config.provider_display}</span>
-                  <div className="flex items-center gap-2.5 mt-1 text-[8px] font-bold uppercase font-mono flex-wrap">
-                    <span>{config.config_scope_display || configScopeLabels[config.config_scope || 'all']}</span>
-                    <span>•</span>
-                    <span>Key: {config.api_key_masked || 'Unset'}</span>
-                    {config.model_name && !['image', 'video'].includes(config.config_scope || 'all') && (
-                      <>
-                        <span>•</span>
-                        <span>Text: {config.model_name}</span>
-                      </>
-                    )}
-                    {config.image_model_name && (
-                      <>
-                        <span>•</span>
-                        <span>Image: {config.image_model_name}</span>
-                      </>
-                    )}
-                    {config.video_model_name && (
-                      <>
-                        <span>•</span>
-                        <span>Video: {config.video_model_name}</span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <span>{config.billing_mode === 'byok' ? '自有密钥' : '平台额度'}</span>
-                  </div>
-                </div>
-                {config.is_active ? (
-                  <span className="bg-[var(--editorial-stroke)] text-[var(--editorial-bg)] text-[8px] font-black px-2 py-0.5 border border-[var(--editorial-stroke)]">
-                    ACTIVE
-                  </span>
-                ) : (
-                  <span className="bg-transparent text-[var(--editorial-text-gray)] text-[8px] font-bold px-2 py-0.5 border border-dashed border-[var(--editorial-stroke)]/40">
-                    STANDBY
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="border border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-bg)]/40 p-4 text-[10px] text-[var(--editorial-text-gray)] font-medium leading-relaxed mt-2">
-            <span className="font-bold text-[var(--editorial-text)] block mb-1">计费说明</span>
-            1. 使用自有密钥时，平台只保留必要的配置记录，生成消耗走您自己的模型账户。
-            <br />
-            2. 未配置密钥时，系统会使用演示模式，便于本地试用和流程演练。
-            <br />
-            3. 文本与图片可分别配置不同服务商，同一用途下保存时会替换该用途的旧配置。
-          </div>
+          ))}
         </div>
-      </div>
+
+        <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4 text-[10px] font-medium leading-relaxed text-[var(--editorial-text-gray)]">
+          <span className="mb-2 flex items-center gap-2 font-black text-[var(--editorial-text)]">
+            <KeyRound className="h-3.5 w-3.5" />
+            使用建议
+          </span>
+          文本、图片、视频可以分别配置不同服务商；同一用途保存新配置时，会替换该用途旧激活配置。
+          <br />
+          套餐、额度、成本和 BYOK 抵扣统一在「计费」页管理。
+        </div>
+      </aside>
     </div>
   );
 }

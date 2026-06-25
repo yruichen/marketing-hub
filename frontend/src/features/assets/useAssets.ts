@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
 import type { AssetRecord } from '../../types/workspace';
 import type { AssetsListResponse, AssetFilterState } from './types';
@@ -44,25 +44,34 @@ export function useAssets(
   const [data, setData] = useState<AssetsListResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightKeyRef = useRef<string | null>(null);
 
   const fetchPage = useCallback(
     async (pageToLoad: number) => {
+      const params = new URLSearchParams({
+        organization: organizationSlug,
+        page: String(pageToLoad),
+        page_size: String(pageSize),
+      });
+      if (filter.type !== 'all') params.set('asset_type', filter.type);
+      if (filter.search.trim()) params.set('search', filter.search.trim());
+
+      const query = params.toString();
+      const requestKey = `/workspace/assets/?${query}`;
+      if (inFlightKeyRef.current === requestKey) return;
+      inFlightKeyRef.current = requestKey;
+
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({
-          organization: organizationSlug,
-          page: String(pageToLoad),
-          page_size: String(pageSize),
-        });
-        if (filter.type !== 'all') params.set('asset_type', filter.type);
-        if (filter.search.trim()) params.set('search', filter.search.trim());
-
-        const result = await apiGet<AssetsListResponse>(`/workspace/assets/?${params.toString()}`);
+        const result = await apiGet<AssetsListResponse>(requestKey);
         setData(result);
       } catch {
         setError('资产加载失败');
       } finally {
+        if (inFlightKeyRef.current === requestKey) {
+          inFlightKeyRef.current = null;
+        }
         setLoading(false);
       }
     },
