@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetCard } from './AssetCard';
@@ -12,6 +12,7 @@ import './assets.css';
 
 const DEFAULT_FILTER: AssetFilterState = { type: 'all', search: '' };
 const PAGE_SIZE = 60;
+const EMPTY_ASSETS: AssetRecord[] = [];
 
 type DialogState =
   | { mode: 'closed' }
@@ -34,7 +35,6 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     useAssets(organizationSlug, filter, PAGE_SIZE);
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null);
   const [dialog, setDialog] = useState<DialogState>({ mode: 'closed' });
-  const [recentCount, setRecentCount] = useState(0);
 
   // 监听工作流运行完成事件，自动刷新
   useEffect(() => {
@@ -43,20 +43,25 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     return () => window.removeEventListener('mh:assets-updated', handler);
   }, [refresh]);
 
-  const items = data?.items ?? [];
+  const items = data?.items ?? EMPTY_ASSETS;
   const total = data?.total ?? 0;
   const typeCounts = data?.type_counts;
+  const [timestamp, setTimestamp] = useState(() => Date.now());
 
   useEffect(() => {
-    const now = Date.now();
-    const sevenDaysAgo = now - 1000 * 60 * 60 * 24 * 7;
-    setRecentCount(
-      items.filter((asset) => {
-        const created = new Date(asset.created_at).getTime();
-        return Number.isFinite(created) && created >= sevenDaysAgo;
-      }).length,
-    );
+    const timeout = window.setTimeout(() => {
+      setTimestamp(Date.now());
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [items]);
+
+  const recentCount = useMemo(() => {
+    const sevenDaysAgo = timestamp - 1000 * 60 * 60 * 24 * 7;
+    return items.filter((asset) => {
+      const created = new Date(asset.created_at).getTime();
+      return Number.isFinite(created) && created >= sevenDaysAgo;
+    }).length;
+  }, [items, timestamp]);
 
   const handleFilterChange = (next: AssetFilterState) => {
     setFilter(next);
