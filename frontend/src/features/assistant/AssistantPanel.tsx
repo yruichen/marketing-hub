@@ -23,7 +23,7 @@ interface AssistantPanelProps {
 export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
   const { open, setOpen, sessionId, setSessionId, pageContext } = useAssistant();
   const {
-    sessions,
+    sessions: sessionsList,
     createSession,
     deleteSession,
     renameSession,
@@ -120,9 +120,9 @@ export function AssistantPanel({ onNavigate }: AssistantPanelProps) {
         </div>
       </header>
 
-      {sessions.sessions.length > 0 ? (
+      {sessionsList.length > 0 ? (
         <div className="assistant-sessions">
-          {sessions.sessions.slice(0, 8).map((s) => (
+          {sessionsList.slice(0, 8).map((s) => (
             <SessionRow
               key={s.id}
               session={s}
