@@ -95,8 +95,12 @@ export type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutpu
 export const taskTypeLabels: Record<string, string> = {
   copy: '文案',
   image: '图片',
+  image_prompt: '图片提示词',
   storyboard: '分镜',
   audio: '配音',
   video: '视频',
+  review: '内容审核',
   rag_search: '历史素材检索',
+  custom_agent: '自定义智能体',
+  brainstorm: '灵感风暴',
 };

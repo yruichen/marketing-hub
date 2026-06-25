@@ -1,5 +1,5 @@
 import type { DragEvent, MouseEvent } from 'react';
-import { Folder } from 'lucide-react';
+import { Folder, Layers, PlayCircle } from 'lucide-react';
 import type { FolderRecord, ProjectRecord } from '../../types/workspace';
 import type { ViewMode } from './types';
 import { DesktopIcon } from './DesktopIcon';
@@ -15,6 +15,7 @@ interface DesktopCanvasProps {
 
   onSelectProject: (project: ProjectRecord, event: MouseEvent) => void;
   onOpenProject: (project: ProjectRecord) => void;
+  onSetCurrentProject: (project: ProjectRecord) => void;
   onContextMenu: (project: ProjectRecord, event: MouseEvent) => void;
   onCheckToggle: (projectId: number) => void;
   onDropToFolder: (project: ProjectRecord, folder: FolderRecord) => void;
@@ -33,6 +34,7 @@ export function DesktopCanvas({
   groupedByFolder,
   onSelectProject,
   onOpenProject,
+  onSetCurrentProject,
   onContextMenu,
   onCheckToggle,
   onDropToFolder,
@@ -67,7 +69,7 @@ export function DesktopCanvas({
                 event.dataTransfer.setData('text/plain', String(project.id));
               }}
               onClick={(event) => onSelectProject(project, event)}
-              onDoubleClick={() => onOpenProject(project)}
+              onDoubleClick={() => onSetCurrentProject(project)}
               onContextMenu={(event) => onContextMenu(project, event)}
               onCheckToggle={() => onCheckToggle(project.id)}
             />
@@ -85,18 +87,51 @@ export function DesktopCanvas({
             <div
               key={project.id}
               onClick={(event) => onSelectProject(project, event)}
-              onDoubleClick={() => onOpenProject(project)}
+              onDoubleClick={() => onSetCurrentProject(project)}
               onContextMenu={(event) => onContextMenu(project, event)}
-              className={`desktop-list__row ${selectedIds.includes(project.id) ? 'desktop-list__row--selected' : ''}`}
+              className={`desktop-list__row desktop-list__row--rich ${selectedIds.includes(project.id) ? 'desktop-list__row--selected' : ''} ${activeProjectId === project.id ? 'desktop-list__row--active' : ''}`}
             >
-              <Folder className="h-3.5 w-3.5 shrink-0" />
-              <span className="desktop-list__row__name">{project.name}</span>
-              <span className="text-[9px] text-[var(--editorial-text-gray)] shrink-0">
+              <div className="desktop-list__row__main">
+                <Folder className="h-4 w-4 shrink-0" />
+                <div className="min-w-0">
+                  <div className="desktop-list__row__titleline">
+                    <span className="desktop-list__row__name">{project.name}</span>
+                    {activeProjectId === project.id && <span className="desktop-list__badge">当前</span>}
+                  </div>
+                  <p className="desktop-list__row__brief">{project.brief || '暂无 Brief'}</p>
+                </div>
+              </div>
+              <span className="desktop-list__pill">
                 {STATUS_LABELS[project.status_tag || ''] || project.status_tag || '进行中'}
               </span>
-              <span className="text-[9px] text-[var(--editorial-text-gray)] shrink-0">
-                {(project.platform_tags || []).join(' · ') || '—'}
+              <span className="desktop-list__meta">
+                {(project.platform_tags || []).join(' · ') || '未设置平台'}
               </span>
+              <span className="desktop-list__meta">
+                {project.folder_path_display || project.folder_path || '默认文件夹'}
+              </span>
+              <div className="desktop-list__actions">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSetCurrentProject(project);
+                  }}
+                  className="desktop-list__action"
+                >
+                  <PlayCircle className="h-3.5 w-3.5" />设为当前
+                </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenProject(project);
+                  }}
+                  className="desktop-list__action"
+                >
+                  <Layers className="h-3.5 w-3.5" />详情
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -137,11 +172,12 @@ export function DesktopCanvas({
                     <div
                       key={project.id}
                       onClick={(event) => onSelectProject(project, event)}
-                      onDoubleClick={() => onOpenProject(project)}
+                      onDoubleClick={() => onSetCurrentProject(project)}
                       onContextMenu={(event) => onContextMenu(project, event)}
                       className={`desktop-list__row ${selectedIds.includes(project.id) ? 'desktop-list__row--selected' : ''}`}
                     >
                       <span className="desktop-list__row__name">{project.name}</span>
+                      {activeProjectId === project.id && <span className="desktop-list__badge">当前</span>}
                       <span className="text-[9px] text-[var(--editorial-text-gray)] shrink-0">
                         {STATUS_LABELS[project.status_tag || ''] || '—'}
                       </span>

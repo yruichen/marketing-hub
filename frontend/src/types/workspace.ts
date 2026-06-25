@@ -186,11 +186,32 @@ export interface BillingPlanResponse {
   current_limits: BillingPlanRecord;
   project_count: number;
   plans: Record<'free' | 'pro' | 'enterprise', BillingPlanRecord>;
+  usage_summary?: {
+    total_tokens: number;
+    total_cost_usd: string;
+    last_30d_tokens: number;
+    last_30d_cost_usd: string;
+    task_count: number;
+    successful_tasks: number;
+    failed_tasks: number;
+  };
+  usage_by_provider?: Array<{
+    provider: string;
+    total_tokens: number;
+    cost_usd: string;
+  }>;
+  recent_usage?: Array<{
+    provider: string;
+    model_name: string;
+    total_tokens: number;
+    cost_usd: string;
+    created_at: string;
+  }>;
 }
 
 export interface GenerationTaskRecord {
   id: number;
-  task_type: 'copy' | 'image' | 'storyboard' | 'video' | 'audio' | 'rag_search' | 'custom_agent';
+  task_type: 'copy' | 'image' | 'image_prompt' | 'storyboard' | 'video' | 'audio' | 'review' | 'rag_search' | 'custom_agent' | 'brainstorm';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   celery_task_id?: string;
   result: {

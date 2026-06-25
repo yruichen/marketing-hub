@@ -22,6 +22,7 @@ interface InspectorProps {
   onUpdateDraftContext: (next: BrandContext) => void;
   onSaveBrandContext: () => void;
   onSelectCampaign: (campaign: CampaignRecord) => void;
+  onSetCurrent: () => void;
   onArchive: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -44,16 +45,14 @@ export function Inspector({
   onUpdateDraftContext,
   onSaveBrandContext,
   onSelectCampaign,
+  onSetCurrent,
   onArchive,
   onDelete,
   onClose,
   onOpenAssetsLibrary,
 }: InspectorProps) {
   return (
-    <aside
-      className={`desktop-inspector ${open ? 'desktop-inspector--open' : ''}`}
-      aria-hidden={!open}
-    >
+    <aside className={`desktop-inspector ${open ? 'desktop-inspector--open' : ''}`}>
       <div className="desktop-inspector__header">
         <span className="desktop-inspector__title">
           {selectedProject?.name || '未选中'}
@@ -71,6 +70,15 @@ export function Inspector({
       <div className="desktop-inspector__body">
         {selectedProject ? (
           <>
+            <div className="desktop-inspector__hero">
+              <p className="desktop-inspector__hero-label">当前查看</p>
+              <h3>{selectedProject.name}</h3>
+              <p>{selectedProject.brief || '暂无 Brief'}</p>
+              <button type="button" onClick={onSetCurrent} className="desktop-toolbar__btn desktop-toolbar__btn--primary w-full justify-center">
+                设为当前项目
+              </button>
+            </div>
+
             <CollapsibleSection title="元数据 + 品牌记忆" defaultOpen>
               <InspectorProjectMeta
                 selectedProject={selectedProject}
@@ -119,9 +127,10 @@ export function Inspector({
             </CollapsibleSection>
           </>
         ) : (
-          <p className="text-[10px] text-[var(--editorial-text-gray)]">
-            选中一个项目以查看 / 编辑详细信息。
-          </p>
+          <div className="desktop-inspector__empty">
+            <span>项目详情</span>
+            <p>从左侧列表选择一个项目，详情会显示在这里。页面宽度不会因为打开详情而跳动。</p>
+          </div>
         )}
       </div>
     </aside>

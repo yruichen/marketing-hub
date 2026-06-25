@@ -13,6 +13,9 @@ This directory contains product, architecture, and development documentation for
 
 - [Product Features Report](./product_features_report.md)
 - [Walkthrough](./walkthrough.md)
+- [Workflow UX Improvement Plan](./workflow_ux_improvement_plan.md)
+- [Global AI Assistant Upgrade Plan](./global_ai_assistant_upgrade_plan.md)
+- [AI Content Generation Prompt Governance](./ai_content_generation_prompt_governance.md)
 
 ## Maintenance
 
@@ -25,4 +28,3 @@ This directory contains product, architecture, and development documentation for
 - Put long-term architecture decisions in architecture documents, not scattered comments.
 - Update this index whenever adding a new document.
 - Prefer current behavior over aspirational claims.
-

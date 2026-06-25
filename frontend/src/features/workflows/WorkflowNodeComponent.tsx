@@ -1,6 +1,6 @@
 import { GitBranch, Settings2 } from 'lucide-react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { presets, statusLabels, type NodeType } from './constants';
+import { nodeTypeLabels, presets, statusLabels, type NodeType } from './constants';
 import { nodeStatusClass, nodeStatusDotClass, resolveNodeOutputDisplay } from './utils';
 
 export interface FlowNodeData {
@@ -15,6 +15,8 @@ export interface FlowNodeData {
   inputSchema: Record<string, string>;
   outputSchema: Record<string, string>;
   isConnectionSource?: boolean;
+  isCompatibleTarget?: boolean;
+  connectionModeActive?: boolean;
   readOnly?: boolean;
   onStartConnect?: (id: string) => void;
   onOpenContextMenu?: (id: string, x: number, y: number) => void;
@@ -83,16 +85,20 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
     output,
     errorMessage,
     isConnectionSource,
+    isCompatibleTarget,
+    connectionModeActive,
     onStartConnect,
     onOpenContextMenu,
   } = data;
   const preset = presets.find((item) => item.type === nodeType);
   const Icon = preset?.icon || Settings2;
   const statusLabel = statusLabels[status] || status || '未运行';
+  const typeLabel = nodeTypeLabels[nodeType] || preset?.label || nodeType;
+  const isDimmedTarget = connectionModeActive && !isConnectionSource && !isCompatibleTarget;
 
   return (
     <div
-      className={`group w-full h-full min-h-[188px] border-1.5 bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 overflow-hidden flex flex-col ${nodeStatusClass(status)} ${selected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : ''} ${isConnectionSource ? 'ring-2 ring-blue-500 ring-offset-1 animate-pulse' : ''}`}
+      className={`group w-full h-full min-h-[188px] border-1.5 bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 overflow-hidden flex flex-col transition-opacity duration-150 ${nodeStatusClass(status)} ${selected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : ''} ${isConnectionSource ? 'ring-2 ring-blue-500 ring-offset-1 animate-pulse' : ''} ${isDimmedTarget ? 'opacity-40' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -115,6 +121,9 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
       />
       <div className="flex items-start justify-between gap-2 shrink-0">
         <div className="min-w-0 flex-1">
+          <span className="ml-6 mb-1 inline-flex border border-[var(--editorial-stroke)]/40 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[var(--editorial-text-gray)]">
+            {typeLabel}
+          </span>
           <div className="flex items-start gap-2">
             <Icon className="h-4 w-4 shrink-0 mt-1 text-[var(--editorial-text-gray)]" aria-label={preset?.label} />
             <h4
@@ -143,6 +152,18 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
         </button>
       </div>
       <NodeResultBox output={output as Record<string, unknown>} status={status} errorMessage={errorMessage} />
+      {status === 'failed' && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenContextMenu?.(id, e.clientX, e.clientY);
+          }}
+          className="mt-2 border border-rose-400 px-2 py-1 text-[9px] font-black text-rose-700 hover:bg-rose-50"
+        >
+          查看原因 / 重试
+        </button>
+      )}
     </div>
   );
 }

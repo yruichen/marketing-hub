@@ -960,6 +960,8 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
         for ordered_node in order:
             node = by_id[str(ordered_node.get('id'))]
             node['status'] = 'running'
+            draft.nodes = nodes
+            draft.save(update_fields=['nodes', 'updated_at'])
             try:
                 with transaction.atomic():
                     updated_node, task = run_workflow_node(
@@ -979,6 +981,8 @@ def run_workspace_workflow(draft: WorkspaceDraft, username: str | None = None) -
                 node['status'] = 'failed'
                 node['error_message'] = str(node_exc)
                 failed_node_ids.append(str(node.get('id')))
+            draft.nodes = nodes
+            draft.save(update_fields=['nodes', 'updated_at'])
 
         draft.nodes = nodes
         all_failed = len(failed_node_ids) == len(order)

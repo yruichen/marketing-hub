@@ -47,7 +47,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER);
   const [folderFilter, setFolderFilter] = useState(ALL_FILTER);
   const [sidebarFolderPath, setSidebarFolderPath] = useState<string>(ALL_FILTER);
-  const [viewMode, setViewMode] = useState<ViewMode>('icon');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [newFolderName] = useState('默认文件夹');
   const [newProject, setNewProject] = useState<ProjectForm>({
@@ -62,6 +62,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [draftContext, setDraftContext] = useState<BrandContext>(EMPTY_BRAND_CONTEXT);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
 
   const organizationSlug = organization?.slug || 'marketing-hub';
   const projectsQueryKey = useMemo(() => ['projects', organizationSlug], [organizationSlug]);
@@ -94,9 +95,11 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         if (next) {
           const detail = await apiGet<ProjectDetail>(`/projects/${next.id}/`);
           setSelectedProject(detail);
+          setSelectedIds([detail.id]);
           setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(detail.brand_context || {}) });
         } else {
           setSelectedProject(null);
+          setSelectedIds([]);
         }
       } catch {
         triggerToast('项目列表加载失败', 'error');
@@ -120,6 +123,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       try {
         const detail = await apiGet<ProjectDetail>(`/projects/${projectId}/`);
         setSelectedProject(detail);
+        setSelectedIds([detail.id]);
         setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(detail.brand_context || {}) });
       } catch {
         triggerToast('项目详情加载失败', 'error');
@@ -183,6 +187,14 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       });
       triggerToast('项目已创建', 'success');
       setShowCreateProject(false);
+      setNewProject({
+        name: '新营销项目',
+        brief: '新品上市全链路营销活动',
+        folder_id: null,
+        folder_path: '默认文件夹',
+        platform_tags: ['小红书'],
+        status_tag: 'creating',
+      });
       await fetchProjects(project.id);
       await loadProject(project.id);
     } catch {
@@ -326,12 +338,17 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       toggleSelected(project.id);
       return;
     }
-    setSelectedIds((prev) => (prev.includes(project.id) ? prev : [project.id]));
+    setSelectedIds([project.id]);
+    void loadProject(project.id);
   };
 
   const onOpenProject = async (project: ProjectRecord) => {
     setSelectedIds([project.id]);
     await loadProject(project.id);
+  };
+
+  const setProjectAsCurrent = (project: ProjectRecord, campaign?: CampaignRecord) => {
+    onSelectScope(project, campaign);
   };
 
   const onContextMenuFor = (project: ProjectRecord, event: MouseEvent) => {
@@ -356,7 +373,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const closeContextMenu = () => setContextMenu(null);
 
   return (
-    <div className={`desktop-shell relative ${selectedProject ? '' : 'desktop-shell--no-inspector'}`}>
+    <div className="desktop-shell relative">
       <DesktopSidebar
         folders={folders}
         activeFolderPath={sidebarFolderPath}
@@ -395,11 +412,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           onBatchArchive={() => void batchPatch({ is_archived: true }, '已批量归档')}
           onBatchReview={() => void batchPatch({ status_tag: 'review' }, '已批量设为待审')}
           onBatchExport={batchExport}
-          onCreateProjectClick={() => setShowCreateProject((v) => !v)}
-          onCreateFolderClick={() => {
-            const name = window.prompt('文件夹名称', newFolderName) || newFolderName;
-            if (name.trim()) void createFolder(name);
-          }}
+        onCreateProjectClick={() => setShowCreateProject((v) => !v)}
+          onCreateFolderClick={() => setShowCreateFolder((v) => !v)}
         />
 
         {showCreateProject ? (
@@ -414,11 +428,14 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           </div>
         ) : null}
 
-        {showCreateProject ? (
+        {showCreateFolder ? (
           <div className="border-b border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] p-4">
             <div className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">快速创建文件夹</div>
             <CreateFolderForm
-              onCreate={(name) => void createFolder(name)}
+              onCreate={(name) => {
+                void createFolder(name);
+                setShowCreateFolder(false);
+              }}
               loading={loading}
               defaultName={newFolderName}
             />
@@ -429,11 +446,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           viewMode={viewMode}
           projects={filteredProjects}
           folders={folders}
-          activeProjectId={selectedProject?.id}
+          activeProjectId={activeProjectId}
           selectedIds={selectedIds}
           groupedByFolder={groupedByFolder}
           onSelectProject={onSelectProject}
           onOpenProject={(p) => void onOpenProject(p)}
+          onSetCurrentProject={setProjectAsCurrent}
           onContextMenu={onContextMenuFor}
           onCheckToggle={onCheckToggle}
           onDropToFolder={(p, f) => void handleDropToFolder(p, f)}
@@ -460,7 +478,10 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         onUpdateDraftContext={setDraftContext}
         onSaveBrandContext={() => void saveBrandContext()}
         onSelectCampaign={(c) => {
-          if (selectedProject) onSelectScope(selectedProject, c);
+          if (selectedProject) setProjectAsCurrent(selectedProject, c);
+        }}
+        onSetCurrent={() => {
+          if (selectedProject) setProjectAsCurrent(selectedProject, undefined);
         }}
         onArchive={() => {
           if (selectedProject) void archiveProject(selectedProject);
@@ -480,7 +501,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           items={buildProjectContextItems({
             isArchived: !!contextMenu.project.is_archived,
             onOpen: () => void onOpenProject(contextMenu.project),
-            onSetAsCurrent: () => onSelectScope(contextMenu.project, undefined),
+            onSetAsCurrent: () => setProjectAsCurrent(contextMenu.project, undefined),
             onArchive: () => void archiveProject(contextMenu.project),
             onDelete: () => void deleteProject(contextMenu.project),
             onCopyName: () => {
