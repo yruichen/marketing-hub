@@ -10,7 +10,9 @@ interface OnboardingModalProps {
   state: OnboardingState;
   setState: React.Dispatch<React.SetStateAction<OnboardingState>>;
   onClose: () => void;
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
+  isCompleting?: boolean;
+  error?: string;
 }
 
 const steps = ['使用场景', '创建品牌', '选择渠道', '起始模板', '生成内容包'];
@@ -20,6 +22,8 @@ export function OnboardingModal({
   setState,
   onClose,
   onComplete,
+  isCompleting = false,
+  error = '',
 }: OnboardingModalProps) {
   const [step, setStep] = useState(0);
   const isLast = step === steps.length - 1;
@@ -32,7 +36,7 @@ export function OnboardingModal({
             <h2 className="text-lg serif-header font-bold">首次使用引导</h2>
             <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">5 步完成第一轮内容生成，后续可以再补品牌细节。</p>
           </div>
-          <button type="button" onClick={onClose} className="text-xs font-black hover:text-rose-500" aria-label="关闭首次使用引导">关闭</button>
+          <button type="button" onClick={onClose} disabled={isCompleting} className="text-xs font-black hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label="关闭首次使用引导">关闭</button>
         </div>
 
         <div className="flex flex-wrap gap-2 my-5">
@@ -103,12 +107,18 @@ export function OnboardingModal({
           )}
         </div>
 
+        {error ? (
+          <div className="mb-3 border border-[var(--danger-accent)] bg-[color-mix(in_srgb,var(--danger-accent)_10%,var(--editorial-paper))] px-3 py-2 text-xs font-bold text-[var(--danger-accent)]">
+            {error}
+          </div>
+        ) : null}
+
         <div className="flex items-center justify-between border-t border-[var(--editorial-stroke)] pt-4">
-          <button type="button" onClick={() => setStep((value) => Math.max(0, value - 1))} disabled={step === 0} className="border border-[var(--editorial-stroke)] px-4 py-2 text-[10px] font-black disabled:opacity-40">
+          <button type="button" onClick={() => setStep((value) => Math.max(0, value - 1))} disabled={step === 0 || isCompleting} className="border border-[var(--editorial-stroke)] px-4 py-2 text-[10px] font-black disabled:opacity-40">
             上一步
           </button>
-          <button type="button" onClick={() => isLast ? onComplete() : setStep((value) => Math.min(steps.length - 1, value + 1))} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase">
-            {isLast ? '生成第一份内容包' : '下一步'}
+          <button type="button" disabled={isCompleting} onClick={() => isLast ? void onComplete() : setStep((value) => Math.min(steps.length - 1, value + 1))} className="btn-editorial-primary px-4 py-2 text-[10px] font-black uppercase disabled:cursor-not-allowed disabled:opacity-60">
+            {isCompleting ? '正在保存并生成...' : isLast ? '生成第一份内容包' : '下一步'}
           </button>
         </div>
       </div>

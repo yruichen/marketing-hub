@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils.text import slugify
 from rest_framework.exceptions import PermissionDenied
 
@@ -14,31 +15,31 @@ def authenticated_user(request):
 
 def get_scope(request):
     user = authenticated_user(request)
-    if user and user.is_superuser:
+    if not user:
+        raise PermissionDenied('Authentication required.')
+    if user.is_superuser:
         raise PermissionDenied('超级管理员只能使用独立后台，不能访问普通工作台。')
-    username = user.username if user else (request.query_params.get('username') or request.data.get('username'))
-    workspace = ensure_demo_workspace(username)
 
     org_slug = request.query_params.get('organization') or request.data.get('organization')
     project_slug = request.query_params.get('project') or request.data.get('project')
     campaign_id = request.query_params.get('campaign') or request.data.get('campaign')
 
-    if user:
-        org_query = Organization.objects.filter(memberships__user=user).distinct()
-        org = org_query.filter(slug=org_slug).first() if org_slug else org_query.order_by('name').first()
-        if not org:
-            org = workspace['organization']
-            Membership.objects.get_or_create(user=user, organization=org, defaults={'role': 'admin' if user.is_staff else 'creator'})
-    else:
-        org = workspace['organization']
-        if org_slug:
-            org = Organization.objects.filter(slug=org_slug).first() or org
+    org_query = Organization.objects.filter(memberships__user=user).distinct()
+    org = org_query.filter(slug=org_slug).first() if org_slug else org_query.order_by('name').first()
+    if not org:
+        raise PermissionDenied('Organization membership required.')
 
-    project = workspace['project']
     if project_slug:
-        project = Project.objects.filter(slug=project_slug, organization=org).first() or project
+        project = Project.objects.filter(slug=project_slug, organization=org).first()
     else:
-        project = Project.objects.filter(organization=org).order_by('-created_at').first() or workspace['project']
+        project = Project.objects.filter(organization=org).order_by('-created_at').first()
+    if not project:
+        project = Project.objects.create(
+            organization=org,
+            name='Default Project',
+            slug=slugify(f'{org.slug}-default-project')[:50] or 'default-project',
+            brief='Default workspace project',
+        )
     if campaign_id:
         campaign = Campaign.objects.filter(pk=campaign_id, project=project).first()
     else:
@@ -52,7 +53,16 @@ def get_scope(request):
             objective='Default campaign workspace',
         )
 
-    return user or workspace['user'], org, project, campaign
+    return user, org, project, campaign
+
+
+def get_demo_scope(request):
+    if not (settings.DEBUG and settings.MARKETING_HUB_BOOTSTRAP_DEMO):
+        raise PermissionDenied('Demo workspace bootstrap is disabled.')
+    user = authenticated_user(request)
+    username = user.username if user else (request.query_params.get('username') or request.data.get('username'))
+    workspace = ensure_demo_workspace(username)
+    return workspace['user'], workspace['organization'], workspace['project'], workspace['campaign']
 
 
 def member_role(user, organization: Organization | None) -> str | None:

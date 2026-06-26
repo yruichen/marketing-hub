@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import type { WorkflowNode } from '../../types/workspace';
-import { nodeTypeLabels } from './constants';
+import { nodeTypeDescriptions, nodeTypeLabels, nodeTypeOutputs } from './constants';
 import { NodeConfigFields } from './NodeConfigFields';
 import { nodeStatusDotClass } from './utils';
 
@@ -47,6 +47,8 @@ export function NodeConfigPopover({
 }: NodeConfigPopoverProps) {
   const { getNode, flowToScreenPosition } = useReactFlow();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const nodeDescription = node ? nodeTypeDescriptions[node.type] : '';
+  const nodeOutput = node ? nodeTypeOutputs[node.type] : '';
 
   const position = useMemo(() => {
     if (!node || readOnly) return null;
@@ -90,6 +92,12 @@ export function NodeConfigPopover({
             </div>
             {node.status === 'failed' && node.error_message && (
               <p className="mt-2 text-[10px] text-rose-600 leading-snug line-clamp-2">{node.error_message}</p>
+            )}
+            {(nodeDescription || nodeOutput) && (
+              <div className="mt-2 border border-[var(--editorial-stroke)]/35 bg-[var(--editorial-bg)]/40 px-2 py-1.5 text-[10px] leading-4 text-[var(--editorial-text-gray)]">
+                {nodeDescription ? <p className="font-semibold">{nodeDescription}</p> : null}
+                {nodeOutput ? <p className="mt-0.5 font-black">预计产物：{nodeOutput}</p> : null}
+              </div>
             )}
           </div>
           <button

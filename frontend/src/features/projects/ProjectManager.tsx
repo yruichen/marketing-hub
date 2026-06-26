@@ -67,6 +67,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   });
   const [newCampaignName, setNewCampaignName] = useState('Launch Wave');
   const [draftContext, setDraftContext] = useState<BrandContext>(EMPTY_BRAND_CONTEXT);
+  const [brandContextSaving, setBrandContextSaving] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -74,6 +75,10 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const organizationSlug = organization?.slug || 'marketing-hub';
   const projectsQueryKey = useMemo(() => ['projects', organizationSlug], [organizationSlug]);
   const foldersQueryKey = useMemo(() => ['projects-folders', organizationSlug], [organizationSlug]);
+  const brandContextDirty = useMemo(
+    () => JSON.stringify(draftContext) !== JSON.stringify({ ...EMPTY_BRAND_CONTEXT, ...(selectedProject?.brand_context || {}) }),
+    [draftContext, selectedProject?.brand_context],
+  );
 
   // ===== data fetch =====
   const fetchProjects = useCallback(
@@ -216,15 +221,20 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
 
   const saveBrandContext = async () => {
     if (!selectedProject) return;
+    setBrandContextSaving(true);
     try {
       const project = await apiPatch<ProjectRecord>(`/projects/${selectedProject.id}/`, {
         brand_context: draftContext,
         brief: selectedProject.brief,
       });
       setSelectedProject({ ...selectedProject, ...project });
+      setProjects((prev) => prev.map((item) => (item.id === project.id ? { ...item, ...project } : item)));
+      setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(project.brand_context || {}) });
       triggerToast('品牌记忆已保存', 'success');
     } catch {
       triggerToast('品牌记忆保存失败', 'error');
+    } finally {
+      setBrandContextSaving(false);
     }
   };
 
@@ -575,6 +585,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         onUpdateMeta={(patch) => void updateProjectMeta(patch)}
         onUpdateDraftContext={setDraftContext}
         onSaveBrandContext={() => void saveBrandContext()}
+        brandContextDirty={brandContextDirty}
+        brandContextSaving={brandContextSaving}
         onSelectCampaign={(c) => {
           if (selectedProject) setProjectAsCurrent(selectedProject, c);
         }}

@@ -1,5 +1,6 @@
 import type { BrandContext, CampaignRecord, ProjectRecord } from '../../types/workspace';
-import { CONTEXT_FIELDS, PLATFORM_CHOICES, STATUS_CHOICES, STATUS_LABELS } from './types';
+import { BrandMemoryEditor } from '../brand-memory';
+import { PLATFORM_CHOICES, STATUS_CHOICES, STATUS_LABELS } from './types';
 
 interface InspectorMetaProps {
   selectedProject: ProjectRecord;
@@ -8,6 +9,8 @@ interface InspectorMetaProps {
   onUpdateMeta: (patch: Partial<ProjectRecord>) => void;
   onUpdateDraftContext: (next: BrandContext) => void;
   onSaveBrandContext: () => void;
+  brandContextDirty: boolean;
+  brandContextSaving: boolean;
   onArchive: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -20,6 +23,8 @@ export function InspectorProjectMeta({
   onUpdateMeta,
   onUpdateDraftContext,
   onSaveBrandContext,
+  brandContextDirty,
+  brandContextSaving,
   onArchive,
   onDelete,
   onClose,
@@ -83,25 +88,14 @@ export function InspectorProjectMeta({
         </div>
       </div>
 
-      <div className="border-t border-dashed border-[var(--editorial-stroke)]/30 pt-4 flex flex-col gap-3">
-        <span className="desktop-inspector__label">品牌记忆（6 字段）</span>
-        {CONTEXT_FIELDS.map(([key, label]) => (
-          <label key={key} className="flex flex-col gap-1">
-            <span className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)]">{label}</span>
-            <input
-              value={String(draftContext[key] || '')}
-              onChange={(e) => onUpdateDraftContext({ ...draftContext, [key]: e.target.value })}
-              className="bg-transparent border-b border-[var(--editorial-stroke)] text-[var(--editorial-text)] text-[11px] py-1 focus:outline-none"
-            />
-          </label>
-        ))}
-
-        <div className="flex gap-2 mt-2">
-          <button type="button" onClick={onSaveBrandContext} className="desktop-toolbar__btn desktop-toolbar__btn--primary flex-1">
-            保存品牌记忆
-          </button>
-        </div>
-      </div>
+      <BrandMemoryEditor
+        project={selectedProject}
+        context={draftContext}
+        isDirty={brandContextDirty}
+        isSaving={brandContextSaving}
+        onChange={onUpdateDraftContext}
+        onSave={onSaveBrandContext}
+      />
 
       <div className="border-t border-dashed border-[var(--editorial-stroke)]/30 pt-4 flex gap-2">
         <button type="button" onClick={onArchive} className="desktop-toolbar__btn flex-1">

@@ -21,6 +21,8 @@ interface InspectorProps {
   onUpdateMeta: (patch: Partial<ProjectRecord>) => void;
   onUpdateDraftContext: (next: BrandContext) => void;
   onSaveBrandContext: () => void;
+  brandContextDirty: boolean;
+  brandContextSaving: boolean;
   onSelectCampaign: (campaign: CampaignRecord) => void;
   onSetCurrent: () => void;
   onArchive: () => void;
@@ -44,6 +46,8 @@ export function Inspector({
   onUpdateMeta,
   onUpdateDraftContext,
   onSaveBrandContext,
+  brandContextDirty,
+  brandContextSaving,
   onSelectCampaign,
   onSetCurrent,
   onArchive,
@@ -87,6 +91,8 @@ export function Inspector({
                 onUpdateMeta={onUpdateMeta}
                 onUpdateDraftContext={onUpdateDraftContext}
                 onSaveBrandContext={onSaveBrandContext}
+                brandContextDirty={brandContextDirty}
+                brandContextSaving={brandContextSaving}
                 onArchive={onArchive}
                 onDelete={onDelete}
                 onClose={onClose}

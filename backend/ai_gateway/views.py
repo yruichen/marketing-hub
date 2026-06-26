@@ -15,6 +15,7 @@ from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -28,6 +29,8 @@ from api.models import AIConfiguration, AssistantMessage, AssistantSession
 from api.permissions import CanManageAIConfiguration, resolve_staff_user_from_request
 from api.image_style_skills import list_image_style_skills
 from api.scope import get_scope
+from api.access import require_role
+from api.throttles import ExpensiveEndpointThrottle
 from api.serializers import (
     AIConfigurationSerializer,
     AssistantMessageSerializer,
@@ -211,8 +214,13 @@ class AIConfigView(APIView):
 
     @method_decorator(ensure_csrf_cookie)
     def get(self, request):
-        _, org, _, _ = get_scope(request)
-        configs = AIConfiguration.objects.filter(Q(organization__isnull=True) | Q(organization=org))
+        org = None
+        if not (request.user.is_staff or request.user.is_superuser):
+            user, org, _, _ = get_scope(request)
+            require_role(user, org, 'admin')
+        configs = AIConfiguration.objects.filter(organization__isnull=True)
+        if org is not None:
+            configs = AIConfiguration.objects.filter(Q(organization__isnull=True) | Q(organization=org))
         if not settings.AI_ALLOW_MOCK_PROVIDER:
             configs = configs.exclude(provider='mock')
         return with_csrf_token(
@@ -222,7 +230,10 @@ class AIConfigView(APIView):
 
     def post(self, request):
         actor = resolve_staff_user_from_request(request)
-        _, org, _, _ = get_scope(request)
+        org = None
+        if not (request.user.is_staff or request.user.is_superuser):
+            user, org, _, _ = get_scope(request)
+            require_role(user, org, 'admin')
         provider = request.data.get('provider', 'agnes')
         if provider == 'mock' and not settings.AI_ALLOW_MOCK_PROVIDER:
             return Response(
@@ -237,7 +248,17 @@ class AIConfigView(APIView):
         config_scope = normalize_config_scope(provider, request.data.get('config_scope', 'all'))
         billing_mode = request.data.get('billing_mode', 'platform')
         billing_mode = billing_mode if billing_mode in {'platform', 'byok'} else 'platform'
+        if billing_mode == 'platform' and not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'detail': 'Platform AI configuration requires staff access.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         organization = org if billing_mode == 'byok' else None
+        if billing_mode == 'byok' and organization is None:
+            return Response(
+                {'detail': 'BYOK AI configuration requires an organization scope.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if provider == 'agnes':
             base_url = base_url or AGNES_DEFAULT_BASE_URL
@@ -292,9 +313,13 @@ class AIConfigView(APIView):
 
 class AIConfigModelsView(APIView):
     permission_classes = [CanManageAIConfiguration]
+    throttle_classes = [ExpensiveEndpointThrottle]
 
     def post(self, request):
-        _, org, _, _ = get_scope(request)
+        org = None
+        if not (request.user.is_staff or request.user.is_superuser):
+            user, org, _, _ = get_scope(request)
+            require_role(user, org, 'admin')
         provider = (request.data.get('provider') or 'agnes').strip()
         if provider == 'mock':
             return Response(
@@ -308,6 +333,11 @@ class AIConfigModelsView(APIView):
             )
 
         billing_mode = request.data.get('billing_mode', 'platform')
+        if billing_mode == 'platform' and not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {'detail': 'Platform AI configuration requires staff access.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         organization = org if billing_mode == 'byok' else None
         config_scope = normalize_config_scope(provider, request.data.get('config_scope', 'all'))
         base_url = (request.data.get('base_url') or '').strip()
@@ -418,6 +448,7 @@ class AssistantChatView(APIView):
     # the moment React re-fired the effect twice in strict mode. The
     # underlying LLM provider has its own quota anyway.
     throttle_classes: list = []
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         username, org, _, _ = get_scope(request)
@@ -535,6 +566,7 @@ class AssistantChatView(APIView):
 
 class AssistantSessionListView(APIView):
     """GET /assistant/sessions  (list) / POST /assistant/sessions  (create)."""
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         _, org, _, _ = get_scope(request)
@@ -561,6 +593,7 @@ class AssistantSessionListView(APIView):
 
 class AssistantSessionDetailView(APIView):
     """PATCH/DELETE /assistant/sessions/<pk>."""
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
         _, org, _, _ = get_scope(request)
@@ -584,6 +617,7 @@ class AssistantSessionDetailView(APIView):
 
 class AssistantSessionMessagesView(APIView):
     """GET /assistant/sessions/<pk>/messages — full history."""
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
         _, org, _, _ = get_scope(request)

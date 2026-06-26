@@ -7,9 +7,16 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.access import (
+    get_folder_for_member,
+    get_organization_for_member,
+    get_project_for_member,
+    require_role,
+)
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
 from api.models import (
@@ -40,18 +47,21 @@ from api.services import (
 from workspaces.view_modules.helpers import folder_path_from_request, build_project_search_query
 
 class FolderCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         organization_slug = request.query_params.get('organization')
-        query = Folder.objects.select_related('organization', 'parent').annotate(project_count=Count('projects')).order_by('parent_id', 'sort_order', 'name')
+        query = Folder.objects.select_related('organization', 'parent').filter(
+            organization__memberships__user=request.user,
+        ).annotate(project_count=Count('projects')).order_by('parent_id', 'sort_order', 'name')
         if organization_slug:
             query = query.filter(organization__slug=organization_slug)
         return Response([serialize_folder(item) for item in query])
 
     def post(self, request):
         org_slug = request.data.get('organization')
-        org = Organization.objects.filter(slug=org_slug).first()
-        if not org:
-            return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+        org = get_organization_for_member(request.user, slug=org_slug)
+        require_role(request.user, org, 'creator')
         parent = Folder.objects.filter(pk=request.data.get('parent_id'), organization=org).first() if request.data.get('parent_id') else None
         name = request.data.get('name', 'Untitled Folder').strip()
         folder = Folder.objects.create(
@@ -67,10 +77,11 @@ class FolderCollectionView(APIView):
 
 
 class FolderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def patch(self, request, pk: int):
-        folder = Folder.objects.filter(pk=pk).first()
-        if not folder:
-            return Response({'error': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)
+        folder = get_folder_for_member(request.user, pk)
+        require_role(request.user, folder.organization, 'creator')
         if 'name' in request.data:
             folder.name = request.data.get('name', folder.name)
         if 'slug' in request.data:
@@ -88,10 +99,9 @@ class FolderDetailView(APIView):
         return Response(serialize_folder(folder))
 
     def delete(self, request, pk: int):
-        folder = Folder.objects.filter(pk=pk).first()
-        if not folder:
-            return Response({'error': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)
-        user, _, _, _ = get_scope(request)
+        folder = get_folder_for_member(request.user, pk)
+        require_role(request.user, folder.organization, 'creator')
+        user = request.user
         record_audit_log(
             action='delete',
             actor=user,
@@ -106,13 +116,17 @@ class FolderDetailView(APIView):
 
 
 class ProjectCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         organization_slug = request.query_params.get('organization')
         folder = request.query_params.get('folder')
         platform = request.query_params.get('platform')
         status_tag = request.query_params.get('status')
         search = request.query_params.get('q')
-        query = Project.objects.select_related('organization', 'folder').order_by('-created_at')
+        query = Project.objects.select_related('organization', 'folder').filter(
+            organization__memberships__user=request.user,
+        ).order_by('-created_at')
         if organization_slug:
             query = query.filter(organization__slug=organization_slug)
         if folder is not None:
@@ -142,9 +156,8 @@ class ProjectCollectionView(APIView):
 
     def post(self, request):
         org_slug = request.data.get('organization')
-        org = Organization.objects.filter(slug=org_slug).first()
-        if not org:
-            return Response({'error': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+        org = get_organization_for_member(request.user, slug=org_slug)
+        require_role(request.user, org, 'creator')
 
         plan = PLAN_LIMITS.get(org.subscription_plan, PLAN_LIMITS['free'])
         active_project_count = Project.objects.filter(organization=org, is_archived=False).count()
@@ -173,10 +186,10 @@ class ProjectCollectionView(APIView):
 
 
 class ProjectDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk: int):
-        project = Project.objects.select_related('organization', 'folder').filter(pk=pk).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        project = get_project_for_member(request.user, pk)
         return Response({
             **serialize_project(project),
             'campaigns': [serialize_campaign(item) for item in project.campaigns.order_by('-created_at')],
@@ -186,9 +199,8 @@ class ProjectDetailView(APIView):
         })
 
     def patch(self, request, pk: int):
-        project = Project.objects.filter(pk=pk).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        project = get_project_for_member(request.user, pk)
+        require_role(request.user, project.organization, 'creator')
         if 'name' in request.data:
             project.name = request.data.get('name') or project.name
         if 'slug' in request.data:
@@ -213,10 +225,9 @@ class ProjectDetailView(APIView):
         return Response(serialize_project(project))
 
     def delete(self, request, pk: int):
-        project = Project.objects.filter(pk=pk).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
-        user, _, _, _ = get_scope(request)
+        project = get_project_for_member(request.user, pk)
+        require_role(request.user, project.organization, 'creator')
+        user = request.user
         record_audit_log(
             action='delete',
             actor=user,

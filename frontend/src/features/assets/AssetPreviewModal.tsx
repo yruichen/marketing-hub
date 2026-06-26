@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Download, ExternalLink, X } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
-import { assetTaskType, formatAssetPreviewText } from './assetContent';
+import { assetSourceLabel, assetTaskType, assetWorkflowLabel, formatAssetPreviewText } from './assetContent';
 
 interface AssetPreviewModalProps {
   asset: AssetRecord;
@@ -28,6 +28,9 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
   const taskType = assetTaskType(asset);
+  const workflowLabel = assetWorkflowLabel(asset);
+  const sourceLabel = assetSourceLabel(asset);
+  const reviewRiskCount = asset.metadata.review?.risk_count ?? 0;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -161,10 +164,28 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
             </div>
             <div className="assets-preview__detail-grid">
               <div><span>类型</span><strong>{palette.formatLabel || asset.asset_type}</strong></div>
-              <div><span>来源</span><strong>{taskType}</strong></div>
+              <div><span>来源</span><strong>{sourceLabel}</strong></div>
+              <div><span>产出类型</span><strong>{taskType}</strong></div>
               <div><span>创建</span><strong>{formatDate(asset.created_at)}</strong></div>
               <div><span>ID</span><strong>#{asset.id}</strong></div>
+              <div><span>预览</span><strong>{asset.source_url ? '有源文件' : '仅记录'}</strong></div>
+              {asset.metadata.generation_task_id ? <div><span>任务</span><strong>#{asset.metadata.generation_task_id}</strong></div> : null}
+              {asset.metadata.workflow_run_id ? <div><span>Run</span><strong>#{asset.metadata.workflow_run_id}</strong></div> : null}
+              {asset.metadata.workflow_node_id ? <div><span>节点</span><strong>{asset.metadata.workflow_node_label || asset.metadata.workflow_node_id}</strong></div> : null}
             </div>
+            {workflowLabel ? (
+              <div>
+                <span className="assets-preview__aside-label">工作流来源</span>
+                <p className="assets-preview__url">{workflowLabel}</p>
+              </div>
+            ) : null}
+            {reviewRiskCount > 0 ? (
+              <div className="assets-preview__review">
+                <span className="assets-preview__aside-label">审阅风险</span>
+                <strong>{reviewRiskCount} 项需要处理</strong>
+                {asset.metadata.review?.verdict ? <p>{asset.metadata.review.verdict}</p> : null}
+              </div>
+            ) : null}
             {asset.source_url ? (
               <div>
                 <span className="assets-preview__aside-label">源文件</span>

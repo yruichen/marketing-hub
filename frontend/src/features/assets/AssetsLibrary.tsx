@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
-import { AssetCard } from './AssetCard';
+import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
 import { AssetFormDialog } from './AssetFormDialog';
 import { Pagination } from './Pagination';
 import { useAssets } from './useAssets';
+import { useAssetGroups } from './useAssetGroups';
 import type { AssetFilterState, AssetsLibraryProps } from './types';
 import type { AssetRecord } from '../../types/workspace';
 import './assets.css';
 
-const DEFAULT_FILTER: AssetFilterState = { type: 'all', search: '' };
+const DEFAULT_FILTER: AssetFilterState = { type: 'all', source: 'all', preview: 'all', search: '' };
 const PAGE_SIZE = 60;
 const EMPTY_ASSETS: AssetRecord[] = [];
 
@@ -46,6 +47,9 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
   const items = data?.items ?? EMPTY_ASSETS;
   const total = data?.total ?? 0;
   const typeCounts = data?.type_counts;
+  const sourceCounts = data?.source_counts;
+  const previewCounts = data?.preview_counts;
+  const { groups } = useAssetGroups(items);
   const [timestamp, setTimestamp] = useState(() => Date.now());
 
   useEffect(() => {
@@ -91,7 +95,7 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
           <span className="assets-library__eyebrow">Brand asset wall</span>
           <h2 className="assets-library__title">资产库</h2>
           <p className="assets-library__subtitle">
-            统一查看文案、图片、音频、视频和智能体沉淀；点击卡片即可进入沉浸预览。
+            按工作流运行、生成来源和预览可用性整理产物；点击卡片进入预览和溯源。
           </p>
         </div>
         <div className="assets-library__stats" aria-label="资产统计">
@@ -104,8 +108,16 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
             <span>近 7 天</span>
           </div>
           <div>
-            <strong>{typeCounts?.image ?? 0}</strong>
-            <span>图片</span>
+            <strong>{sourceCounts?.workflow ?? 0}</strong>
+            <span>工作流</span>
+          </div>
+          <div>
+            <strong>{previewCounts?.with_file ?? 0}</strong>
+            <span>可预览</span>
+          </div>
+          <div>
+            <strong>{previewCounts?.records_only ?? 0}</strong>
+            <span>仅记录</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -134,6 +146,8 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
         filter={filter}
         onChange={handleFilterChange}
         typeCounts={typeCounts}
+        sourceCounts={sourceCounts}
+        previewCounts={previewCounts}
         total={total}
       />
 
@@ -145,11 +159,11 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
           <span>运行工作流或生成内容后，文案、图片、音频、视频会自动沉淀到这里。</span>
         </div>
       ) : (
-        <div className="assets-library__grid assets-library__grid--wall">
-          {items.map((asset) => (
-            <AssetCard
-              key={asset.id}
-              asset={asset}
+        <div className="assets-library__groups">
+          {groups.map((group) => (
+            <AssetGroup
+              key={group.key}
+              group={group}
               onPreview={setPreviewAsset}
               onEdit={(a) => setDialog({ mode: 'edit', asset: a })}
               onDelete={handleDelete}

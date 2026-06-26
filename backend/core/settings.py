@@ -117,6 +117,9 @@ else:
         }
     }
 
+DATABASES['default']['CONN_MAX_AGE'] = int(os.getenv('DB_CONN_MAX_AGE', '60'))
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -186,6 +189,25 @@ CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', REDIS_URL)
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'true').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = os.getenv('CELERY_TASK_EAGER_PROPAGATES', 'true').lower() == 'true'
 
+if DEBUG and not os.getenv('REDIS_CACHE_URL'):
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'marketing-hub-dev',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.getenv('REDIS_CACHE_URL', REDIS_URL),
+            'OPTIONS': {
+                'socket_connect_timeout': 2,
+                'socket_timeout': 2,
+            },
+        }
+    }
+
 OBJECT_STORAGE_BACKEND = os.getenv('OBJECT_STORAGE_BACKEND', 'local')
 OBJECT_STORAGE_BUCKET = os.getenv('OBJECT_STORAGE_BUCKET', '')
 
@@ -203,6 +225,9 @@ AI_ALLOW_MOCK_PROVIDER = os.getenv('AI_ALLOW_MOCK_PROVIDER', 'true' if DEBUG els
 AI_ALLOW_MOCK_FALLBACK = os.getenv('AI_ALLOW_MOCK_FALLBACK', 'true' if DEBUG else 'false').lower() == 'true'
 ALLOW_UNAUTHENTICATED_API = os.getenv('ALLOW_UNAUTHENTICATED_API', 'true' if DEBUG else 'false').lower() == 'true'
 
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('DATA_UPLOAD_MAX_MEMORY_SIZE', str(2 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('FILE_UPLOAD_MAX_MEMORY_SIZE', str(5 * 1024 * 1024)))
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -217,7 +242,11 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': os.getenv('DRF_THROTTLE_ANON', '120/min'),
         'user': os.getenv('DRF_THROTTLE_USER', '600/min'),
+        'org': os.getenv('DRF_THROTTLE_ORG', '1200/min'),
         'generation': os.getenv('DRF_THROTTLE_GENERATION', '60/min'),
+        'generation_burst': os.getenv('DRF_THROTTLE_GENERATION_BURST', '10/min'),
+        'expensive': os.getenv('DRF_THROTTLE_EXPENSIVE', '20/min'),
+        'login': os.getenv('DRF_THROTTLE_LOGIN', '10/min'),
     },
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
 }

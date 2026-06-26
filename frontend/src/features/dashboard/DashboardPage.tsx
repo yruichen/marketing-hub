@@ -19,6 +19,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { AppSection } from '../../shared/stores/uiStore';
+import { TaskCenter } from '../generation';
 import { taskTypeLabels } from '../generation/types';
 import type { DashboardSnapshot } from './types';
 import { formatUsd } from './types';
@@ -30,6 +31,8 @@ interface DashboardPageProps {
   setActiveTab: (tab: AppSection) => void;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   onRefresh: () => void;
+  onRetryTask: (task: GenerationTaskRecord) => void | Promise<void>;
+  retryingTaskId?: number | null;
 }
 
 const numberFormatter = new Intl.NumberFormat('zh-CN', {
@@ -76,13 +79,6 @@ function formatDateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function statusClass(status: string) {
-  if (status === 'succeeded') return 'bg-[color-mix(in_srgb,var(--success-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--success-accent)_44%,var(--border-default))]';
-  if (status === 'running') return 'bg-[color-mix(in_srgb,var(--info-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--info-accent)_44%,var(--border-default))]';
-  if (status === 'queued') return 'bg-[color-mix(in_srgb,var(--warning-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--warning-accent)_44%,var(--border-default))]';
-  return 'bg-[color-mix(in_srgb,var(--danger-accent)_16%,var(--surface-elevated))] text-[var(--editorial-text)] border-[color-mix(in_srgb,var(--danger-accent)_44%,var(--border-default))]';
 }
 
 function EmptyPanel({
@@ -166,6 +162,8 @@ export function DashboardPage({
   setActiveTab,
   triggerToast,
   onRefresh,
+  onRetryTask,
+  retryingTaskId = null,
 }: DashboardPageProps) {
   const metrics = snapshot?.metrics;
   const taskTotal = metrics?.task_count ?? 0;
@@ -424,30 +422,20 @@ export function DashboardPage({
         <div className="xl:col-span-7 border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-5 shadow-editorial-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-black">最近任务流水</h3>
-              <p className="text-xs text-[var(--editorial-text-gray)]">最新生成、工作流节点与失败任务</p>
+              <h3 className="text-sm font-black">任务中心</h3>
+              <p className="text-xs text-[var(--editorial-text-gray)]">刷新后仍可恢复最新生成、工作流节点与失败任务</p>
             </div>
             <Clock3 className="h-5 w-5 text-[var(--editorial-text-gray)]" />
           </div>
-          {recentTasks.length ? (
-            <div className="mt-4 divide-y divide-dashed divide-[var(--editorial-stroke)]/25 border-y border-[var(--editorial-stroke)]/25">
-              {recentTasks.slice(0, 6).map((task) => (
-                <div key={task.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black">#{task.id} / {taskTypeLabels[task.task_type] ?? task.task_type}</p>
-                    <p className="mt-1 truncate text-xs text-[var(--editorial-text-gray)]">{task.error_message || `${formatNumber(task.token_count ?? 0)} tokens / $${formatUsd(task.cost_usd)}`}</p>
-                  </div>
-                  <span className={`inline-flex h-7 items-center border px-2 text-[10px] font-black ${statusClass(task.status)}`}>
-                    {statusLabels[task.status] ?? task.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-4">
-              <EmptyPanel title="还没有任务流水" description="开始生成内容后，任务状态、错误原因和成本会在这里形成可追踪记录。" action="创建第一个任务" onAction={() => setActiveTab('brainstorm')} />
-            </div>
-          )}
+          <div className="mt-4">
+            <TaskCenter
+              tasks={recentTasks}
+              limit={6}
+              retryingTaskId={retryingTaskId}
+              onRetryTask={onRetryTask}
+              emptyAction={() => setActiveTab('brainstorm')}
+            />
+          </div>
         </div>
       </section>
 

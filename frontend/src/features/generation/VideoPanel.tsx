@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
+import { BrandMemorySummary } from '../brand-memory';
+import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
 import type { CreationContent, VideoOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -53,7 +55,7 @@ export function VideoPanel({
 
   const [isRunning, setIsRunning] = useState(false);
 
-  const { submitVideoGeneration } = useGenerationTask({
+  const { submitVideoGeneration, taskUiState } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -99,6 +101,11 @@ export function VideoPanel({
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// VIDEO STICKY SLATE</h3>
+        <BrandMemorySummary
+          projectName={workspaceScope?.project.name}
+          context={workspaceScope?.project.brand_context}
+          compact
+        />
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">视频主题 Topic</label>
@@ -176,6 +183,7 @@ export function VideoPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateVideo} retryDisabled={isRunning} />
       </div>
 
       <div className="generation-workspace__results">

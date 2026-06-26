@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Count, Sum
@@ -7,12 +8,15 @@ from datetime import timedelta
 from decimal import Decimal
 
 from api.audit import record_audit_log
+from api.access import require_capability
 from api.contracts import PLAN_LIMITS
 from api.models import CreditLedgerEntry, GenerationTask, Project, UsageEvent
 from api.scope import get_scope
 
 
 class BillingPlansView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def _payload(self, org):
         project_count = Project.objects.filter(organization=org, is_archived=False).count()
         events = UsageEvent.objects.filter(organization=org)
@@ -81,11 +85,13 @@ class BillingPlansView(APIView):
         }
 
     def get(self, request):
-        _, org, _, _ = get_scope(request)
+        user, org, _, _ = get_scope(request)
+        require_capability(user, org, 'billing_read')
         return Response(self._payload(org))
 
     def post(self, request):
         user, org, _, _ = get_scope(request)
+        require_capability(user, org, 'billing_write')
         plan = request.data.get('plan', 'free')
         if plan not in PLAN_LIMITS:
             return Response({'error': 'Unsupported subscription plan'}, status=status.HTTP_400_BAD_REQUEST)

@@ -7,9 +7,11 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.access import get_asset_for_member, require_role
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
 from api.models import (
@@ -44,17 +46,22 @@ class WorkspaceAssetsView(APIView):
     组织级资产库列表 + 创建。
 
     GET：返回 organization 下所有 Asset（不依赖 project_id），可按
-         asset_type / project_id / search 过滤。
+         asset_type / project_id / source / workflow_run / workflow_node / search 过滤。
     POST：手动创建资产（不依赖 task）。前端 AssetsLibrary 用。
     """
 
     DEFAULT_PAGE_SIZE = 60
     MAX_PAGE_SIZE = 200
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         _, org, _, _ = get_scope(request)
         asset_type = request.query_params.get('asset_type')
         project_id = request.query_params.get('project')
+        source = request.query_params.get('source')
+        workflow_run_id = request.query_params.get('workflow_run')
+        workflow_node_id = request.query_params.get('workflow_node')
+        has_source = request.query_params.get('has_source')
         search = (request.query_params.get('search') or '').strip()
 
         try:
@@ -71,8 +78,26 @@ class WorkspaceAssetsView(APIView):
             qs = qs.filter(asset_type=asset_type)
         if project_id:
             qs = qs.filter(project_id=project_id)
+        if source and source != 'all':
+            qs = qs.filter(metadata__source=source)
+        if workflow_run_id:
+            try:
+                qs = qs.filter(metadata__workflow_run_id=int(workflow_run_id))
+            except (TypeError, ValueError):
+                qs = qs.none()
+        if workflow_node_id:
+            qs = qs.filter(metadata__workflow_node_id=workflow_node_id)
+        if has_source in {'1', 'true', 'True'}:
+            qs = qs.exclude(source_url='')
+        if has_source in {'0', 'false', 'False'}:
+            qs = qs.filter(source_url='')
         if search:
-            qs = qs.filter(Q(title__icontains=search) | Q(tags__icontains=search))
+            qs = qs.filter(
+                Q(title__icontains=search)
+                | Q(tags__icontains=search)
+                | Q(metadata__workflow_node_label__icontains=search)
+                | Q(metadata__task_type__icontains=search)
+            )
 
         total = qs.count()
         offset = (page - 1) * page_size
@@ -82,6 +107,15 @@ class WorkspaceAssetsView(APIView):
         type_counts = dict(
             qs.values_list('asset_type').annotate(c=Count('id')).order_by()
         )
+        source_counts = {'manual': 0, 'generation': 0, 'workflow': 0, 'unknown': 0}
+        for item in qs.values('metadata').iterator():
+            metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+            item_source = metadata.get('source') or 'unknown'
+            source_counts[str(item_source)] = source_counts.get(str(item_source), 0) + 1
+        preview_counts = {
+            'with_file': qs.exclude(source_url='').count(),
+            'records_only': qs.filter(source_url='').count(),
+        }
 
         return Response({
             'total': total,
@@ -89,11 +123,14 @@ class WorkspaceAssetsView(APIView):
             'page_size': page_size,
             'has_more': offset + len(items) < total,
             'type_counts': type_counts,
+            'source_counts': source_counts,
+            'preview_counts': preview_counts,
             'items': [serialize_asset(item) for item in items],
         })
 
     def post(self, request):
-        username, org, _, _ = get_scope(request)
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'creator')
         data = request.data or {}
 
         title = (data.get('title') or '').strip()
@@ -141,7 +178,7 @@ class WorkspaceAssetsView(APIView):
         )
         record_audit_log(
             action='asset_create',
-            actor=_get_user_by_username(username),
+            actor=user,
             organization=org,
             target_type='asset',
             target_id=str(asset.id),
@@ -152,15 +189,15 @@ class WorkspaceAssetsView(APIView):
 
 class WorkspaceAssetDetailView(APIView):
     """单个 Asset 的编辑 + 删除。"""
+    permission_classes = [IsAuthenticated]
 
     def _get(self, pk, org):
         return Asset.objects.filter(pk=pk, organization=org).first()
 
     def patch(self, request, pk):
-        username, org, _, _ = get_scope(request)
-        asset = self._get(pk, org)
-        if not asset:
-            return Response({'detail': '资产不存在'}, status=status.HTTP_404_NOT_FOUND)
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'creator')
+        asset = get_asset_for_member(user, pk)
 
         data = request.data or {}
         if 'title' in data:
@@ -184,7 +221,7 @@ class WorkspaceAssetDetailView(APIView):
         asset.save()
         record_audit_log(
             action='asset_update',
-            actor=_get_user_by_username(username),
+            actor=user,
             organization=org,
             target_type='asset',
             target_id=str(asset.id),
@@ -193,16 +230,15 @@ class WorkspaceAssetDetailView(APIView):
         return Response(serialize_asset(asset))
 
     def delete(self, request, pk):
-        username, org, _, _ = get_scope(request)
-        asset = self._get(pk, org)
-        if not asset:
-            return Response({'detail': '资产不存在'}, status=status.HTTP_404_NOT_FOUND)
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'creator')
+        asset = get_asset_for_member(user, pk)
         asset_id = asset.id
         asset_type = asset.asset_type
         asset.delete()
         record_audit_log(
             action='asset_delete',
-            actor=_get_user_by_username(username),
+            actor=user,
             organization=org,
             target_type='asset',
             target_id=str(asset_id),

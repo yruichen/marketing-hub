@@ -17,7 +17,9 @@ from api.service_modules.workflow_parts.payloads import (
     workflow_execution_order,
 )
 from api.service_modules.workflow_parts.runner import (
+    create_workflow_run,
     retry_workspace_node,
+    run_workflow_run_by_id,
     run_workflow_node,
     run_workspace_workflow,
 )
@@ -25,10 +27,12 @@ from api.service_modules.workflow_parts.runner import (
 __all__ = [
     'brainstorm_workflow',
     'build_payload_for_node',
+    'create_workflow_run',
     'extract_upstream_text',
     'get_or_create_default_draft',
     'node_io_schema',
     'retry_workspace_node',
+    'run_workflow_run_by_id',
     'run_workflow_node',
     'run_workspace_workflow',
     'upstream_outputs',

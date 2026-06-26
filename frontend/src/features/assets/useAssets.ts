@@ -54,6 +54,9 @@ export function useAssets(
         page_size: String(pageSize),
       });
       if (filter.type !== 'all') params.set('asset_type', filter.type);
+      if (filter.source !== 'all') params.set('source', filter.source);
+      if (filter.preview === 'with_file') params.set('has_source', '1');
+      if (filter.preview === 'records_only') params.set('has_source', '0');
       if (filter.search.trim()) params.set('search', filter.search.trim());
 
       const query = params.toString();
@@ -75,7 +78,7 @@ export function useAssets(
         setLoading(false);
       }
     },
-    [organizationSlug, filter.type, filter.search, pageSize],
+    [organizationSlug, filter.type, filter.source, filter.preview, filter.search, pageSize],
   );
 
   // 筛选条件 / 页码变化 → 重新拉

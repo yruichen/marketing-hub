@@ -71,8 +71,8 @@ export function WorkflowEmptyState({
         <h4 className="text-xs font-black uppercase">还没有工作流节点</h4>
         <p className="mt-2 text-[10px] text-[var(--editorial-text-gray)]">从常用节点开始搭建当前项目的内容生产流程。</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={onAddCopy} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">添加文案节点</button>
-          <button type="button" onClick={onAddImagePrompt} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">添加图像节点</button>
+          <button type="button" onClick={onAddCopy} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">写渠道文案</button>
+          <button type="button" onClick={onAddImagePrompt} className="border border-[var(--editorial-stroke)] px-2.5 py-2 text-[9px] font-black hover:bg-[var(--editorial-unselected)]">生成图片说明</button>
         </div>
       </div>
     </div>

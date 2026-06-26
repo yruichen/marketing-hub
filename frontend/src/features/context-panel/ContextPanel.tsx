@@ -1,4 +1,5 @@
 import { BarChart3, ChevronRight, ClipboardList, FolderKanban, PackageCheck, X } from 'lucide-react';
+import { TaskCenter } from '../generation';
 import type { ContentPackage } from '../generation/types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
@@ -12,6 +13,8 @@ interface ContextPanelProps {
   contentPackage: ContentPackage;
   setActiveTab: (tab: AppSection) => void;
   onClose: () => void;
+  onRetryTask: (task: GenerationTaskRecord) => void | Promise<void>;
+  retryingTaskId?: number | null;
 }
 
 export function ContextPanel({
@@ -21,7 +24,14 @@ export function ContextPanel({
   contentPackage,
   setActiveTab,
   onClose,
+  onRetryTask,
+  retryingTaskId = null,
 }: ContextPanelProps) {
+  const taskList = [
+    ...(latestTask ? [latestTask] : []),
+    ...(dashboardSnapshot?.recent_tasks ?? []),
+  ];
+
   return (
     <aside className="context-panel">
       <div className="context-panel__header">
@@ -63,19 +73,14 @@ export function ContextPanel({
           <ClipboardList className="h-3.5 w-3.5" />
           <span>任务队列</span>
         </div>
-        {latestTask ? (
-          <div className="context-panel__stack">
-            <div className="context-panel__task-line"><span>生成任务 #{latestTask.id}</span><span>{latestTask.status}</span></div>
-            <p className="context-panel__body">
-              {latestTask.status === 'queued' && '正在排队处理，本次任务预计需要约 8 秒。'}
-              {latestTask.status === 'running' && '正在根据品牌记忆生成内容。'}
-              {latestTask.status === 'succeeded' && '任务已完成，可保存到资产库或加入审阅。'}
-              {latestTask.status === 'failed' && (latestTask.error_message || '生成失败，可重试、换模型或减少输入长度。')}
-            </p>
-          </div>
-        ) : (
-          <p className="context-panel__body">暂无生成任务。生成内容包后会在这里显示排队、生成和失败原因。</p>
-        )}
+        <TaskCenter
+          tasks={taskList}
+          compact
+          retryingTaskId={retryingTaskId}
+          onRetryTask={onRetryTask}
+          onOpenTasks={() => setActiveTab('dashboard')}
+          emptyAction={() => setActiveTab('content')}
+        />
       </section>
 
       <section className="context-panel__section">

@@ -340,6 +340,7 @@ def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) 
         source_url=source_url,
         tags=tags,
         metadata={
+            'source': 'generation',
             'generation_task_id': task.id,
             'task_type': task.task_type,
             'result': result,

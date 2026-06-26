@@ -8,9 +8,17 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.access import (
+    get_campaign_for_member,
+    get_draft_for_member,
+    get_project_for_member,
+    get_template_for_member,
+    require_role,
+)
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
 from api.models import (
@@ -39,18 +47,21 @@ from api.services import (
 )
 
 class CampaignCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         project_id = request.query_params.get('project')
-        query = Campaign.objects.select_related('project', 'project__organization').order_by('-created_at')
+        query = Campaign.objects.select_related('project', 'project__organization').filter(
+            project__organization__memberships__user=request.user,
+        ).order_by('-created_at')
         if project_id:
             query = query.filter(project_id=project_id)
         return Response([serialize_campaign(item) for item in query])
 
     def post(self, request):
         project_id = request.data.get('project_id')
-        project = Project.objects.filter(pk=project_id).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        project = get_project_for_member(request.user, project_id)
+        require_role(request.user, project.organization, 'creator')
         campaign = Campaign.objects.create(
             project=project,
             name=request.data.get('name', 'Untitled Campaign'),
@@ -61,10 +72,11 @@ class CampaignCollectionView(APIView):
 
 
 class CampaignDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def patch(self, request, pk: int):
-        campaign = Campaign.objects.filter(pk=pk).first()
-        if not campaign:
-            return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+        campaign = get_campaign_for_member(request.user, pk)
+        require_role(request.user, campaign.project.organization, 'creator')
         if 'name' in request.data:
             campaign.name = request.data.get('name', campaign.name)
         if 'objective' in request.data:
@@ -75,10 +87,9 @@ class CampaignDetailView(APIView):
         return Response(serialize_campaign(campaign))
 
     def delete(self, request, pk: int):
-        campaign = Campaign.objects.filter(pk=pk).first()
-        if not campaign:
-            return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
-        user, _, _, _ = get_scope(request)
+        campaign = get_campaign_for_member(request.user, pk)
+        require_role(request.user, campaign.project.organization, 'creator')
+        user = request.user
         record_audit_log(
             action='delete',
             actor=user,
@@ -93,10 +104,14 @@ class CampaignDetailView(APIView):
 
 
 class WorkspaceDraftCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         project_id = request.query_params.get('project')
         project_slug = request.query_params.get('project_slug')
-        query = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').order_by('-updated_at')
+        query = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').filter(
+            organization__memberships__user=request.user,
+        ).order_by('-updated_at')
         if project_id:
             query = query.filter(project_id=project_id)
         elif project_slug:
@@ -105,9 +120,8 @@ class WorkspaceDraftCollectionView(APIView):
 
     def post(self, request):
         project_id = request.data.get('project_id')
-        project = Project.objects.filter(pk=project_id).select_related('organization').first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        project = get_project_for_member(request.user, project_id)
+        require_role(request.user, project.organization, 'creator')
         campaign = Campaign.objects.filter(pk=request.data.get('campaign_id'), project=project).first() if request.data.get('campaign_id') else None
         draft, _ = WorkspaceDraft.objects.update_or_create(
             project=project,
@@ -128,16 +142,15 @@ class WorkspaceDraftCollectionView(APIView):
 
 
 class WorkspaceDraftDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk: int):
-        draft = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').filter(pk=pk).first()
-        if not draft:
-            return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
+        draft = get_draft_for_member(request.user, pk)
         return Response(serialize_workspace_draft(draft))
 
     def patch(self, request, pk: int):
-        draft = WorkspaceDraft.objects.filter(pk=pk).first()
-        if not draft:
-            return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
+        draft = get_draft_for_member(request.user, pk)
+        require_role(request.user, draft.organization, 'creator')
         for field in ('name', 'selected_node_id', 'status'):
             if field in request.data:
                 setattr(draft, field, request.data.get(field, getattr(draft, field)))
@@ -156,24 +169,27 @@ class WorkspaceDraftDetailView(APIView):
 
 
 class WorkflowTemplateCollectionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         organization_slug = request.query_params.get('organization')
-        query = WorkflowTemplate.objects.select_related('organization', 'source_project', 'source_campaign').filter(is_public=True)
+        query = WorkflowTemplate.objects.select_related('organization', 'source_project', 'source_campaign').filter(
+            Q(is_public=True) | Q(organization__memberships__user=request.user)
+        ).distinct()
         if organization_slug:
             query = query.filter(organization__slug=organization_slug)
         return Response([serialize_workflow_template(item) for item in query])
 
     def post(self, request):
-        project = Project.objects.filter(pk=request.data.get('project_id')).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        project = get_project_for_member(request.user, request.data.get('project_id'))
+        require_role(request.user, project.organization, 'creator')
         template = WorkflowTemplate.objects.create(
             organization=project.organization,
             source_project=project,
             source_campaign=Campaign.objects.filter(pk=request.data.get('campaign_id'), project=project).first() if request.data.get('campaign_id') else None,
             title=request.data.get('title', project.name),
             description=request.data.get('description', ''),
-            author_username=request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME),
+            author_username=request.user.username,
             brand_context=request.data.get('brand_context', {}) if isinstance(request.data.get('brand_context', {}), dict) else {},
             nodes=request.data.get('nodes', []) if isinstance(request.data.get('nodes', []), list) else [],
             edges=request.data.get('edges', []) if isinstance(request.data.get('edges', []), list) else [],
@@ -185,13 +201,12 @@ class WorkflowTemplateCollectionView(APIView):
 
 
 class WorkflowTemplateForkView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, pk: int):
-        template = WorkflowTemplate.objects.filter(pk=pk).first()
-        if not template:
-            return Response({'error': 'Template not found'}, status=status.HTTP_404_NOT_FOUND)
-        project = Project.objects.filter(pk=request.data.get('project_id')).first()
-        if not project:
-            return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+        template = get_template_for_member(request.user, pk)
+        project = get_project_for_member(request.user, request.data.get('project_id'))
+        require_role(request.user, project.organization, 'creator')
         runtime_fields = {'status', 'output', 'task_id', 'error_message', 'feedback', 'input_schema', 'output_schema'}
         clean_nodes = [{k: v for k, v in node.items() if k not in runtime_fields} for node in (template.nodes or [])]
         draft, _ = WorkspaceDraft.objects.update_or_create(

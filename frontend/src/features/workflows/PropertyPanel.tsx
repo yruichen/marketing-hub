@@ -1,6 +1,8 @@
-import type { GenerationTaskRecord, WorkflowNode, WorkflowEdge } from '../../types/workspace';
+import type { GenerationTaskRecord, WorkflowNode, WorkflowEdge, WorkflowRunRecord } from '../../types/workspace';
 import { statusLabels } from './constants';
 import { nodeStatusDotClass } from './utils';
+import { classifyWorkflowFailure } from './workflowRecovery';
+import { workflowRunProgressLabel } from './workflowRunState';
 
 interface PropertyPanelProps {
   nodes: WorkflowNode[];
@@ -10,8 +12,11 @@ interface PropertyPanelProps {
   draftStatus?: string;
   runPreview: { stepCount: number; estimatedCost: string; estimatedMinutes: number };
   lastTasks: GenerationTaskRecord[];
+  currentWorkflowRun?: WorkflowRunRecord | null;
   onTidyLayout: () => void;
   onSelectNode: (id: string) => void;
+  onCopyNodeDiagnostics: (id: string) => void;
+  onRecoverFromNode: (id: string) => void;
 }
 
 function executionOrder(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[] {
@@ -81,8 +86,11 @@ export function PropertyPanel({
   draftStatus,
   runPreview,
   lastTasks,
+  currentWorkflowRun,
   onTidyLayout,
   onSelectNode,
+  onCopyNodeDiagnostics,
+  onRecoverFromNode,
 }: PropertyPanelProps) {
   const orderedNodes = executionOrder(nodes, edges);
   const succeededCount = nodes.filter((n) => n.status === 'succeeded').length;
@@ -95,14 +103,17 @@ export function PropertyPanel({
 
   const nodeErrors = nodes
     .filter((n) => n.status === 'failed' && n.error_message)
-    .map((n) => ({ id: n.id, label: n.label, message: n.error_message! }));
+    .map((n) => ({ id: n.id, nodeId: n.id, label: n.label, message: n.error_message! }));
 
   const taskErrors = lastTasks
     .filter((t) => t.status === 'failed' && t.error_message)
-    .map((t) => ({ id: `task-${t.id}`, label: `任务 #${t.id} (${t.task_type})`, message: t.error_message }));
+    .map((t) => ({ id: `task-${t.id}`, nodeId: '', label: `任务 #${t.id} (${t.task_type})`, message: t.error_message }));
 
   const allErrors = [...nodeErrors, ...taskErrors.filter((t) => !nodeErrors.some((n) => n.message === t.message))];
   const runningNode = orderedNodes.find((n) => n.status === 'running' || n.status === 'queued') || null;
+  const runAssetIds = Array.isArray(currentWorkflowRun?.summary?.asset_ids)
+    ? currentWorkflowRun.summary.asset_ids.filter((id): id is number => typeof id === 'number')
+    : [];
   const isolatedNodes = nodes.filter((node) => !edges.some((edge) => edge.source === node.id || edge.target === node.id));
   const missingConfigNodes = nodes.filter((node) => {
     if (node.type === 'copy') return !node.config?.tone || !node.config?.platform;
@@ -126,6 +137,24 @@ export function PropertyPanel({
           <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">运行</h4>
           <span className="text-[9px] font-black text-[var(--editorial-text)]">{summaryText}</span>
         </div>
+        {currentWorkflowRun ? (
+          <div className="mb-3 border border-[var(--editorial-stroke)]/50 bg-[var(--editorial-bg)]/35 px-2.5 py-2">
+            <div className="flex items-center justify-between gap-2 text-[10px]">
+              <span className="font-black text-[var(--editorial-text)]">Run #{currentWorkflowRun.id}</span>
+              <span className="font-black uppercase text-[var(--editorial-text-gray)]">{currentWorkflowRun.status}</span>
+            </div>
+            <p className="mt-1 text-[9px] font-semibold text-[var(--editorial-text-gray)]">
+              {workflowRunProgressLabel(currentWorkflowRun)}
+              {currentWorkflowRun.actual_cost_usd ? ` · $${currentWorkflowRun.actual_cost_usd}` : ''}
+            </p>
+            {runAssetIds.length > 0 ? (
+              <div className="mt-2 border border-emerald-300/60 bg-emerald-50/60 px-2 py-1.5 text-[9px] text-emerald-700">
+                <b>{runAssetIds.length}</b> 个产物已进入资产库
+                <span className="mt-1 block truncate font-mono">Asset {runAssetIds.slice(0, 6).map((id) => `#${id}`).join(' / ')}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-3 gap-2 text-[10px]">
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">节点</span><b>{runPreview.stepCount}</b></div>
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">预计耗时</span><b>{runPreview.estimatedMinutes} 分钟</b></div>
@@ -189,8 +218,50 @@ export function PropertyPanel({
             <h5 className="text-[9px] font-black uppercase text-rose-600">生成报错</h5>
             {allErrors.map((item) => (
               <div key={item.id} className="border border-rose-300/60 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-2 text-[10px] leading-relaxed">
-                <p className="font-black text-rose-700">{item.label}</p>
-                <p className="mt-1 text-rose-600/90 whitespace-pre-wrap break-words">{item.message}</p>
+                {(() => {
+                  const recovery = classifyWorkflowFailure(item.message);
+                  return (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-black text-rose-700">{item.label}</p>
+                          <p className="mt-0.5 font-black text-[var(--editorial-text)]">{recovery.title}</p>
+                        </div>
+                        <span className="shrink-0 border border-rose-300 px-1.5 py-0.5 text-[8px] font-black uppercase text-rose-700">{recovery.kind}</span>
+                      </div>
+                      <p className="mt-1 text-rose-700/90">{recovery.explanation}</p>
+                      <p className="mt-1 text-rose-600/80 whitespace-pre-wrap break-words line-clamp-3">{item.message}</p>
+                      <div className="mt-2 grid grid-cols-1 gap-1.5">
+                        <button
+                          type="button"
+                          className="border border-rose-300 bg-white/50 px-2 py-1 text-left text-[9px] font-black text-rose-700 hover:bg-white disabled:opacity-40"
+                          disabled={!item.nodeId}
+                          onClick={() => item.nodeId && onSelectNode(item.nodeId)}
+                        >
+                          {recovery.primaryAction}
+                        </button>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            className="border border-[var(--editorial-stroke)] bg-white/50 px-2 py-1 text-[9px] font-black hover:bg-white disabled:opacity-40"
+                            disabled={!item.nodeId}
+                            onClick={() => item.nodeId && onCopyNodeDiagnostics(item.nodeId)}
+                          >
+                            复制输入/上游输出
+                          </button>
+                          <button
+                            type="button"
+                            className="border border-[var(--editorial-stroke)] bg-white/50 px-2 py-1 text-[9px] font-black hover:bg-white disabled:opacity-40"
+                            disabled={!item.nodeId || isRunning}
+                            onClick={() => item.nodeId && onRecoverFromNode(item.nodeId)}
+                          >
+                            {recovery.secondaryAction}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>

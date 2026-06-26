@@ -23,17 +23,45 @@ export type NodePreset = {
 };
 
 export const presets: NodePreset[] = [
-  { type: 'context', label: '品牌上下文', icon: Settings2, width: 260, height: 200 },
-  { type: 'copy', label: '文案节点', icon: Copy, width: 260, height: 200 },
-  { type: 'image_prompt', label: '图片提示词', icon: Sparkles, width: 260, height: 200 },
-  { type: 'image_generation', label: '图片生成', icon: ImageIcon, width: 260, height: 200 },
-  { type: 'storyboard', label: '分镜节点', icon: Film, width: 260, height: 200 },
-  { type: 'video_generation', label: '视频生成', icon: Video, width: 260, height: 200 },
-  { type: 'audio', label: '配音节点', icon: Mic, width: 260, height: 200 },
-  { type: 'retrieval', label: '检索节点', icon: Search, width: 260, height: 200 },
-  { type: 'review', label: '审核节点', icon: ShieldCheck, width: 260, height: 200 },
-  { type: 'custom_agent', label: '自定义智能体', icon: Sparkles, width: 260, height: 200 },
+  { type: 'context', label: '读取品牌记忆', icon: Settings2, width: 280, height: 240 },
+  { type: 'copy', label: '写渠道文案', icon: Copy, width: 280, height: 240 },
+  { type: 'image_prompt', label: '生成图片说明', icon: Sparkles, width: 280, height: 240 },
+  { type: 'image_generation', label: '生成配图', icon: ImageIcon, width: 280, height: 240 },
+  { type: 'storyboard', label: '生成分镜脚本', icon: Film, width: 280, height: 240 },
+  { type: 'video_generation', label: '生成视频', icon: Video, width: 280, height: 240 },
+  { type: 'audio', label: '合成配音', icon: Mic, width: 280, height: 240 },
+  { type: 'retrieval', label: '查找历史素材', icon: Search, width: 280, height: 240 },
+  { type: 'review', label: '内容审阅', icon: ShieldCheck, width: 280, height: 240 },
+  { type: 'custom_agent', label: '自定义步骤', icon: Sparkles, width: 280, height: 240 },
 ];
+
+export const nodeTypeDescriptions: Record<string, string> = {
+  context: '读取当前项目的品牌、受众、语调和禁区。',
+  copy: '按渠道规则生成标题、正文、标签和 CTA。',
+  image_prompt: '把文案转成可用于生图的视觉描述。',
+  image_generation: '调用图片模型生成可保存的视觉资产。',
+  storyboard: '把主题拆成镜头、旁白和时长。',
+  video_generation: '根据提示词、分镜或参考图生成视频。',
+  audio: '将口播文本转成音频资产。',
+  retrieval: '从品牌记忆、资产库和授权资料里找素材。',
+  rag_search: '从品牌记忆、资产库和授权资料里找素材。',
+  review: '检查禁用词、品牌一致性和渠道规则。',
+  custom_agent: '高级用户定义自己的输入、提示词和输出。',
+};
+
+export const nodeTypeOutputs: Record<string, string> = {
+  context: '品牌摘要、语调、受众、禁用词',
+  copy: '标题、正文、标签、CTA',
+  image_prompt: '图片 prompt、负面提示词、画幅比例',
+  image_generation: '图片资产、图片 URL、修订 prompt',
+  storyboard: '分镜镜头、旁白、总时长',
+  video_generation: '视频资产、视频 URL、缩略图',
+  audio: '音频资产、音频 URL、字幕时间线',
+  retrieval: '参考素材、洞察、可复用角度',
+  rag_search: '参考素材、洞察、可复用角度',
+  review: '风险项、品牌一致性评分、渠道规则建议',
+  custom_agent: '自定义响应和结构化输出',
+};
 
 export const ioSchema: Record<LegacyNodeType, { input: Record<string, string>; output: Record<string, string> }> = {
   context: { input: {}, output: { brand_summary: 'String', tone: 'String', audience: 'String', forbidden_words: 'String[]' } },
@@ -109,22 +137,22 @@ export const defaultNodeConfig = (type: NodeType, brandContext: BrandContext) =>
 
 export const defaultNodes = (projectName: string): WorkflowNode[] => [
   {
-    id: 'brand-brief', type: 'context', label: '品牌上下文', x: 72, y: 118, width: 260, height: 200, status: 'idle',
+    id: 'brand-brief', type: 'context', label: '读取品牌记忆', x: 72, y: 118, width: 280, height: 240, status: 'idle',
     config: { summary: `${projectName} 品牌上下文`, input_schema: {}, output_schema: ioSchema.context.output },
     output: {}, input_schema: ioSchema.context.input, output_schema: ioSchema.context.output,
   },
   {
-    id: 'copy-agent', type: 'copy', label: '文案节点', x: 384, y: 98, width: 260, height: 200, status: 'idle',
+    id: 'copy-agent', type: 'copy', label: '写渠道文案', x: 384, y: 98, width: 280, height: 240, status: 'idle',
     config: { tone: '清晰专业', platform: 'Xiaohongshu', input_schema: ioSchema.copy.input, output_schema: ioSchema.copy.output },
     output: {}, input_schema: ioSchema.copy.input, output_schema: ioSchema.copy.output,
   },
   {
-    id: 'image-prompt-agent', type: 'image_prompt', label: '图片提示词', x: 696, y: 116, width: 260, height: 200, status: 'idle',
+    id: 'image-prompt-agent', type: 'image_prompt', label: '生成图片说明', x: 696, y: 116, width: 280, height: 240, status: 'idle',
     config: { style_skill: 'editorial_magazine', aspect_ratio: '1:1', negative_prompt: '低清晰度、夸张承诺、品牌不一致', input_schema: ioSchema.image_prompt.input, output_schema: ioSchema.image_prompt.output },
     output: {}, input_schema: ioSchema.image_prompt.input, output_schema: ioSchema.image_prompt.output,
   },
   {
-    id: 'review-agent', type: 'review', label: '审核节点', x: 384, y: 340, width: 260, height: 200, status: 'idle',
+    id: 'review-agent', type: 'review', label: '内容审阅', x: 384, y: 340, width: 280, height: 240, status: 'idle',
     config: { forbidden_words: '绝对、第一、包治', channel_rules: '平台基础合规规则', input_schema: ioSchema.review.input, output_schema: ioSchema.review.output },
     output: {}, input_schema: ioSchema.review.input, output_schema: ioSchema.review.output,
   },
@@ -141,7 +169,7 @@ export const statusLabels: Record<string, string> = {
 };
 
 export const nodeTypeLabels: Record<string, string> = {
-  context: '品牌上下文', copy: '文案', image_prompt: '图片提示词', image_generation: '图片生成',
-  image: '图片生成', storyboard: '分镜', video_generation: '视频生成', video: '视频生成', audio: '配音', retrieval: '检索',
-  rag_search: '检索', review: '审核', custom_agent: '自定义智能体',
+  context: '读取品牌记忆', copy: '写渠道文案', image_prompt: '生成图片说明', image_generation: '生成配图',
+  image: '生成配图', storyboard: '生成分镜脚本', video_generation: '生成视频', video: '生成视频', audio: '合成配音', retrieval: '查找历史素材',
+  rag_search: '查找历史素材', review: '内容审阅', custom_agent: '自定义步骤',
 };

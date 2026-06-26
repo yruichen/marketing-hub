@@ -11,7 +11,7 @@ ROLE_MATRIX = {
     'viewer': {'read'},
     'ops': {'read', 'export', 'retry', 'billing_read'},
     'creator': {'read', 'write', 'generate', 'export'},
-    'admin': {'read', 'write', 'generate', 'export', 'billing_write', 'member_write', 'key_write', 'delete'},
+    'admin': {'read', 'write', 'generate', 'export', 'billing_read', 'billing_write', 'member_write', 'key_write', 'delete'},
 }
 
 
@@ -25,4 +25,3 @@ def role_at_least(role: str | None, minimum: str) -> bool:
 
 def permissions_for_role(role: str | None) -> set[str]:
     return set(ROLE_MATRIX.get((role or 'viewer').lower(), ROLE_MATRIX['viewer']))
-
