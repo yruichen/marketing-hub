@@ -3,7 +3,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.test import Client, SimpleTestCase, override_settings
-from rest_framework.test import APITestCase
+from rest_framework.test import APITestCase, force_authenticate
 
 from ai_gateway.content_package import assemble_content_package
 from ai_gateway.prompt_catalog import PROMPT_ASSETS, get_prompt_asset, prompt_registry_snapshot
@@ -310,12 +310,18 @@ class ImagePromptHelperTests(SimpleTestCase):
 
 class AIConfigPermissionTests(APITestCase):
     def setUp(self):
-        self.client = Client(enforce_csrf_checks=True)
-        self.user = User.objects.get(username='ROOT')
+        self.staff = User.objects.get(username='ROOT')
+        self.admin = User.objects.create_user(username='ai-org-admin', password='123')
+        self.creator = User.objects.create_user(username='ai-org-creator', password='123')
+        self.organization = Organization.objects.create(name='AI Org', slug='ai-org')
+        Membership.objects.create(user=self.admin, organization=self.organization, role='admin')
+        Membership.objects.create(user=self.creator, organization=self.organization, role='creator')
 
-    def test_post_ai_config_allows_admin_username_without_session(self):
-        csrf_response = self.client.get('/api/ai/config/')
-        csrf_token = csrf_response.headers.get('X-CSRFToken') or self.client.cookies['csrftoken'].value
+    def test_ai_config_get_requires_login(self):
+        response = self.client.get('/api/ai/config/')
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_ai_config_post_ignores_username_staff_claim(self):
         response = self.client.post(
             '/api/ai/config/',
             {
@@ -324,11 +330,53 @@ class AIConfigPermissionTests(APITestCase):
                 'model_name': 'agnes-2.0-flash',
                 'billing_mode': 'byok',
                 'username': 'ROOT',
+                'organization': self.organization.slug,
             },
-            content_type='application/json',
-            HTTP_X_CSRFTOKEN=csrf_token,
+            format='json',
+        )
+        self.assertIn(response.status_code, (401, 403), response.content)
+
+    def test_creator_cannot_read_ai_config(self):
+        self.client.login(username='ai-org-creator', password='123')
+        response = self.client.get(f'/api/ai/config/?organization={self.organization.slug}')
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_manage_org_byok_config(self):
+        self.client.login(username='ai-org-admin', password='123')
+        response = self.client.post(
+            '/api/ai/config/',
+            {
+                'organization': self.organization.slug,
+                'provider': 'agnes',
+                'api_key': 'org-key',
+                'model_name': 'agnes-2.0-flash',
+                'billing_mode': 'byok',
+            },
+            format='json',
         )
         self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(
+            AIConfiguration.objects.filter(
+                organization=self.organization,
+                provider='agnes',
+                billing_mode='byok',
+            ).exists()
+        )
+
+    def test_org_admin_cannot_manage_platform_config(self):
+        self.client.login(username='ai-org-admin', password='123')
+        response = self.client.post(
+            '/api/ai/config/',
+            {
+                'organization': self.organization.slug,
+                'provider': 'agnes',
+                'api_key': 'platform-key',
+                'model_name': 'agnes-2.0-flash',
+                'billing_mode': 'platform',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class AssistantAgentTests(APITestCase):
@@ -628,6 +676,7 @@ class AssistantChatStreamingTests(APITestCase):
             {'message': '你好助手', 'page_context': {'tab': 'projects'}},
             content_type='application/json',
         )
+        force_authenticate(factory_req, user=self.user)
         factory_req.session = self.client_.session
         view = AssistantChatView.as_view()
         view_resp = view(factory_req)
@@ -649,6 +698,7 @@ class AssistantChatStreamingTests(APITestCase):
             {'message': '测试持久化'},
             content_type='application/json',
         )
+        force_authenticate(factory_req, user=self.user)
         factory_req.session = self.client_.session
         view = AssistantChatView.as_view()
         view_resp = view(factory_req)

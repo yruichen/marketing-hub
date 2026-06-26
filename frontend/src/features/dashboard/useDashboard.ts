@@ -8,7 +8,7 @@ const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
 export function useWorkspaceScope(username: string | null) {
   const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope | null>(null);
 
-  const fetchWorkspaceBootstrap = useCallback(async () => {
+  const fetchWorkspaceBootstrap = useCallback(async (): Promise<WorkspaceScope | null> => {
     try {
       const params = new URLSearchParams({
         username: username || DEMO_USERNAME,
@@ -21,15 +21,17 @@ export function useWorkspaceScope(username: string | null) {
       if (res.ok) {
         const data: { scope: WorkspaceScope } = await res.json();
         setWorkspaceScope(data.scope);
+        return data.scope;
       }
     } catch (err) {
       console.error('Failed to fetch workspace bootstrap', err);
     }
+    return null;
   }, [username]);
 
   const selectProjectScope = useCallback((
     project: ProjectRecord,
-    campaign?: CampaignRecord,
+    campaign?: CampaignRecord | WorkspaceScope['campaign'],
     currentUsername: string | null = null,
   ) => {
     localStorage.setItem('mh_project_slug', project.slug);

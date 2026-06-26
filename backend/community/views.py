@@ -1,21 +1,38 @@
 import json
 
 from django.conf import settings
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.models import CommunityCreation
 from api.scope import get_scope
+from api.access import require_role
 from api.serializers import CommunityCreationSerializer
 
 
+def visible_community_creations(request):
+    query = CommunityCreation.objects.select_related('organization', 'project', 'campaign')
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        return query.filter(visibility='public')
+    return query.filter(
+        Q(visibility='public')
+        | Q(organization__memberships__user=user, visibility__in=['organization', 'private'])
+    ).distinct()
+
+
 class CommunityCreationView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
     def get(self, request):
         creation_type = request.query_params.get('creation_type')
         organization_slug = request.query_params.get('organization')
         project_slug = request.query_params.get('project')
-        query = CommunityCreation.objects.all().select_related('organization', 'project', 'campaign')
+        query = visible_community_creations(request)
 
         if creation_type:
             query = query.filter(creation_type=creation_type)
@@ -24,10 +41,16 @@ class CommunityCreationView(APIView):
         if project_slug:
             query = query.filter(project__slug=project_slug)
 
-        return Response(CommunityCreationSerializer(query, many=True).data)
+        try:
+            page_size = min(100, max(1, int(request.query_params.get('page_size', '30'))))
+        except (TypeError, ValueError):
+            page_size = 30
+
+        return Response(CommunityCreationSerializer(query.order_by('-created_at')[:page_size], many=True).data)
 
     def post(self, request):
-        username, org, project, campaign = get_scope(request)
+        user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         creation_type = request.data.get('creation_type')
         title = request.data.get('title')
         content_dict = request.data.get('content', {})
@@ -37,12 +60,15 @@ class CommunityCreationView(APIView):
 
         if not creation_type or not title or not content_dict:
             return Response({'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+        visibility = request.data.get('visibility', 'private')
+        if visibility not in dict(CommunityCreation.VISIBILITY_CHOICES):
+            visibility = 'private'
 
         item = CommunityCreation.objects.create(
             organization=org,
             project=project,
             campaign=campaign,
-            username=username.username if username else request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME),
+            username=user.username,
             creation_type=creation_type,
             title=title,
             content=json.dumps(content_dict, ensure_ascii=False),
@@ -50,14 +76,19 @@ class CommunityCreationView(APIView):
             audio_url=audio_url,
             tags=tags if isinstance(tags, list) else [],
             rag_indexed=False,
+            visibility=visibility,
+            published_at=timezone.now() if visibility == 'public' else None,
+            published_by=user if visibility == 'public' else None,
         )
 
         return Response({'message': 'Creation shared to the community workspace!', 'id': item.id}, status=status.HTTP_201_CREATED)
 
 
 class LikeCreationView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, pk):
-        item = CommunityCreation.objects.filter(pk=pk).first()
+        item = visible_community_creations(request).filter(pk=pk).first()
         if not item:
             return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
         item.likes += 1
@@ -67,11 +98,11 @@ class LikeCreationView(APIView):
 
 class RAGSearchView(APIView):
     def get(self, request):
-        query = request.query_params.get('q', '').strip()
+        query = request.query_params.get('q', '').strip()[:512]
         if not query:
             return Response({'results': [], 'rag_logs': ['请输入品牌关键词后再检索。']})
 
-        creations = CommunityCreation.objects.all().select_related('organization', 'project')
+        creations = visible_community_creations(request).select_related('organization', 'project')[:100]
         results = []
         for item in creations:
             haystack = f"{item.title} {item.content} {' '.join(item.tags)}"

@@ -19,8 +19,32 @@ export function nodeStatusDotClass(status?: string) {
 export type NodeOutputDisplay =
   | { kind: 'empty'; text: string }
   | { kind: 'text'; text: string }
+  | { kind: 'copy'; title?: string; body: string; tags?: string[] }
   | { kind: 'image'; text: string; imageUrl: string }
-  | { kind: 'video'; text: string; videoUrl: string; thumbnailUrl?: string };
+  | { kind: 'video'; text: string; videoUrl: string; thumbnailUrl?: string }
+  | { kind: 'audio'; text: string; audioUrl: string }
+  | { kind: 'review'; text: string; issueCount: number; score?: string };
+
+function unwrapOutput(output?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!output) return output;
+  const data = output.data;
+  if (data && typeof data === 'object' && !Array.isArray(data)) return data as Record<string, unknown>;
+  const result = output.result;
+  if (result && typeof result === 'object' && !Array.isArray(result)) return result as Record<string, unknown>;
+  return output;
+}
+
+function findString(output: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = output[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nested = findString(value as Record<string, unknown>, keys);
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
 
 function pickOutputText(output: Record<string, unknown>): string | null {
   const textKeys = ['body', 'prompt', 'response', 'title', 'summary', 'revised_prompt', 'voiceover', 'text'];
@@ -53,10 +77,11 @@ export function resolveNodeOutputDisplay(
   output?: Record<string, unknown>,
   status?: string,
 ): NodeOutputDisplay {
-  const videoUrl = typeof output?.video_url === 'string' ? output.video_url : '';
+  const resolved = unwrapOutput(output);
+  const videoUrl = resolved ? findString(resolved, ['video_url']) : '';
   if (videoUrl) {
-    const thumbnailUrl = typeof output?.thumbnail_url === 'string' ? output.thumbnail_url : undefined;
-    const seconds = output?.duration_seconds;
+    const thumbnailUrl = resolved ? findString(resolved, ['thumbnail_url', 'poster_url']) || undefined : undefined;
+    const seconds = resolved?.duration_seconds;
     return {
       kind: 'video',
       text: seconds ? `已生成 ${seconds} 秒视频` : '已生成视频',
@@ -65,22 +90,53 @@ export function resolveNodeOutputDisplay(
     };
   }
 
-  const imageUrl = typeof output?.image_url === 'string' ? output.image_url : '';
+  const imageUrl = resolved ? findString(resolved, ['image_url', 'source_url', 'url']) : '';
   if (imageUrl) {
-    return { kind: 'image', text: '已生成图片', imageUrl };
+    const revisedPrompt = resolved ? findString(resolved, ['revised_prompt', 'prompt', 'prompt_zh']) : '';
+    return { kind: 'image', text: revisedPrompt || '已生成图片', imageUrl };
   }
 
-  const text = output ? pickOutputText(output) : null;
+  const audioUrl = resolved ? findString(resolved, ['audio_url']) : '';
+  if (audioUrl) {
+    const text = resolved ? findString(resolved, ['text', 'voiceover', 'summary']) : '';
+    return { kind: 'audio', text: text || '已生成音频', audioUrl };
+  }
+
+  if (resolved?.brand_consistency != null || resolved?.sensitive_word_issues || resolved?.channel_rules) {
+    const issues = [
+      ...(Array.isArray(resolved.sensitive_word_issues) ? resolved.sensitive_word_issues : []),
+      ...(Array.isArray(resolved.channel_rules) ? resolved.channel_rules : []),
+    ];
+    return {
+      kind: 'review',
+      text: issues.length ? `发现 ${issues.length} 个风险项` : '未发现明显风险',
+      issueCount: issues.length,
+      score: resolved.brand_consistency != null ? String(resolved.brand_consistency) : undefined,
+    };
+  }
+
+  if (resolved && (typeof resolved.title === 'string' || Array.isArray(resolved.paragraphs) || typeof resolved.body === 'string')) {
+    const title = typeof resolved.title === 'string' ? resolved.title : undefined;
+    const body = typeof resolved.body === 'string'
+      ? resolved.body
+      : Array.isArray(resolved.paragraphs)
+      ? (resolved.paragraphs as string[]).filter(Boolean).join('\n')
+      : findString(resolved, ['text', 'summary']);
+    const tags = Array.isArray(resolved.tags) ? (resolved.tags as string[]).filter(Boolean).slice(0, 5) : undefined;
+    if (body || title) return { kind: 'copy', title, body: body || title || '', tags };
+  }
+
+  const text = resolved ? pickOutputText(resolved) : null;
   if (text) return { kind: 'text', text };
 
   if (status === 'running') return { kind: 'empty', text: '生成中…' };
   if (status === 'queued') return { kind: 'empty', text: '排队等待…' };
   if (status === 'failed') {
-    const err = output?.error ?? output?.error_message;
+    const err = resolved?.error ?? resolved?.error_message;
     return { kind: 'text', text: err ? String(err) : '生成失败，请检查配置后重试' };
   }
-  if (output && Object.keys(output).length > 0) {
-    const compact = JSON.stringify(output);
+  if (resolved && Object.keys(resolved).length > 0) {
+    const compact = JSON.stringify(resolved);
     if (compact.length > 2) return { kind: 'text', text: compact.slice(0, 240) };
   }
   return { kind: 'empty', text: '运行后在此显示结果' };
@@ -88,7 +144,7 @@ export function resolveNodeOutputDisplay(
 
 export function summarizeOutput(output?: Record<string, unknown>) {
   const display = resolveNodeOutputDisplay(output);
-  if (display.kind === 'image') return display.text;
+  if (display.kind === 'copy') return display.title ? `${display.title} · ${display.body}` : display.body;
   return display.text;
 }
 

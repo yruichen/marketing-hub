@@ -1,6 +1,6 @@
 import { GitBranch, Settings2 } from 'lucide-react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { nodeTypeLabels, presets, statusLabels, type NodeType } from './constants';
+import { nodeTypeDescriptions, nodeTypeLabels, nodeTypeOutputs, presets, statusLabels, type NodeType } from './constants';
 import { nodeStatusClass, nodeStatusDotClass, resolveNodeOutputDisplay } from './utils';
 
 export interface FlowNodeData {
@@ -33,7 +33,7 @@ function NodeResultBox({ output, status, errorMessage }: { output: Record<string
 
   return (
     <div
-      className={`mt-2 flex-1 min-h-[76px] rounded border px-2.5 py-2 overflow-hidden flex flex-col ${
+      className={`mt-2 flex-1 min-h-[112px] rounded border px-2.5 py-2 overflow-hidden flex flex-col ${
         isPending
           ? 'border-dashed border-[var(--editorial-stroke)]/50 bg-[var(--editorial-bg)]/30'
           : 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/60'
@@ -55,13 +55,37 @@ function NodeResultBox({ output, status, errorMessage }: { output: Record<string
           <span className="text-[11px] leading-snug text-[var(--editorial-text)] line-clamp-3">{display.text}</span>
         </div>
       ) : display.kind === 'image' ? (
-        <div className="mt-1.5 flex-1 min-h-0 flex items-center gap-2">
+        <div className="mt-1.5 flex-1 min-h-0 grid grid-cols-[92px_minmax(0,1fr)] gap-2">
           <img
             src={display.imageUrl}
             alt="节点生成图片"
-            className="h-14 w-14 shrink-0 rounded border border-[var(--editorial-stroke)]/40 object-cover bg-[var(--editorial-paper)]"
+            className="h-[86px] w-[92px] rounded border border-[var(--editorial-stroke)]/40 object-cover bg-[var(--editorial-paper)]"
           />
-          <span className="text-[11px] leading-snug text-[var(--editorial-text)] line-clamp-3">{display.text}</span>
+          <span className="min-w-0 text-[11px] leading-snug text-[var(--editorial-text)] line-clamp-5">{display.text}</span>
+        </div>
+      ) : display.kind === 'copy' ? (
+        <div className="mt-1.5 flex-1 min-h-0 space-y-1.5">
+          {display.title ? <h5 className="line-clamp-2 text-[12px] font-black leading-snug text-[var(--editorial-text)]">{display.title}</h5> : null}
+          <p className="line-clamp-4 text-[11px] font-semibold leading-snug text-[var(--editorial-text-muted)]">{display.body}</p>
+          {display.tags?.length ? (
+            <div className="flex flex-wrap gap-1 text-[8px] font-black text-[var(--editorial-accent-blue)]">
+              {display.tags.map((tag) => <span key={tag}>#{tag}</span>)}
+            </div>
+          ) : null}
+        </div>
+      ) : display.kind === 'audio' ? (
+        <div className="mt-1.5 flex-1 min-h-0 space-y-2">
+          <div className="flex h-8 items-end gap-1 border-b border-[var(--editorial-stroke)]/30 pb-1">
+            {Array.from({ length: 18 }).map((_, index) => (
+              <span key={index} className={`flex-1 bg-[var(--editorial-stroke)]/70 ${index % 3 === 0 ? 'h-6' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />
+            ))}
+          </div>
+          <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-[var(--editorial-text)]">{display.text}</p>
+        </div>
+      ) : display.kind === 'review' ? (
+        <div className="mt-1.5 flex-1 min-h-0 rounded border border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] px-2 py-2">
+          <p className={`text-[12px] font-black ${display.issueCount > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{display.text}</p>
+          {display.score ? <p className="mt-1 text-[10px] font-semibold text-[var(--editorial-text-gray)]">品牌一致性：{display.score}</p> : null}
         </div>
       ) : (
         <p
@@ -94,11 +118,13 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
   const Icon = preset?.icon || Settings2;
   const statusLabel = statusLabels[status] || status || '未运行';
   const typeLabel = nodeTypeLabels[nodeType] || preset?.label || nodeType;
+  const description = nodeTypeDescriptions[nodeType] || '';
+  const expectedOutput = nodeTypeOutputs[nodeType] || '';
   const isDimmedTarget = connectionModeActive && !isConnectionSource && !isCompatibleTarget;
 
   return (
     <div
-      className={`group w-full h-full min-h-[188px] border-1.5 bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 overflow-hidden flex flex-col transition-opacity duration-150 ${nodeStatusClass(status)} ${selected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : ''} ${isConnectionSource ? 'ring-2 ring-blue-500 ring-offset-1 animate-pulse' : ''} ${isDimmedTarget ? 'opacity-40' : ''}`}
+      className={`group w-full h-full min-h-[228px] border-1.5 bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 overflow-hidden flex flex-col transition-opacity duration-150 ${nodeStatusClass(status)} ${selected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : ''} ${isConnectionSource ? 'ring-2 ring-blue-500 ring-offset-1 animate-pulse' : ''} ${isDimmedTarget ? 'opacity-40' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -137,6 +163,16 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
             <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${nodeStatusDotClass(status)}`} />
             <span>{statusLabel}</span>
           </span>
+          {description ? (
+            <p className="mt-1 ml-6 line-clamp-2 text-[10px] font-semibold leading-snug text-[var(--editorial-text-gray)]">
+              {description}
+            </p>
+          ) : null}
+          {expectedOutput ? (
+            <p className="mt-1 ml-6 truncate text-[8px] font-black uppercase tracking-wide text-[var(--editorial-text-gray)]/70" title={expectedOutput}>
+              预计产物：{expectedOutput}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"

@@ -297,6 +297,110 @@ class WorkspaceDraft(models.Model):
         return f'{self.project.slug}:{self.name}'
 
 
+class WorkflowRun(models.Model):
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('running', 'Running'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('partial_success', 'Partial Success'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    draft = models.ForeignKey(WorkspaceDraft, on_delete=models.CASCADE, related_name='workflow_runs')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='workflow_runs')
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_runs')
+    campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_runs')
+    requested_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_runs')
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default='queued')
+    idempotency_key = models.CharField(max_length=160, blank=True, default='', db_index=True)
+    graph_version = models.CharField(max_length=32, default='v1')
+    input_snapshot = models.JSONField(default=dict, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    total_nodes = models.IntegerField(default=0)
+    completed_nodes = models.IntegerField(default=0)
+    failed_nodes = models.IntegerField(default=0)
+    token_count = models.IntegerField(default=0)
+    estimated_cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    actual_cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
+    celery_task_id = models.CharField(max_length=255, blank=True, default='')
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['organization', 'status', 'created_at']),
+            models.Index(fields=['draft', 'status']),
+        ]
+
+    def __str__(self) -> str:
+        return f'workflow-run:{self.id}:{self.status}'
+
+
+class WorkflowNodeRun(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('queued', 'Queued'),
+        ('running', 'Running'),
+        ('saving_asset', 'Saving Asset'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('skipped', 'Skipped'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    workflow_run = models.ForeignKey(WorkflowRun, on_delete=models.CASCADE, related_name='node_runs')
+    generation_task = models.ForeignKey(GenerationTask, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_node_runs')
+    retry_of = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='retries')
+    node_id = models.CharField(max_length=120)
+    node_type = models.CharField(max_length=40)
+    node_label = models.CharField(max_length=180, blank=True, default='')
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default='pending')
+    attempt = models.IntegerField(default=1)
+    input_snapshot = models.JSONField(default=dict, blank=True)
+    output_summary = models.JSONField(default=dict, blank=True)
+    error_code = models.CharField(max_length=80, blank=True, default='')
+    error_message = models.TextField(blank=True, default='')
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        unique_together = [('workflow_run', 'node_id', 'attempt')]
+        indexes = [
+            models.Index(fields=['workflow_run', 'status']),
+            models.Index(fields=['generation_task']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.workflow_run_id}:{self.node_id}:{self.status}'
+
+
+class WorkflowRunEvent(models.Model):
+    workflow_run = models.ForeignKey(WorkflowRun, on_delete=models.CASCADE, related_name='events')
+    node_run = models.ForeignKey(WorkflowNodeRun, on_delete=models.SET_NULL, null=True, blank=True, related_name='events')
+    event_type = models.CharField(max_length=60)
+    node_id = models.CharField(max_length=120, blank=True, default='')
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['workflow_run', 'created_at']),
+            models.Index(fields=['event_type']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.workflow_run_id}:{self.event_type}'
+
+
 class WorkflowTemplate(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_templates')
     source_project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_templates')
@@ -499,6 +603,11 @@ class CommunityCreation(models.Model):
         ('audio', 'AI Voiceover'),
         ('video', 'AI Video'),
     ]
+    VISIBILITY_CHOICES = [
+        ('private', 'Private'),
+        ('organization', 'Organization'),
+        ('public', 'Public'),
+    ]
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='community_creations', null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
@@ -513,6 +622,9 @@ class CommunityCreation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     likes = models.IntegerField(default=0)
     rag_indexed = models.BooleanField(default=False)
+    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private')
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='published_creations')
 
     class Meta:
         ordering = ['-created_at']

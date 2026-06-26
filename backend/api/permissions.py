@@ -26,20 +26,15 @@ def organization_from_request(request) -> Organization | None:
 
 def resolve_staff_user_from_request(request) -> User | None:
     user = getattr(request, 'user', None)
-    if user and getattr(user, 'is_authenticated', False):
-        organization = organization_from_request(request)
-        if organization is None and (user.is_staff or user.is_superuser):
-            return user
-        role = organization_for_user(user, organization)
-        if role_at_least(role, 'admin'):
-            return user
-
-    username = request.data.get('username') or request.query_params.get('username')
-    if not username:
+    if not user or not getattr(user, 'is_authenticated', False):
         return None
-    candidate = User.objects.filter(username=username, is_active=True).first()
-    if candidate and (candidate.is_staff or candidate.is_superuser):
-        return candidate
+    if user.is_staff or user.is_superuser:
+        return user
+    organization = organization_from_request(request)
+    if organization and role_at_least(organization_for_user(user, organization), 'admin'):
+        return user
+    if organization is None and Membership.objects.filter(user=user, role='admin').exists():
+        return user
     return None
 
 
@@ -53,7 +48,7 @@ class IsOrganizationMember(BasePermission):
 
 class OrganizationRolePermission(BasePermission):
     required_role = 'viewer'
-    allow_safe_without_membership = True
+    allow_safe_without_membership = False
 
     def has_permission(self, request, view):
         if request.method in SAFE_METHODS and self.allow_safe_without_membership:
@@ -70,11 +65,9 @@ class CanManageOrganization(OrganizationRolePermission):
 
 
 class CanManageAIConfiguration(BasePermission):
-    """Allow platform AI config changes for authenticated admins or demo staff via username."""
+    """Allow AI config access only to platform staff or organization admins."""
 
     def has_permission(self, request, view):
-        if request.method in SAFE_METHODS:
-            return True
         return resolve_staff_user_from_request(request) is not None
 
 

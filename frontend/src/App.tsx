@@ -15,7 +15,6 @@ import {
   Loader2,
   Menu,
   PanelRight,
-  Search,
   UserCircle,
   XCircle,
 } from 'lucide-react';
@@ -27,7 +26,7 @@ import { ProjectManager } from './features/projects';
 import { AssetsLibrary } from './features/assets';
 import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from './features/generation';
 import { taskTypeLabels, type CreationContent } from './features/generation';
-import { ContentPackagePanel, buildContentPackage } from './features/content-package';
+import { ContentPackagePanel, buildContentPackage, buildContentPackageRequest } from './features/content-package';
 import type { ContentPackage } from './features/generation';
 import { CommunityPage } from './features/community';
 import { ProfilePage } from './features/profile';
@@ -39,6 +38,7 @@ import { ReviewPage } from './features/review';
 import { ContextPanel } from './features/context-panel';
 import { OnboardingModal, onboardingDefaults } from './features/onboarding';
 import type { OnboardingState } from './features/onboarding';
+import { GlobalSearchBox, type GlobalSearchResult } from './features/search';
 import {
   AssistantBubble,
   AssistantPanel,
@@ -178,6 +178,8 @@ export default function App() {
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('mh_onboarding_complete') !== 'true');
+  const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
+  const [onboardingError, setOnboardingError] = useState('');
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   const [onboarding, setOnboarding] = useState<OnboardingState>(onboardingDefaults);
@@ -193,6 +195,7 @@ export default function App() {
   const [apiLive, setApiLive] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [latestTask, setLatestTask] = useState<GenerationTaskRecord | null>(null);
+  const [retryingTaskId, setRetryingTaskId] = useState<number | null>(null);
   const [agentLogs, setAgentLogs] = useState<string[]>([]);
   const [billingPlans, setBillingPlans] = useState<BillingPlanResponse | null>(null);
 
@@ -456,18 +459,127 @@ export default function App() {
     }
   }, [triggerToast]);
 
-  const completeOnboarding = useCallback(() => {
-    localStorage.setItem('mh_onboarding_complete', 'true');
-    setShowOnboarding(false);
-    const nextPackage = buildContentPackage(
-      { onboarding, copyInput: { brandName: onboarding.brandName, description: onboarding.brief, tone: onboarding.tone, platform: onboarding.channels[0] || '小红书' }, workspaceScope, contentBrief: onboarding.brief },
-      onboarding.brief,
-    );
-    setContentPackage(nextPackage);
-    setContentVersion('AI 初稿');
-    setActiveTab('content');
-    triggerToast('已生成第一份内容包草稿', 'success');
-  }, [onboarding, workspaceScope, setActiveTab, triggerToast]);
+  const completeOnboarding = useCallback(async () => {
+    if (onboardingSubmitting) return;
+    setOnboardingSubmitting(true);
+    setOnboardingError('');
+    setAgentLogs(['正在保存品牌记忆...', '随后会生成第一份内容包草稿。']);
+
+    try {
+      const scope = workspaceScope ?? await fetchWorkspaceBootstrap();
+      if (!scope?.organization?.slug || !scope?.project?.id) {
+        throw new Error('还没有可用项目，请稍后重试或先进入「我的项目」创建项目。');
+      }
+
+      const brandContext = {
+        ...(scope.project.brand_context || {}),
+        brand_name: onboarding.brandName,
+        industry: onboarding.industry,
+        audience: onboarding.audience,
+        tone: onboarding.tone,
+        forbidden_words: onboarding.forbiddenWords,
+        reference_links: onboarding.referenceLinks,
+        preferred_channels: onboarding.channels,
+        starter_template: onboarding.template,
+        use_case: onboarding.useCase,
+        campaign_goal: onboarding.brief,
+        onboarding_completed_at: new Date().toISOString(),
+      };
+
+      const projectResponse = await apiFetch(`/projects/${scope.project.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          brief: onboarding.brief,
+          brand_context: brandContext,
+          platform_tags: onboarding.channels,
+        }),
+      });
+      if (!projectResponse.ok) {
+        const data = await projectResponse.json().catch(() => ({}));
+        throw new Error(data.error || data.detail || `品牌记忆保存失败 (${projectResponse.status})`);
+      }
+      const updatedProject: ProjectRecord = await projectResponse.json();
+
+      let campaign = scope.campaign;
+      let createdCampaign: CampaignRecord | undefined;
+      if (!campaign?.id) {
+        const campaignResponse = await apiFetch('/campaigns/', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: updatedProject.id,
+            name: `${onboarding.useCase} Launch`,
+            objective: onboarding.brief,
+            status: 'active',
+          }),
+        });
+        if (campaignResponse.ok) {
+          createdCampaign = await campaignResponse.json() as CampaignRecord;
+          campaign = createdCampaign;
+        }
+      }
+
+      selectProjectScope(updatedProject, campaign?.id ? campaign : createdCampaign, username);
+      setAgentLogs((prev) => [...prev, '品牌记忆已保存到当前项目。', '正在调用 AI 生成内容包...']);
+
+      const payload = buildContentPackageRequest({
+        onboarding,
+        contentBrief: onboarding.brief,
+        copyInput: {
+          brandName: onboarding.brandName,
+          description: onboarding.brief,
+          tone: onboarding.tone,
+          platform: onboarding.channels[0] || '小红书',
+        },
+        workspaceScope: {
+          ...scope,
+          project: {
+            ...scope.project,
+            ...updatedProject,
+          },
+          campaign,
+        },
+        username,
+        storyboardDuration: 30,
+      });
+
+      const packageResponse = await apiFetch('/generate/content-package/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!packageResponse.ok) {
+        const data = await packageResponse.json().catch(() => ({}));
+        throw new Error(data.error || data.detail || `内容包生成失败 (${packageResponse.status})`);
+      }
+      const packageData: { content_package: ContentPackage; logs?: string[] } = await packageResponse.json();
+
+      setContentPackage(packageData.content_package);
+      setContentVersion(packageData.content_package.version || 'AI 初稿');
+      setAgentLogs(packageData.logs?.length ? packageData.logs : ['已生成第一份内容包草稿。']);
+      localStorage.setItem('mh_onboarding_complete', 'true');
+      setShowOnboarding(false);
+      setActiveTab('content');
+      await fetchWorkspaceBootstrap();
+      await fetchDashboard();
+      triggerToast('品牌记忆已保存，并生成第一份内容包', 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '首次引导保存失败';
+      setOnboardingError(message);
+      setAgentLogs((prev) => [...prev, message]);
+      triggerToast(message, 'error');
+    } finally {
+      setOnboardingSubmitting(false);
+    }
+  }, [
+    fetchDashboard,
+    fetchWorkspaceBootstrap,
+    onboarding,
+    onboardingSubmitting,
+    selectProjectScope,
+    setActiveTab,
+    triggerToast,
+    username,
+    workspaceScope,
+  ]);
 
   const handleLogin = async (values: LoginFormValues) => {
     setLoading(true);
@@ -574,6 +686,35 @@ export default function App() {
     }
   }, [navigate, setActiveSection]);
 
+  const handleGlobalSearchSelect = useCallback(async (result: GlobalSearchResult) => {
+    if (result.kind === 'project' && result.project) {
+      try {
+        const response = await apiFetch(`/projects/${result.project.id}/`);
+        const detail = response.ok ? await response.json() as ProjectRecord : result.project;
+        selectProjectScope(detail, undefined, username);
+        setActiveTab('projects');
+        triggerToast(`已切换到项目：${detail.name}`, 'success');
+      } catch {
+        selectProjectScope(result.project, undefined, username);
+        setActiveTab('projects');
+      }
+      return;
+    }
+    if (result.kind === 'asset') {
+      setActiveTab('assets');
+      triggerToast('已打开资产库，可继续筛选查看该资产。', 'info');
+      return;
+    }
+    if (result.kind === 'task' && result.task) {
+      setLatestTask(result.task);
+      setRightPanelOpen(true);
+      setActiveTab('dashboard');
+      triggerToast(`已定位到任务 #${result.task.id}`, 'info');
+      return;
+    }
+    setActiveTab(result.tab);
+  }, [selectProjectScope, setActiveTab, setRightPanelOpen, triggerToast, username]);
+
   const handleShareToCommunity = useCallback(async (
     type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video',
     title: string,
@@ -608,6 +749,42 @@ export default function App() {
     }
   }, [username, workspaceScope, triggerToast, fetchDashboard]);
 
+  const handleRetryTask = useCallback(async (task: GenerationTaskRecord) => {
+    if (retryingTaskId) return;
+    setRetryingTaskId(task.id);
+    setAgentLogs((prev) => [...prev, `正在重试任务 #${task.id}...`]);
+    try {
+      const response = await apiFetch(`/tasks/${task.id}/`, {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': `retry-${task.id}-${Date.now()}`,
+        },
+        body: JSON.stringify({
+          username: username || DEMO_USERNAME,
+          organization: workspaceScope?.organization.slug,
+          project: workspaceScope?.project.slug,
+          campaign: workspaceScope?.campaign.id,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || data.detail || `任务重试失败 (${response.status})`);
+      }
+      const retriedTask = data as GenerationTaskRecord;
+      setLatestTask(retriedTask);
+      await fetchDashboard();
+      await fetchWorkspaceBootstrap();
+      triggerToast(
+        retriedTask.status === 'succeeded' ? `任务 #${retriedTask.id} 已重试成功` : `任务 #${retriedTask.id} 已重新执行`,
+        retriedTask.status === 'failed' ? 'error' : 'success',
+      );
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : '任务重试失败', 'error');
+    } finally {
+      setRetryingTaskId(null);
+    }
+  }, [fetchDashboard, fetchWorkspaceBootstrap, retryingTaskId, triggerToast, username, workspaceScope]);
+
   // One-time URL → store sync on mount, so deep links / refresh land
   // on the right tab. After that, store is the source of truth: every
   // sidebar click / programmatic jump goes through setActiveSection,
@@ -633,6 +810,14 @@ export default function App() {
       navigate('/dashboard', { replace: true });
     }
   }, [authUser, location.pathname, navigate, setActiveSection]);
+
+  useEffect(() => {
+    const handleOpenProjectBrandMemory = () => {
+      setActiveTab('projects');
+    };
+    window.addEventListener('mh:open-project-brand-memory', handleOpenProjectBrandMemory);
+    return () => window.removeEventListener('mh:open-project-brand-memory', handleOpenProjectBrandMemory);
+  }, [setActiveTab]);
 
   // Initial bootstrap: API status + workspace + dashboard + billing
   useEffect(() => {
@@ -801,6 +986,8 @@ export default function App() {
             setShowOnboarding(false);
           }}
           onComplete={completeOnboarding}
+          isCompleting={onboardingSubmitting}
+          error={onboardingError}
         />
       )}
 
@@ -854,16 +1041,13 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <label className="relative hidden lg:flex items-center w-[190px] xl:w-[220px]">
-                  <Search className="absolute left-2.5 h-3.5 w-3.5 text-[var(--editorial-text-gray)]" aria-hidden="true" />
-                  <input
-                    value={globalSearch}
-                    onChange={(event) => setGlobalSearch(event.target.value)}
-                    className="h-8 w-full rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-default)] pl-8 pr-2 text-[10px] focus:outline-none focus:border-[var(--brand-accent-strong)]"
-                    placeholder="搜索项目、brief、资产…"
-                    aria-label="全局搜索"
-                  />
-                </label>
+                <GlobalSearchBox
+                  organizationSlug={workspaceScope?.organization.slug}
+                  recentTasks={recentTasks}
+                  value={globalSearch}
+                  onChange={setGlobalSearch}
+                  onSelect={handleGlobalSearchSelect}
+                />
                 {currentActiveTask ? (
                   <button
                     type="button"
@@ -1020,6 +1204,8 @@ export default function App() {
                   await fetchWorkspaceBootstrap();
                   await fetchDashboard();
                 }}
+                onRetryTask={handleRetryTask}
+                retryingTaskId={retryingTaskId}
               />
             )}
 
@@ -1118,7 +1304,7 @@ export default function App() {
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
                 fetchDashboard={async () => { await fetchDashboard(); }}
-                onWorkspaceRefresh={fetchWorkspaceBootstrap}
+                onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
                 onShare={handleShareToCommunity}
               />
             )}
@@ -1173,7 +1359,7 @@ export default function App() {
                 workspaceScope={workspaceScope}
                 username={username}
                 triggerToast={triggerToast}
-                onWorkspaceRefresh={fetchWorkspaceBootstrap}
+                onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
               />
             )}
           </div>
@@ -1186,6 +1372,8 @@ export default function App() {
                 contentPackage={contentPackage}
                 setActiveTab={setActiveTab}
                 onClose={() => setRightPanelOpen(false)}
+                onRetryTask={handleRetryTask}
+                retryingTaskId={retryingTaskId}
               />
             </div>
           )}

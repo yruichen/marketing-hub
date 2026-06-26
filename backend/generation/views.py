@@ -6,19 +6,24 @@ from rest_framework.views import APIView
 
 from api.idempotency import claim_idempotency_key, finish_idempotency_key
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
-from api.models import GenerationTask
+from api.models import GenerationTask, WorkflowRun
 from api.permissions import organization_for_user
+from api.access import get_task_for_member, require_role
+from api.throttles import GenerationBurstThrottle, OrgRateThrottle
 from api.scope import as_bool, get_scope
 from ai_gateway.content_package import generate_content_package
 from api.services import (
     brainstorm_workflow,
+    create_workflow_run,
     create_generation_task,
     membership_role,
+    run_workflow_run_by_id,
     schedule_generation_task,
     retry_workspace_node,
     run_generation_task,
     run_workspace_workflow,
     serialize_task,
+    serialize_workflow_run,
     serialize_workspace_draft,
 )
 
@@ -62,10 +67,12 @@ def finalize_idempotency(record, response, resource_type='', resource_id=''):
 
 
 class ContentPackageView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -81,14 +88,16 @@ class ContentPackageView(APIView):
 
 
 class MarketingCopyView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='copy',
@@ -104,7 +113,7 @@ class MarketingCopyView(APIView):
                 campaign=campaign,
                 run_now=False,
             )
-            queue_generation_task(task)
+            schedule_generation_task(task)
             return finalize_idempotency(
                 idempotency,
                 Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED),
@@ -133,14 +142,16 @@ class MarketingCopyView(APIView):
 
 
 class ImageGenerateView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='image',
@@ -151,7 +162,7 @@ class ImageGenerateView(APIView):
                 campaign=campaign,
                 run_now=False,
             )
-            queue_generation_task(task)
+            schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
         task = create_generation_task(
             task_type='image',
@@ -165,14 +176,16 @@ class ImageGenerateView(APIView):
 
 
 class StoryboardView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='storyboard',
@@ -187,7 +200,7 @@ class StoryboardView(APIView):
                 campaign=campaign,
                 run_now=False,
             )
-            queue_generation_task(task)
+            schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
         task = create_generation_task(
             task_type='storyboard',
@@ -205,14 +218,16 @@ class StoryboardView(APIView):
 
 
 class AudioVoiceoverView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='audio',
@@ -227,7 +242,7 @@ class AudioVoiceoverView(APIView):
                 campaign=campaign,
                 run_now=False,
             )
-            queue_generation_task(task)
+            schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
         task = create_generation_task(
             task_type='audio',
@@ -245,14 +260,16 @@ class AudioVoiceoverView(APIView):
 
 
 class VideoGenerateView(APIView):
-    throttle_classes = [GenerationRateThrottle]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         payload = {
             'video_topic': request.data.get('video_topic', 'Product launch video'),
             'scenes': request.data.get('scenes') or [],
@@ -271,7 +288,7 @@ class VideoGenerateView(APIView):
                 campaign=campaign,
                 run_now=False,
             )
-            queue_generation_task(task)
+            schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
         task = create_generation_task(
             task_type='video',
@@ -285,6 +302,9 @@ class VideoGenerateView(APIView):
 
 
 class TaskQueueView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
+
     def get(self, request):
         _, org, _, _ = get_scope(request)
         tasks = GenerationTask.objects.filter(organization=org).order_by('-created_at')[:50]
@@ -292,10 +312,11 @@ class TaskQueueView(APIView):
 
     def post(self, request):
         user, org, project, campaign = get_scope(request)
+        require_role(user, org, 'creator')
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        request_username = request.data.get('username') or (user.username if user else None)
+        request_username = user.username
         task_type = request.data.get('task_type')
         if task_type not in dict(GenerationTask.TASK_TYPES):
             return Response({'error': 'Unsupported task type'}, status=status.HTTP_400_BAD_REQUEST)
@@ -316,28 +337,26 @@ class TaskQueueView(APIView):
 
 
 class TaskDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, pk: int):
-        _, org, _, _ = get_scope(request)
-        task = GenerationTask.objects.filter(pk=pk, organization=org).first()
-        if not task:
-            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+        task = get_task_for_member(request.user, pk)
         return Response(serialize_task(task))
 
     def post(self, request, pk: int):
-        _, org, _, _ = get_scope(request)
+        task = get_task_for_member(request.user, pk)
+        require_role(request.user, task.organization, 'creator')
+        org = task.organization
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
-        task = GenerationTask.objects.filter(pk=pk, organization=org).first()
-        if not task:
-            return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
         run_generation_task(task)
         return finalize_idempotency(idempotency, Response(serialize_task(task)), 'generation_task', task.id)
 
 
 class WorkflowRunView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [GenerationRateThrottle]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request, pk: int):
         from api.models import WorkspaceDraft
@@ -347,19 +366,64 @@ class WorkflowRunView(APIView):
             return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        require_role(request.user, draft.organization, 'creator')
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay
-        draft, tasks = run_workspace_workflow(draft, username=request.data.get('username'))
+        username = request.user.username
+        workflow_run = create_workflow_run(
+            draft,
+            username=username,
+            idempotency_key=idempotency.key if idempotency else '',
+        )
+        if as_bool(request.data.get('async', False)):
+            from django.conf import settings
+            from api.tasks import process_workflow_run
+
+            if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', True):
+                import threading
+
+                threading.Thread(target=run_workflow_run_by_id, args=(workflow_run.id, username), daemon=True).start()
+            else:
+                async_result = process_workflow_run.delay(workflow_run.id, username)
+                workflow_run.celery_task_id = async_result.id
+                workflow_run.save(update_fields=['celery_task_id', 'updated_at'])
+            response = Response({
+                'workflow_run': serialize_workflow_run(workflow_run),
+                'draft': serialize_workspace_draft(draft),
+                'tasks': [],
+            }, status=status.HTTP_202_ACCEPTED)
+            return finalize_idempotency(idempotency, response, 'workflow_run', workflow_run.id)
+
+        draft, tasks = run_workspace_workflow(draft, username=username, workflow_run=workflow_run)
+        workflow_run = WorkflowRun.objects.prefetch_related('node_runs', 'events').get(pk=workflow_run.id)
         return finalize_idempotency(idempotency, Response({
+            'workflow_run': serialize_workflow_run(workflow_run),
             'draft': serialize_workspace_draft(draft),
             'tasks': [serialize_task(task) for task in tasks],
-        }), 'workspace_draft', draft.id)
+        }), 'workflow_run', workflow_run.id)
+
+
+class WorkflowRunDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk: int):
+        workflow_run = WorkflowRun.objects.select_related(
+            'organization',
+            'draft',
+            'project',
+            'campaign',
+        ).prefetch_related('node_runs', 'events').filter(pk=pk).first()
+        if not workflow_run:
+            return Response({'error': 'Workflow run not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not organization_for_user(request.user, workflow_run.organization):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        return Response(serialize_workflow_run(workflow_run))
 
 
 class WorkflowNodeRetryView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [GenerationRateThrottle]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request, pk: int, node_id: str):
         from api.models import WorkspaceDraft
@@ -369,24 +433,27 @@ class WorkflowNodeRetryView(APIView):
             return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        require_role(request.user, draft.organization, 'creator')
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay
-        draft, task = retry_workspace_node(
+        draft, task, workflow_run = retry_workspace_node(
             draft,
             node_id=node_id,
             feedback=request.data.get('feedback', ''),
-            username=request.data.get('username'),
+            username=request.user.username,
+            idempotency_key=idempotency.key if idempotency else '',
         )
         return finalize_idempotency(idempotency, Response({
             'draft': serialize_workspace_draft(draft),
             'task': serialize_task(task) if task else None,
+            'workflow_run': serialize_workflow_run(workflow_run),
         }), 'workspace_draft', draft.id)
 
 
 class BrainstormView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [GenerationRateThrottle]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
 
     def post(self, request):
         idea = str(request.data.get('idea', '')).strip()
@@ -396,7 +463,8 @@ class BrainstormView(APIView):
             return Response({'error': 'idea must be 2000 characters or fewer'}, status=status.HTTP_400_BAD_REQUEST)
 
         user, org, project, campaign = get_scope(request)
-        request_username = request.data.get('username') or (user.username if user else None)
+        require_role(user, org, 'creator')
+        request_username = user.username
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay

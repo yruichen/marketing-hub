@@ -41,8 +41,9 @@ export function groupOfAsset(asset: AssetRecord): AssetGroupKey {
 }
 
 export interface AssetGroup {
-  key: AssetGroupKey;
+  key: AssetGroupKey | string;
   label: string;
+  hint?: string;
   items: AssetRecord[];
 }
 
@@ -52,13 +53,22 @@ export interface AssetsListResponse {
   page_size: number;
   has_more: boolean;
   type_counts: Partial<Record<AssetType, number>>;
+  source_counts?: Partial<Record<AssetSourceFilter | 'unknown', number>>;
+  preview_counts?: {
+    with_file: number;
+    records_only: number;
+  };
   items: AssetRecord[];
 }
 
 export type AssetTypeFilter = AssetType | 'all';
+export type AssetSourceFilter = 'all' | 'workflow' | 'generation' | 'manual';
+export type AssetPreviewFilter = 'all' | 'with_file' | 'records_only';
 
 export interface AssetFilterState {
   type: AssetTypeFilter;
+  source: AssetSourceFilter;
+  preview: AssetPreviewFilter;
   search: string;
 }
 

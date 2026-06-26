@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ContentPackage } from '../generation/types';
 import { defaultContentPackage } from './constants';
 import { buildContentPackage, buildContentPackageRequest, useContentPackageActions } from './hooks';
+import { BrandMemorySummary } from '../brand-memory';
 import { channelChoices, useCaseChoices, templateChoices } from '../onboarding/types';
 import type { OnboardingState } from '../onboarding/types';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -118,6 +119,11 @@ export function ContentPackagePanel({
             生成内容包
           </button>
         </div>
+        <BrandMemorySummary
+          projectName={workspaceScope?.project.name}
+          context={workspaceScope?.project.brand_context}
+          compact
+        />
 
         <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
           使用场景

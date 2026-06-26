@@ -5,10 +5,10 @@ import {
   type Connection, type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { apiGet, apiPatch, apiPost } from '../hooks/useApi';
+import { apiFetch, apiGet, apiPatch, apiPost, useCopyClipboard } from '../hooks/useApi';
 import type {
   BrandContext, GenerationTaskRecord,
-  WorkflowEdge, WorkflowNode, WorkspaceDraftRecord,
+  WorkflowEdge, WorkflowNode, WorkflowRunRecord, WorkspaceDraftRecord,
 } from '../types/workspace';
 import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, type NodeType } from '../features/workflows/constants';
 import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps, type WorkflowSnapshot } from '../features/workflows/types';
@@ -29,6 +29,10 @@ import {
   WorkflowHandoffBanner,
   WorkflowLoadingOverlay,
 } from '../features/workflows/WorkflowBuilderOverlays';
+import { WorkflowRunPreflightPanel } from '../features/workflows/WorkflowRunPreflightPanel';
+import { buildWorkflowReadiness, type WorkflowReadinessIssue } from '../features/workflows/workflowReadiness';
+import { classifyWorkflowFailure, formatNodeDiagnosticSnapshot } from '../features/workflows/workflowRecovery';
+import { mergeWorkflowRunIntoNodes, workflowRunIsActive } from '../features/workflows/workflowRunState';
 
 import { wfToRF, rfToWF } from '../features/workflows/conversions';
 import type { FlowNode } from '../features/workflows/WorkflowNodeComponent';
@@ -62,6 +66,8 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('clean');
   const [showHandoffBanner, setShowHandoffBanner] = useState(false);
   const [highlightedEdgeId, setHighlightedEdgeId] = useState('');
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [currentWorkflowRun, setCurrentWorkflowRun] = useState<WorkflowRunRecord | null>(null);
 
   // Derived: RF nodes → WorkflowNode for UI
   const nodes: WorkflowNode[] = useMemo(() => rfNodes.map(rfToWF), [rfNodes]);
@@ -72,6 +78,8 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     stepCount: nodes.length, estimatedCost: `$${(nodes.length * 0.03).toFixed(2)}`,
     estimatedMinutes: Math.max(1, Math.round(nodes.length * 0.8)),
   }), [nodes.length]);
+  const workflowReadiness = useMemo(() => buildWorkflowReadiness(nodes, edges, brandContext), [nodes, edges, brandContext]);
+  const copyClipboard = useCopyClipboard(triggerToast);
 
   // Refs for snapshot closures
   const nodesRef = useRef(nodes);
@@ -174,6 +182,14 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
         setSelectedNodeIds([]);
         const snap: WorkflowSnapshot = { id: `draft-${d.id}`, label: d.name || '灵感风暴工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: '' };
         setHistory([snap]); setFuture([]);
+        const workflowRunId = d.last_run_summary?.workflow_run_id as number | undefined;
+        if (workflowRunId) {
+          apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`)
+            .then(setCurrentWorkflowRun)
+            .catch(() => setCurrentWorkflowRun(null));
+        } else {
+          setCurrentWorkflowRun(null);
+        }
         const taskIds = d.last_run_summary?.task_ids as number[] | undefined;
         if (taskIds?.length) {
           const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
@@ -207,6 +223,14 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       setHistory([snap]); setFuture([]);
       setSaveStatus('clean');
       // Restore run history from persisted last_run_summary
+      const workflowRunId = d?.last_run_summary?.workflow_run_id as number | undefined;
+      if (workflowRunId) {
+        apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`)
+          .then(setCurrentWorkflowRun)
+          .catch(() => setCurrentWorkflowRun(null));
+      } else {
+        setCurrentWorkflowRun(null);
+      }
       const taskIds = d?.last_run_summary?.task_ids as number[] | undefined;
       if (taskIds?.length) {
         const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
@@ -265,20 +289,18 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [nodes, edges, brandContext, saveStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const runWorkflow = async () => {
+  const executeWorkflow = async () => {
     if (!project) { triggerToast('请先选择项目', 'error'); return; }
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
-    if (nodes.length === 0) { triggerToast('请先添加节点', 'error'); return; }
-    const adj = new Map(nodes.map((n) => [n.id, [] as string[]]));
-    for (const e of edges) adj.get(e.source)?.push(e.target);
-    const visited = new Set<string>(), inStack = new Set<string>();
-    let cycle = false;
-    const dfs = (id: string) => { if (inStack.has(id)) { cycle = true; return; } if (visited.has(id)) return; visited.add(id); inStack.add(id); for (const nx of adj.get(id) || []) dfs(nx); inStack.delete(id); };
-    for (const n of nodes) { dfs(n.id); if (cycle) break; }
-    if (cycle) { triggerToast('工作流存在循环依赖', 'error'); return; }
+    if (!workflowReadiness.canRun) {
+      setPreflightOpen(true);
+      triggerToast('运行前仍有阻断项需要修复', 'error');
+      return;
+    }
     setLoadingState('running');
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let runningDraftId: number | null = null;
+    let workflowRunId: number | null = null;
     try {
       markHistory('运行前保存');
       const saved = await persistDraft(nodes, edges, true);
@@ -293,26 +315,50 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       setDraft({ ...saved, status: 'running', nodes: optimisticNodes });
       setRfNodes(optimisticNodes.map(wfToRF));
       setLastTasks([]);
-      pollTimer = setInterval(async () => {
+      const startResponse = await apiPost<{ workflow_run: WorkflowRunRecord; draft: WorkspaceDraftRecord; tasks: GenerationTaskRecord[] }>(
+        `/drafts/${saved.id}/run/`,
+        { username, async: true },
+      );
+      workflowRunId = startResponse.workflow_run.id;
+      setCurrentWorkflowRun(startResponse.workflow_run);
+
+      const pollWorkflowRun = async () => {
+        if (!workflowRunId) return null;
         try {
-          const liveDraft = await apiGet<WorkspaceDraftRecord>(`/drafts/${saved.id}/`);
-          const liveNodes = liveDraft.nodes.map((n) => normalizeWorkflowNode(n, liveDraft.brand_context || brandContext));
-          setDraft(liveDraft);
-          setRfNodes(liveNodes.map(wfToRF));
-          setRfEdges(liveDraft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
-          if (liveDraft.status !== 'running' && pollTimer) {
+          const liveRun = await apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`);
+          setCurrentWorkflowRun(liveRun);
+          setRfNodes(mergeWorkflowRunIntoNodes(nodesRef.current, liveRun).map(wfToRF));
+          if (!workflowRunIsActive(liveRun) && pollTimer) {
             clearInterval(pollTimer);
             pollTimer = null;
           }
+          return liveRun;
         } catch {
-          // Keep the optimistic local progress; the final run response will reconcile state.
+          return null;
         }
-      }, 1400);
-      const data = await apiPost<{ draft: WorkspaceDraftRecord; tasks: GenerationTaskRecord[] }>(`/drafts/${saved.id}/run/`, { username });
+      };
+
+      pollTimer = setInterval(() => { void pollWorkflowRun(); }, 1200);
+      let finalRun: WorkflowRunRecord | null = startResponse.workflow_run;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+        finalRun = await pollWorkflowRun() || finalRun;
+        if (finalRun && !workflowRunIsActive(finalRun)) break;
+      }
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      if (!finalRun || workflowRunIsActive(finalRun)) {
+        triggerToast('工作流已提交，长任务会继续在任务中心运行', 'info');
+        return;
+      }
+      const liveDraft = await apiGet<WorkspaceDraftRecord>(`/drafts/${saved.id}/`);
+      const taskIds = (finalRun.summary?.task_ids || liveDraft.last_run_summary?.task_ids || []) as number[];
+      const tasks = taskIds.length
+        ? (await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)))).filter(Boolean) as GenerationTaskRecord[]
+        : [];
+      const data = { draft: liveDraft, tasks };
       setDraft(data.draft);
       const sn = data.draft.nodes.map((n) => normalizeWorkflowNode(n, data.draft.brand_context || brandContext));
       setRfNodes(sn.map(wfToRF));
@@ -326,7 +372,13 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       }
       // 后端 run_now=True 时 run 接口返回前所有 task 已同步执行完，assets 已落库。
       // 通知 ProjectManager 重新拉取项目详情，inspector 的资产列表自动更新。
-      window.dispatchEvent(new CustomEvent('mh:assets-updated', { detail: { projectId: project.id } }));
+      window.dispatchEvent(new CustomEvent('mh:assets-updated', {
+        detail: {
+          projectId: project.id,
+          workflowRunId: finalRun.id,
+          assetIds: Array.isArray(finalRun.summary?.asset_ids) ? finalRun.summary.asset_ids : [],
+        },
+      }));
     } catch (err) {
       if (runningDraftId) {
         await apiGet<WorkspaceDraftRecord>(`/drafts/${runningDraftId}/`).then((liveDraft) => {
@@ -344,22 +396,77 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     }
   };
 
-  const retryNode = async () => {
-    if (!selectedNode || !feedback.trim()) { if (!feedback.trim()) triggerToast('请输入修改意见', 'info'); return; }
+  const runWorkflow = useCallback(() => {
+    if (!project) { triggerToast('请先选择项目', 'error'); return; }
+    if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
+    setPreflightOpen(true);
+  }, [project, readOnly, triggerToast]);
+
+  const copyNodeDiagnostics = useCallback((nodeId: string) => {
+    const node = nodes.find((item) => item.id === nodeId);
+    if (!node) {
+      triggerToast('未找到节点，无法复制诊断信息', 'error');
+      return;
+    }
+    void copyClipboard(formatNodeDiagnosticSnapshot(node, nodes, edges));
+  }, [copyClipboard, edges, nodes, triggerToast]);
+
+  const recoverFromNode = async (nodeId: string, recoveryFeedback?: string) => {
+    const node = nodes.find((item) => item.id === nodeId);
+    if (!node) {
+      triggerToast('未找到节点，无法恢复', 'error');
+      return;
+    }
+    if (!project) {
+      triggerToast('请先选择项目', 'error');
+      return;
+    }
     if (readOnly) { triggerToast('只读模式下无法重试', 'error'); return; }
     setLoadingState('retrying');
     try {
-      markHistory(`节点重试 ${selectedNode.id}`);
+      const recovery = classifyWorkflowFailure(node.error_message || '');
+      const feedbackText = recoveryFeedback?.trim()
+        || feedback.trim()
+        || `${recovery.title}：${recovery.primaryAction}；从该节点向后恢复运行。`;
+      markHistory(`节点恢复 ${node.id}`);
       const saved = await persistDraft(nodes, edges, true);
-      const data = await apiPost<{ draft: WorkspaceDraftRecord; task: GenerationTaskRecord | null }>(`/drafts/${saved.id}/nodes/${selectedNode.id}/retry/`, { username, feedback });
+      const idempotencyKey = `workflow-retry-${saved.id}-${node.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const response = await apiFetch(`/drafts/${saved.id}/nodes/${node.id}/retry/`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ username, feedback: feedbackText }),
+      });
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => '');
+        throw new Error(errBody.slice(0, 200) || `HTTP ${response.status}`);
+      }
+      const data = await response.json() as {
+        draft: WorkspaceDraftRecord;
+        task: GenerationTaskRecord | null;
+        workflow_run?: WorkflowRunRecord;
+      };
       setDraft(data.draft);
       const sn = data.draft.nodes.map((n) => normalizeWorkflowNode(n, data.draft.brand_context || brandContext));
       setRfNodes(sn.map(wfToRF));
       setRfEdges(data.draft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
-      setLastTasks(data.task ? [data.task] : []); setFeedback('');
-      triggerToast('节点已按修改意见重试', 'success');
-    } catch (err) { triggerToast(`节点重试失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
+      setLastTasks(data.task ? [data.task] : []);
+      setCurrentWorkflowRun(data.workflow_run || null);
+      window.dispatchEvent(new CustomEvent('mh:assets-updated', {
+        detail: {
+          projectId: project.id,
+          workflowRunId: data.workflow_run?.id,
+          assetIds: Array.isArray(data.workflow_run?.summary?.asset_ids) ? data.workflow_run.summary.asset_ids : [],
+        },
+      }));
+      setFeedback('');
+      triggerToast(node.status === 'failed' ? '失败节点已恢复并向后重跑' : '已从该节点向后重跑', 'success');
+    } catch (err) { triggerToast(`节点恢复失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
+  };
+
+  const retryNode = async () => {
+    if (!selectedNode) return;
+    await recoverFromNode(selectedNode.id);
   };
 
   // --- UI Event Handlers ---
@@ -528,6 +635,30 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     setTimeout(() => fitView({ padding: 0.22, duration: 320 }), 80);
   }, [readOnly, nodes, edges, markHistory, markDirty, fitView, setRfNodes]);
 
+  const handlePreflightAction = useCallback((issue: WorkflowReadinessIssue) => {
+    if (issue.action === 'select_node' && issue.nodeId) {
+      setPreflightOpen(false);
+      selectNode(issue.nodeId);
+      setPropertyPanelOpen(true);
+      return;
+    }
+    if (issue.action === 'add_review') {
+      setPreflightOpen(false);
+      addNode('review', '内容审阅');
+      return;
+    }
+    if (issue.action === 'tidy_layout') {
+      setPreflightOpen(false);
+      tidyLayout();
+      return;
+    }
+    if (issue.action === 'open_brand_memory') {
+      setPreflightOpen(false);
+      window.dispatchEvent(new CustomEvent('mh:open-project-brand-memory', { detail: { projectId: project?.id } }));
+      triggerToast('请到「我的项目」打开当前项目检查器，补齐品牌记忆后再运行。', 'info');
+    }
+  }, [addNode, project?.id, selectNode, tidyLayout, triggerToast]);
+
   const saveCustomAgent = useCallback((form: CustomAgentForm) => {
     const { name, ...rest } = form;
     addNode('custom_agent', name.trim(), {
@@ -555,13 +686,14 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       if (e.key === 'Delete' && selectedNodeId && !readOnly) { e.preventDefault(); removeSelectedNode(); }
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (connectionSource) setConnectionSource('');
+        if (preflightOpen) setPreflightOpen(false);
+        else if (connectionSource) setConnectionSource('');
         else if (selectedNodeId) clearNodeSelection();
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [clearNodeSelection, connectionSource, copySelection, pasteSelection, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
+  }, [clearNodeSelection, connectionSource, copySelection, pasteSelection, preflightOpen, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
 
   // Inject callbacks into RF node data
   const setConnectionSourceRef = useRef(setConnectionSource);
@@ -667,8 +799,8 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
             {loadingState === 'loading' && <WorkflowLoadingOverlay />}
             {loadingState !== 'loading' && nodes.length === 0 && (
               <WorkflowEmptyState
-                onAddCopy={() => addNode('copy', '文案节点')}
-                onAddImagePrompt={() => addNode('image_prompt', '图片提示词')}
+                onAddCopy={() => addNode('copy', '写渠道文案')}
+                onAddImagePrompt={() => addNode('image_prompt', '生成图片说明')}
               />
             )}
             <WorkflowBuilderCanvas
@@ -705,8 +837,11 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
               draftStatus={draft?.status}
               runPreview={runPreview}
               lastTasks={lastTasks}
+              currentWorkflowRun={currentWorkflowRun}
               onTidyLayout={tidyLayout}
               onSelectNode={selectNode}
+              onCopyNodeDiagnostics={copyNodeDiagnostics}
+              onRecoverFromNode={(id) => { void recoverFromNode(id); }}
             />
           )}
         </div>
@@ -731,6 +866,8 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
             setSelectedNodeId(newId);
         }}
         onConfigureNode={(id) => { selectNode(id); setPropertyPanelOpen(true); }}
+        onCopyNodeDiagnostics={copyNodeDiagnostics}
+        onRecoverFromNode={(id) => { void recoverFromNode(id); }}
         onDeleteNode={(id) => {
             if (readOnly) return;
             markHistory('删除节点');
@@ -747,6 +884,21 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
         }}
         onCloseContextMenu={() => setContextMenu(null)}
         onCloseEdgeContextMenu={() => setEdgeContextMenu(null)}
+      />
+
+      <WorkflowRunPreflightPanel
+        open={preflightOpen}
+        projectName={projectDetail?.name || project.name}
+        brandContext={brandContext}
+        readiness={workflowReadiness}
+        estimatedCost={runPreview.estimatedCost}
+        estimatedMinutes={runPreview.estimatedMinutes}
+        onClose={() => setPreflightOpen(false)}
+        onConfirmRun={() => {
+          setPreflightOpen(false);
+          void executeWorkflow();
+        }}
+        onIssueAction={handlePreflightAction}
       />
 
       {showCustomAgent && (

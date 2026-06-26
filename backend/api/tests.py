@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from decimal import Decimal
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, Campaign, CommunityCreation, CreditLedgerEntry, GenerationTask, Membership, Organization, Project, UsageEvent, UserProfile, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, Campaign, CommunityCreation, CreditLedgerEntry, GenerationTask, Membership, Organization, Project, UsageEvent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft
 
 
 class AdminConsoleSeparationTests(APITestCase):
@@ -278,17 +278,47 @@ class WorkspaceUpgradeTests(APITestCase):
 
         response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'DEMO'}, format='json')
         self.assertEqual(response.status_code, 200)
+        self.assertIn('workflow_run', response.data)
         self.assertEqual(response.data['draft']['status'], 'completed')
+        self.assertEqual(response.data['workflow_run']['status'], 'succeeded')
+        self.assertEqual(response.data['workflow_run']['total_nodes'], 2)
+        self.assertEqual(response.data['workflow_run']['completed_nodes'], 2)
         self.assertEqual(len(response.data['tasks']), 1)
         self.assertTrue(Asset.objects.filter(project=self.project, campaign=self.campaign).exists())
+        workflow_run_id = response.data['workflow_run']['id']
+        workflow_asset = Asset.objects.get(metadata__generation_task_id=response.data['tasks'][0]['id'])
+        self.assertEqual(workflow_asset.metadata['source'], 'workflow')
+        self.assertEqual(workflow_asset.metadata['workflow_run_id'], workflow_run_id)
+        self.assertEqual(workflow_asset.metadata['workflow_node_id'], 'copy-1')
+        self.assertIn(workflow_asset.id, response.data['workflow_run']['summary']['asset_ids'])
+        self.assertTrue(WorkflowRun.objects.filter(pk=workflow_run_id, draft=draft).exists())
+        self.assertEqual(WorkflowNodeRun.objects.filter(workflow_run_id=workflow_run_id).count(), 2)
+        self.assertTrue(WorkflowRunEvent.objects.filter(workflow_run_id=workflow_run_id, event_type='asset_saved').exists())
+        self.assertTrue(WorkflowRunEvent.objects.filter(workflow_run_id=workflow_run_id, event_type='run_completed').exists())
+
+        detail = self.client.get(f'/api/workflow-runs/{workflow_run_id}/')
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data['id'], workflow_run_id)
+        self.assertEqual(len(detail.data['node_runs']), 2)
+
+        assets_response = self.client.get(
+            f'/api/workspace/assets/?organization=test-org&source=workflow&workflow_run={workflow_run_id}'
+        )
+        self.assertEqual(assets_response.status_code, 200)
+        self.assertEqual(assets_response.data['total'], 1)
+        self.assertEqual(assets_response.data['source_counts']['workflow'], 1)
+        self.assertEqual(assets_response.data['items'][0]['metadata']['workflow_node_id'], 'copy-1')
 
         response = self.client.post(
             f'/api/drafts/{draft.id}/nodes/copy-1/retry/',
             {'username': 'DEMO', 'feedback': 'Make the opening more direct.'},
             format='json',
+            HTTP_IDEMPOTENCY_KEY='retry-copy-1',
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['draft']['last_run_summary']['last_retry_node_id'], 'copy-1')
+        self.assertIn('last_retry_workflow_run_id', response.data['draft']['last_run_summary'])
+        self.assertEqual(response.data['workflow_run']['idempotency_key'], 'retry-copy-1')
         self.assertEqual(response.data['task']['status'], 'succeeded')
 
     def test_template_can_be_forked_into_project_draft(self):
@@ -400,3 +430,157 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(len(response.data['usage_trend']), 7)
         self.assertEqual(response.data['workspace_health']['completed_drafts'], 1)
         self.assertEqual(response.data['recent_tasks'][0]['id'], task.id)
+
+
+class SecurityAccessLayerTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(username='sec-admin', password='123')
+        self.creator = User.objects.create_user(username='sec-creator', password='123')
+        self.viewer = User.objects.create_user(username='sec-viewer', password='123')
+        self.ops = User.objects.create_user(username='sec-ops', password='123')
+        self.other_user = User.objects.create_user(username='sec-other', password='123')
+        self.organization = Organization.objects.create(name='Security Org', slug='security-org')
+        self.other_org = Organization.objects.create(name='Other Security Org', slug='other-security-org')
+        Membership.objects.create(user=self.admin, organization=self.organization, role='admin')
+        Membership.objects.create(user=self.creator, organization=self.organization, role='creator')
+        Membership.objects.create(user=self.viewer, organization=self.organization, role='viewer')
+        Membership.objects.create(user=self.ops, organization=self.organization, role='ops')
+        Membership.objects.create(user=self.other_user, organization=self.other_org, role='admin')
+        self.project = Project.objects.create(organization=self.organization, name='Owned Project', slug='owned-project')
+        self.other_project = Project.objects.create(organization=self.other_org, name='Other Project', slug='other-project')
+        self.campaign = Campaign.objects.create(project=self.project, name='Owned Campaign')
+        self.task = GenerationTask.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            requested_by=self.creator,
+            task_type='copy',
+            status='queued',
+        )
+        self.other_task = GenerationTask.objects.create(
+            organization=self.other_org,
+            project=self.other_project,
+            requested_by=self.other_user,
+            task_type='copy',
+            status='queued',
+        )
+
+    def test_project_list_does_not_return_other_org_projects(self):
+        self.client.login(username='sec-admin', password='123')
+        response = self.client.get('/api/projects/')
+        self.assertEqual(response.status_code, 200)
+        ids = {item['id'] for item in response.data}
+        self.assertIn(self.project.id, ids)
+        self.assertNotIn(self.other_project.id, ids)
+
+    def test_project_detail_other_org_returns_404(self):
+        self.client.login(username='sec-admin', password='123')
+        response = self.client.get(f'/api/projects/{self.other_project.id}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_viewer_cannot_create_project(self):
+        self.client.login(username='sec-viewer', password='123')
+        response = self.client.post(
+            '/api/projects/',
+            {'organization': self.organization.slug, 'name': 'Blocked'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_task_detail_other_org_returns_404(self):
+        self.client.login(username='sec-admin', password='123')
+        response = self.client.get(f'/api/tasks/{self.other_task.id}/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_generation_ignores_request_username(self):
+        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        self.client.login(username='sec-creator', password='123')
+        response = self.client.post(
+            '/api/generate/copy/',
+            {
+                'organization': self.organization.slug,
+                'username': 'ROOT',
+                'brand_name': 'Secure',
+                'product_description': 'Safe launch',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        task = GenerationTask.objects.get(pk=response.data['task']['id'])
+        self.assertEqual(task.requested_by, self.creator)
+
+    def test_billing_read_write_roles(self):
+        self.client.login(username='sec-viewer', password='123')
+        response = self.client.get(f'/api/billing/plans/?organization={self.organization.slug}')
+        self.assertEqual(response.status_code, 403)
+
+        self.client.logout()
+        self.client.login(username='sec-creator', password='123')
+        response = self.client.get(f'/api/billing/plans/?organization={self.organization.slug}')
+        self.assertEqual(response.status_code, 403)
+
+        self.client.logout()
+        self.client.login(username='sec-ops', password='123')
+        response = self.client.get(f'/api/billing/plans/?organization={self.organization.slug}')
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(
+            '/api/billing/plans/',
+            {'organization': self.organization.slug, 'plan': 'pro'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+        self.client.logout()
+        self.client.login(username='sec-admin', password='123')
+        response = self.client.post(
+            '/api/billing/plans/',
+            {'organization': self.organization.slug, 'plan': 'pro'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_community_and_rag_do_not_cross_organization(self):
+        own_private = CommunityCreation.objects.create(
+            organization=self.organization,
+            username='sec-creator',
+            creation_type='copy',
+            title='Private Launch',
+            content='{"body": "alpha insight"}',
+            visibility='private',
+        )
+        public_item = CommunityCreation.objects.create(
+            organization=self.other_org,
+            username='sec-other',
+            creation_type='copy',
+            title='Public Launch',
+            content='{"body": "alpha public"}',
+            visibility='public',
+        )
+        other_private = CommunityCreation.objects.create(
+            organization=self.other_org,
+            username='sec-other',
+            creation_type='copy',
+            title='Other Private',
+            content='{"body": "alpha secret"}',
+            visibility='private',
+        )
+
+        response = self.client.get('/api/community/creations/')
+        self.assertEqual(response.status_code, 200)
+        ids = {item['id'] for item in response.data}
+        self.assertEqual(ids, {public_item.id})
+
+        self.client.login(username='sec-creator', password='123')
+        response = self.client.get('/api/community/creations/')
+        self.assertEqual(response.status_code, 200)
+        ids = {item['id'] for item in response.data}
+        self.assertIn(own_private.id, ids)
+        self.assertIn(public_item.id, ids)
+        self.assertNotIn(other_private.id, ids)
+
+        response = self.client.get('/api/community/search/?q=alpha')
+        self.assertEqual(response.status_code, 200)
+        result_ids = {item['id'] for item in response.data['results']}
+        self.assertIn(own_private.id, result_ids)
+        self.assertIn(public_item.id, result_ids)
+        self.assertNotIn(other_private.id, result_ids)

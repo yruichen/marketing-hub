@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Check, Copy, Download, ExternalLink, FileText, Pencil, Play, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Download, ExternalLink, FileText, GitBranch, Pencil, Play, Trash2 } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
-import { assetTaskType, getAssetSummary } from './assetContent';
+import { assetPreviewState, assetSourceLabel, assetTaskType, assetWorkflowLabel, getAssetSummary } from './assetContent';
 
 interface AssetCardProps {
   asset: AssetRecord;
@@ -24,6 +24,10 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
   const taskType = assetTaskType(asset);
   const summary = getAssetSummary(asset);
   const dateLabel = formatAssetDate(asset.created_at);
+  const sourceLabel = assetSourceLabel(asset);
+  const workflowLabel = assetWorkflowLabel(asset);
+  const previewState = assetPreviewState(asset);
+  const reviewRiskCount = asset.metadata.review?.risk_count ?? 0;
 
   const copy = async (text: string, field: 'url' | 'title') => {
     try {
@@ -95,13 +99,16 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
           ) : (
             <div className="asset-card__document-preview">
               <FileText className="h-8 w-8" strokeWidth={1.4} />
-              <p>{summary}</p>
+              <p>{asset.asset_type === 'image' && !asset.source_url ? '图片记录缺少源文件，无法展示缩略图。' : summary}</p>
             </div>
           )}
 
           <span className="asset-card__type">
             {palette.formatLabel || asset.asset_type}
           </span>
+          {previewState === 'record' ? (
+            <span className="asset-card__preview-badge">仅记录</span>
+          ) : null}
           <span className="asset-card__open-hint">
             打开预览 <ExternalLink className="h-3 w-3" />
           </span>
@@ -112,8 +119,21 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
             <span>{taskType}</span>
             <span>{dateLabel}</span>
           </div>
+          <div className="asset-card__source-row">
+            <span className="asset-card__source-pill">
+              {asset.metadata?.source === 'workflow' ? <GitBranch className="h-3 w-3" /> : null}
+              {sourceLabel}
+            </span>
+            {workflowLabel ? <span className="asset-card__workflow-label" title={workflowLabel}>{workflowLabel}</span> : null}
+          </div>
           <h4 className="asset-card__title" title={asset.title}>{asset.title}</h4>
           <p className="asset-card__summary">{summary}</p>
+          {reviewRiskCount > 0 ? (
+            <p className="asset-card__review-risk">
+              <AlertTriangle className="h-3 w-3" />
+              审阅风险 {reviewRiskCount}
+            </p>
+          ) : null}
         </div>
       </button>
 

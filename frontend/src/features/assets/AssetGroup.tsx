@@ -33,7 +33,7 @@ export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDel
           <span className="asset-group__count">{group.items.length}</span>
         </button>
         <span className="asset-group__hint">
-          {group.items.length} 个
+          {group.hint || `${group.items.length} 个`}
         </span>
       </header>
 

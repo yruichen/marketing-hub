@@ -11,6 +11,7 @@ from generation.views import (
     TaskQueueView,
     VideoGenerateView,
     WorkflowNodeRetryView,
+    WorkflowRunDetailView,
     WorkflowRunView,
 )
 
@@ -25,7 +26,7 @@ urlpatterns = [
     path('generate/video/', VideoGenerateView.as_view(), name='generate_video'),
     path('tasks/', TaskQueueView.as_view(), name='task_queue'),
     path('tasks/<int:pk>/', TaskDetailView.as_view(), name='task_detail'),
+    path('workflow-runs/<int:pk>/', WorkflowRunDetailView.as_view(), name='workflow_run_detail'),
     path('drafts/<int:pk>/run/', WorkflowRunView.as_view(), name='workflow_run'),
     path('drafts/<int:pk>/nodes/<str:node_id>/retry/', WorkflowNodeRetryView.as_view(), name='workflow_node_retry'),
 ]
-

@@ -16,12 +16,28 @@ export interface OrganizationRecord {
 
 export interface BrandContext {
   brand_name?: string;
+  product_name?: string;
+  industry?: string;
+  website?: string;
   audience?: string;
+  pain_points?: string;
+  buying_motivations?: string;
   tone?: string;
+  headline_preference?: string;
+  punctuation_preference?: string;
   selling_points?: string;
   visual_style?: string;
   campaign_goal?: string;
-  [key: string]: string | number | boolean | undefined;
+  forbidden_words?: string;
+  compliance_rules?: string;
+  competitor_restrictions?: string;
+  platform?: string | string[];
+  channel_rules?: string;
+  content_formats?: string;
+  reference_links?: string;
+  case_studies?: string;
+  historical_assets?: string;
+  [key: string]: string | number | boolean | string[] | undefined;
 }
 
 export interface FolderRecord {
@@ -154,6 +170,64 @@ export interface WorkspaceDraftRecord {
   updated_at: string;
 }
 
+export interface WorkflowRunEventRecord {
+  id: number;
+  workflow_run_id: number;
+  node_run_id: number | null;
+  event_type: string;
+  node_id: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WorkflowNodeRunRecord {
+  id: number;
+  workflow_run_id: number;
+  generation_task_id: number | null;
+  retry_of_id: number | null;
+  node_id: string;
+  node_type: string;
+  node_label: string;
+  status: 'pending' | 'queued' | 'running' | 'saving_asset' | 'succeeded' | 'failed' | 'skipped' | 'cancelled';
+  attempt: number;
+  input_snapshot: Record<string, unknown>;
+  output_summary: Record<string, unknown>;
+  error_code: string;
+  error_message: string;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_ms: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowRunRecord {
+  id: number;
+  draft_id: number;
+  organization_id: number;
+  project_id: number | null;
+  campaign_id: number | null;
+  requested_by_id: number | null;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'partial_success' | 'cancelled';
+  idempotency_key: string;
+  graph_version: string;
+  input_snapshot: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  total_nodes: number;
+  completed_nodes: number;
+  failed_nodes: number;
+  token_count: number;
+  estimated_cost_usd: string;
+  actual_cost_usd: string;
+  celery_task_id: string;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  node_runs: WorkflowNodeRunRecord[];
+  events: WorkflowRunEventRecord[];
+}
+
 export interface WorkflowTemplateRecord {
   id: number;
   organization_id: number | null;
@@ -238,8 +312,20 @@ export interface AssetRecord {
   source_url: string;
   tags: string[];
   metadata: {
+    source?: 'manual' | 'generation' | 'workflow' | string;
     generation_task_id?: number;
     task_type?: string;
+    workflow_run_id?: number;
+    workflow_draft_id?: number;
+    workflow_node_run_id?: number;
+    workflow_node_id?: string;
+    workflow_node_type?: string;
+    workflow_node_label?: string;
+    review?: {
+      risk_count?: number;
+      verdict?: string;
+      requires_revision?: boolean;
+    };
     result?: Record<string, unknown>;
     [key: string]: unknown;
   };

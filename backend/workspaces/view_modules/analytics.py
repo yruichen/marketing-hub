@@ -7,6 +7,7 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -38,6 +39,8 @@ from api.services import (
 )
 
 class AnalyticsDashboardView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         _, org, project, campaign = get_scope(request)
         events = UsageEvent.objects.filter(organization=org)

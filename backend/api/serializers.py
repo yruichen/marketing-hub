@@ -15,6 +15,9 @@ from api.models import (
     Organization,
     Project,
     UsageEvent,
+    WorkflowNodeRun,
+    WorkflowRun,
+    WorkflowRunEvent,
     WorkflowTemplate,
     WorkspaceDraft,
 )
@@ -152,6 +155,79 @@ class WorkspaceDraftSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class WorkflowRunEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkflowRunEvent
+        fields = (
+            'id',
+            'workflow_run_id',
+            'node_run_id',
+            'event_type',
+            'node_id',
+            'payload',
+            'created_at',
+        )
+
+
+class WorkflowNodeRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkflowNodeRun
+        fields = (
+            'id',
+            'workflow_run_id',
+            'generation_task_id',
+            'retry_of_id',
+            'node_id',
+            'node_type',
+            'node_label',
+            'status',
+            'attempt',
+            'input_snapshot',
+            'output_summary',
+            'error_code',
+            'error_message',
+            'started_at',
+            'completed_at',
+            'duration_ms',
+            'created_at',
+            'updated_at',
+        )
+
+
+class WorkflowRunSerializer(serializers.ModelSerializer):
+    node_runs = WorkflowNodeRunSerializer(many=True, read_only=True)
+    events = WorkflowRunEventSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = WorkflowRun
+        fields = (
+            'id',
+            'draft_id',
+            'organization_id',
+            'project_id',
+            'campaign_id',
+            'requested_by_id',
+            'status',
+            'idempotency_key',
+            'graph_version',
+            'input_snapshot',
+            'summary',
+            'total_nodes',
+            'completed_nodes',
+            'failed_nodes',
+            'token_count',
+            'estimated_cost_usd',
+            'actual_cost_usd',
+            'celery_task_id',
+            'started_at',
+            'completed_at',
+            'created_at',
+            'updated_at',
+            'node_runs',
+            'events',
+        )
+
+
 class WorkflowTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkflowTemplate
@@ -279,6 +355,7 @@ class CommunityCreationSerializer(serializers.ModelSerializer):
             'likes',
             'tags',
             'rag_indexed',
+            'visibility',
             'created_at',
             'organization',
             'project',

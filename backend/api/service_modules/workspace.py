@@ -19,6 +19,7 @@ from api.serializers import (
     OrganizationSerializer,
     ProjectSerializer,
     TaskSerializer,
+    WorkflowRunSerializer,
     WorkflowTemplateSerializer,
     WorkspaceDraftSerializer,
 )
@@ -33,6 +34,7 @@ from api.models import (
     Organization,
     Project,
     UsageEvent,
+    WorkflowRun,
     WorkflowTemplate,
     WorkspaceDraft,
 )
@@ -103,6 +105,10 @@ def serialize_workspace_draft(draft: WorkspaceDraft) -> dict[str, Any]:
 
 def serialize_workflow_template(template: WorkflowTemplate) -> dict[str, Any]:
     return WorkflowTemplateSerializer(template).data
+
+
+def serialize_workflow_run(run: WorkflowRun) -> dict[str, Any]:
+    return WorkflowRunSerializer(run).data
 
 
 def serialize_asset(asset: Asset) -> dict[str, Any]:

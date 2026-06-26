@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
+import { BrandMemorySummary } from '../brand-memory';
+import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
 import type { CreationContent, StoryboardOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -65,7 +67,7 @@ export function StoryboardPanel({
 
   const [isRunning, setIsRunning] = useState(false);
 
-  const { submitQueuedGeneration } = useGenerationTask({
+  const { submitQueuedGeneration, taskUiState } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -94,6 +96,11 @@ export function StoryboardPanel({
       <div className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial paper-sheet-1 relative">
         <div className="generation-workspace__form-body">
         <h3 className="text-[10px] font-black text-[var(--editorial-text-gray)] uppercase tracking-wider font-mono">// TIMELINE STICKY SLATE</h3>
+        <BrandMemorySummary
+          projectName={workspaceScope?.project.name}
+          context={workspaceScope?.project.brand_context}
+          compact
+        />
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[var(--editorial-text)] text-[10px] font-bold uppercase tracking-wider font-mono">视频大纲 Focus</label>
@@ -145,6 +152,7 @@ export function StoryboardPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateStoryboard} retryDisabled={isRunning} />
       </div>
 
       <div className="generation-workspace__results">

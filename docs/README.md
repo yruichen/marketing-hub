@@ -15,6 +15,7 @@ This directory contains product, architecture, planning, operation, and archived
 - [Upgrade Plan](./plans/upgrade_plan.md)
 - [Workflow UX Improvement Plan](./plans/workflow_ux_improvement_plan.md)
 - [Brand Memory Long-Term Evolution Plan](./plans/brand_memory_long_term_evolution_plan.md)
+- [RAG Search Upgrade Plan](./plans/rag_search_upgrade_plan.md)
 
 ### Operations
 

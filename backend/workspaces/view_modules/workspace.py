@@ -8,9 +8,11 @@ from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.access import require_role
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
 from api.models import (
@@ -41,9 +43,11 @@ from api.services import (
 from workspaces.view_modules.helpers import folder_path_from_request, build_project_search_query
 
 class WorkspaceBootstrapView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         username, org, project, campaign = get_scope(request)
-        organizations = Organization.objects.all().order_by('name')
+        organizations = Organization.objects.filter(memberships__user=request.user).distinct().order_by('name')
         projects = Project.objects.filter(organization=org).select_related('folder').order_by('-created_at')
         folders = Folder.objects.filter(organization=org).annotate(project_count=Count('projects')).order_by('parent_id', 'sort_order', 'name')
         campaigns = Campaign.objects.filter(project__in=projects).order_by('-created_at')
@@ -89,12 +93,14 @@ class WorkspaceBootstrapView(APIView):
 
 
 class WorkspaceView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         org_slug = request.query_params.get('organization')
-        organizations = Organization.objects.all().order_by('name')
-        projects = Project.objects.all().order_by('-created_at')
-        campaigns = Campaign.objects.all().order_by('-created_at')
-        folders = Folder.objects.all().order_by('parent_id', 'sort_order', 'name')
+        organizations = Organization.objects.filter(memberships__user=request.user).distinct().order_by('name')
+        projects = Project.objects.filter(organization__memberships__user=request.user).order_by('-created_at')
+        campaigns = Campaign.objects.filter(project__organization__memberships__user=request.user).order_by('-created_at')
+        folders = Folder.objects.filter(organization__memberships__user=request.user).order_by('parent_id', 'sort_order', 'name')
 
         if org_slug:
             projects = projects.filter(organization__slug=org_slug)
@@ -108,14 +114,20 @@ class WorkspaceView(APIView):
         })
 
     def post(self, request):
+        if request.user.is_superuser:
+            return Response({'error': 'Superusers cannot create workspace scope.'}, status=status.HTTP_403_FORBIDDEN)
         org_name = request.data.get('organization_name', 'Marketing Hub')
         org_slug = slugify(request.data.get('organization_slug') or org_name or 'marketing-hub')
         project_name = request.data.get('project_name', 'Core Launch')
         project_slug = slugify(request.data.get('project_slug') or project_name or 'core-launch')
         campaign_name = request.data.get('campaign_name', 'Product Launch')
-        user_name = request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME)
+        user = request.user
 
         org, _ = Organization.objects.get_or_create(slug=org_slug, defaults={'name': org_name})
+        from api.models import Membership
+
+        Membership.objects.get_or_create(user=user, organization=org, defaults={'role': 'admin'})
+        require_role(user, org, 'admin')
         project, _ = Project.objects.get_or_create(
             organization=org,
             slug=project_slug,
@@ -126,12 +138,6 @@ class WorkspaceView(APIView):
             name=campaign_name,
             defaults={'objective': request.data.get('objective', ''), 'status': request.data.get('status', 'active')},
         )
-
-        user = User.objects.filter(username=user_name).first()
-        if user:
-            from api.models import Membership
-
-            Membership.objects.get_or_create(user=user, organization=org, defaults={'role': 'admin'})
 
         return Response({
             'organization': serialize_organization(org),

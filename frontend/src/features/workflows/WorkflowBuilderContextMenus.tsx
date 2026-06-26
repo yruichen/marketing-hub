@@ -11,6 +11,8 @@ interface WorkflowBuilderContextMenusProps {
   onStartConnect: (id: string) => void;
   onDuplicateNode: (id: string) => void;
   onConfigureNode: (id: string) => void;
+  onCopyNodeDiagnostics: (id: string) => void;
+  onRecoverFromNode: (id: string) => void;
   onDeleteNode: (id: string) => void;
   onDeleteEdge: (id: string) => void;
   onCloseContextMenu: () => void;
@@ -26,6 +28,8 @@ export function WorkflowBuilderContextMenus({
   onStartConnect,
   onDuplicateNode,
   onConfigureNode,
+  onCopyNodeDiagnostics,
+  onRecoverFromNode,
   onDeleteNode,
   onDeleteEdge,
   onCloseContextMenu,
@@ -44,6 +48,8 @@ export function WorkflowBuilderContextMenus({
           onStartConnect={onStartConnect}
           onDuplicate={onDuplicateNode}
           onConfigure={onConfigureNode}
+          onCopyDiagnostics={onCopyNodeDiagnostics}
+          onRecoverFromNode={onRecoverFromNode}
           onDelete={onDeleteNode}
           onClose={onCloseContextMenu}
         />

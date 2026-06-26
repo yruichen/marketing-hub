@@ -28,6 +28,24 @@ export function assetTaskType(asset: AssetRecord): string {
   return typeof asset.metadata?.task_type === 'string' ? asset.metadata.task_type : asset.asset_type;
 }
 
+export function assetSourceLabel(asset: AssetRecord): string {
+  if (asset.metadata?.source === 'workflow') return '工作流';
+  if (asset.metadata?.source === 'manual') return '手工';
+  if (asset.metadata?.source === 'generation') return '生成';
+  return '未标记';
+}
+
+export function assetWorkflowLabel(asset: AssetRecord): string {
+  if (asset.metadata?.source !== 'workflow') return '';
+  const runId = asset.metadata.workflow_run_id ? `Run #${asset.metadata.workflow_run_id}` : '工作流产物';
+  const nodeLabel = asset.metadata.workflow_node_label || asset.metadata.workflow_node_id || '';
+  return nodeLabel ? `${runId} / ${nodeLabel}` : runId;
+}
+
+export function assetPreviewState(asset: AssetRecord): 'file' | 'record' {
+  return asset.source_url ? 'file' : 'record';
+}
+
 export function getAssetSummary(asset: AssetRecord): string {
   const result = resultOf(asset);
   const taskType = assetTaskType(asset);
