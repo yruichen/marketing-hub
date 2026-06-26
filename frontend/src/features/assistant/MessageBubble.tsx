@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Check, Clipboard } from 'lucide-react';
 import type { ChatMessage } from './types';
 import { ToolCallCard } from './ToolCallCard';
 import './assistant.css';
@@ -21,13 +23,41 @@ interface MessageBubbleProps {
  */
 export function MessageBubble({ message, onNavigate }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    if (!message.content) return;
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
     <div className={`assistant-msg assistant-msg--${message.role}`}>
-      <span className="assistant-msg__role">{isUser ? '我' : '助手'}</span>
+      <div className="assistant-msg__top">
+        <span className="assistant-msg__role">{isUser ? '我' : '助手'}</span>
+        <div className="assistant-msg__actions">
+          {!isUser && message.content ? (
+            <button
+              type="button"
+              className="assistant-msg__copy"
+              onClick={copy}
+              aria-label="复制回复"
+            >
+              {copied ? <Check className="h-3 w-3" /> : <Clipboard className="h-3 w-3" />}
+              {copied ? '已复制' : '复制'}
+            </button>
+          ) : null}
+        </div>
+      </div>
       <div
         className={`assistant-msg__bubble ${
           message.pending && !message.content ? 'assistant-msg__bubble--pending' : ''
-        }`}
+        } ${!message.content && message.pending === false ? 'assistant-msg__bubble--empty' : ''}`}
       >
         {isUser ? (
           // User input: never run untrusted text through a markdown
@@ -51,7 +81,9 @@ export function MessageBubble({ message, onNavigate }: MessageBubbleProps) {
           </div>
         ) : message.pending ? (
           <span className="assistant-md__thinking">思考中</span>
-        ) : null}
+        ) : (
+          <span className="assistant-md__thinking">暂无内容</span>
+        )}
       </div>
       {message.toolCalls.length > 0 ? (
         <div className="assistant-msg__tools">

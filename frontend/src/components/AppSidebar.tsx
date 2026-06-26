@@ -8,6 +8,7 @@ type AppSidebarProps = {
   onToggleDarkMode: () => void;
   username: string | null;
   onLogout: () => void;
+  className?: string;
 };
 
 export function AppSidebar({
@@ -17,9 +18,10 @@ export function AppSidebar({
   onToggleDarkMode,
   username,
   onLogout,
+  className = '',
 }: AppSidebarProps) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 w-[272px] border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none xl:static xl:w-auto xl:h-full xl:min-h-0 xl:overflow-hidden flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0">
+    <aside className={`h-full w-[272px] border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0 ${className}`}>
       <div className="flex min-h-0 flex-1 flex-col gap-5">
         <div className="select-none rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 px-3 py-3 shadow-[var(--shadow-panel)]">
           <div className="mb-2 h-1.5 w-10 rounded-full bg-[var(--brand-accent)]" />

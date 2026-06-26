@@ -75,13 +75,16 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null);
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
   const [authError, setAuthError] = useState('');
+  const [routeSynced, setRouteSynced] = useState(false);
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { username: 'ROOT', password: '123' },
   });
 
-  const activeTab = activeSection;
+  const routeSection = sectionFromPath(location.pathname);
+  const activeTab = routeSynced ? activeSection : routeSection;
   const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !sidebarCollapsed;
+  const rightPanelAvailable = activeTab !== 'builder';
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
 
@@ -316,6 +319,7 @@ export default function App() {
     if (section !== activeSection) {
       setActiveSection(section);
     }
+    setRouteSynced(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -354,7 +358,7 @@ export default function App() {
   const isFullHeightTab = FULL_HEIGHT_WORKSPACE_TABS.includes(activeTab);
 
   return (
-    <div className={`h-screen bg-[var(--surface-canvas)] text-[var(--editorial-text)] grid grid-cols-1 ${sidebarOpen ? 'xl:grid-cols-[236px_minmax(0,1fr)]' : ''} relative overflow-hidden transition-colors duration-250 font-sans`}>
+    <div className="h-screen bg-[var(--surface-canvas)] text-[var(--editorial-text)] relative overflow-hidden transition-colors duration-250 font-sans">
 
       {/* Dynamic toast alerts */}
       {feedbackMsg && (
@@ -376,29 +380,28 @@ export default function App() {
       )}
 
       {/* 左侧导航 */}
-      {sidebarOpen && (
-        <>
-          {activeTab !== 'brainstorm' && (
-            <button
-              type="button"
-              className="fixed inset-0 z-30 bg-black/20 xl:hidden"
-              onClick={() => setSidebarCollapsed(true)}
-              aria-label="关闭侧栏遮罩"
-            />
-          )}
-          <AppSidebar
-            activeTab={activeTab}
-            onNavigate={setActiveTab}
-            darkMode={darkMode}
-            onToggleDarkMode={() => setDarkMode(!darkMode)}
-            username={username}
-            onLogout={handleLogout}
+      <div className={`app-sidebar-shell ${sidebarOpen ? 'app-sidebar-shell--open' : ''}`}>
+        {activeTab !== 'brainstorm' && (
+          <button
+            type="button"
+            className={`app-sidebar-scrim xl:hidden ${sidebarOpen ? 'app-sidebar-scrim--open' : ''}`}
+            onClick={() => setSidebarCollapsed(true)}
+            aria-label="关闭侧栏遮罩"
           />
-        </>
-      )}
+        )}
+        <AppSidebar
+          activeTab={activeTab}
+          onNavigate={setActiveTab}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          username={username}
+          onLogout={handleLogout}
+          className="app-sidebar-shell__panel"
+        />
+      </div>
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
+      <main ref={mainRef} className={`app-main-shell ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
@@ -475,7 +478,7 @@ export default function App() {
         )}
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
-        <div className={`grid grid-cols-1 ${showInlineRightPanel ? 'xl:grid-cols-[minmax(0,1fr)_300px]' : ''} gap-4 mt-1 z-0 flex-1 min-h-0 overflow-hidden ${isFullHeightTab ? 'items-stretch' : ''}`}>
+        <div className={`workspace-panel-layout ${showInlineRightPanel ? 'workspace-panel-layout--right-open' : ''} mt-1 z-0 flex-1 min-h-0 overflow-hidden ${isFullHeightTab ? 'items-stretch' : ''}`}>
           <div className={`min-w-0 h-full min-h-0 ${isFullHeightTab ? 'overflow-hidden' : 'overflow-y-auto'} ${isFullHeightTab ? '' : 'space-y-4 pr-1'}`}>
             {activeTab === 'projects' && (
               <ProjectManager
@@ -667,15 +670,17 @@ export default function App() {
               />
             )}
           </div>
-          {showAppRightPanel && (
-            <ContextPanel
-              workspaceScope={workspaceScope}
-              latestTask={latestTask}
-              dashboardSnapshot={dashboardSnapshot}
-              contentPackage={contentPackage}
-              setActiveTab={setActiveTab}
-              onClose={() => setRightPanelOpen(false)}
-            />
+          {rightPanelAvailable && (
+            <div className={`workspace-panel-layout__right ${showAppRightPanel ? 'workspace-panel-layout__right--open' : ''}`} aria-hidden={!showAppRightPanel}>
+              <ContextPanel
+                workspaceScope={workspaceScope}
+                latestTask={latestTask}
+                dashboardSnapshot={dashboardSnapshot}
+                contentPackage={contentPackage}
+                setActiveTab={setActiveTab}
+                onClose={() => setRightPanelOpen(false)}
+              />
+            </div>
           )}
         </div>
 

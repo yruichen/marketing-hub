@@ -202,8 +202,7 @@ export function DashboardPage({
 
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)]">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_12%_0%,color-mix(in_srgb,var(--brand-accent)_18%,transparent),transparent_30%),radial-gradient(circle_at_92%_8%,color-mix(in_srgb,var(--editorial-accent-blue)_10%,transparent),transparent_28%)]" />
+      <section className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)]">
         <div className="relative">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
