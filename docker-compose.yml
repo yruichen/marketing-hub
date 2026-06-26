@@ -39,7 +39,7 @@ services:
   worker:
     build:
       context: ./backend
-    command: ["uv", "run", "celery", "-A", "core", "worker", "--loglevel=info"]
+    command: ["uv", "run", "celery", "-A", "core", "worker", "--loglevel=info", "--concurrency=4", "--prefetch-multiplier=1", "--max-tasks-per-child=100"]
     environment:
       DJANGO_DEBUG: "true"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend

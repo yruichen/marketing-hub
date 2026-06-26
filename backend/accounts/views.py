@@ -435,6 +435,16 @@ class AdminLoginView(APIView):
         return response
 
 
+class CsrfTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    @method_decorator(ensure_csrf_cookie)
+    def get(self, request):
+        response = Response({'ok': True}, status=status.HTTP_200_OK)
+        response['X-CSRFToken'] = get_token(request)
+        return response
+
+
 class AuthMeView(APIView):
     permission_classes = [AllowAny]
 

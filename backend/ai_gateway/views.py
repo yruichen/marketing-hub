@@ -30,6 +30,7 @@ from api.permissions import CanManageAIConfiguration, resolve_staff_user_from_re
 from api.image_style_skills import list_image_style_skills
 from api.scope import get_scope
 from api.access import require_role
+from api.redaction import redact_text
 from api.throttles import ExpensiveEndpointThrottle
 from api.serializers import (
     AIConfigurationSerializer,
@@ -277,8 +278,15 @@ class AIConfigView(APIView):
             },
         )
         if api_key and not looks_like_masked_api_key(api_key):
-            config.api_key = api_key
-            config.save(update_fields=['api_key', 'updated_at'])
+            config.set_api_key(api_key)
+            config.save(update_fields=[
+                'api_key',
+                'api_key_encrypted',
+                'api_key_fingerprint',
+                'api_key_last4',
+                'key_updated_at',
+                'updated_at',
+            ])
         AIConfiguration.objects.filter(
             organization=organization,
             config_scope=config_scope,
@@ -357,7 +365,7 @@ class AIConfigModelsView(APIView):
         ).order_by('-updated_at').first()
 
         if not api_key and saved_config:
-            api_key = saved_config.api_key
+            api_key = saved_config.get_api_key()
         if not base_url and saved_config:
             base_url = saved_config.base_url
         base_url = base_url or PROVIDER_BASE_URLS[provider]
@@ -368,9 +376,9 @@ class AIConfigModelsView(APIView):
         try:
             models = _fetch_live_models(provider, api_key=api_key, base_url=base_url)
         except (ValueError, urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            detail = str(exc)[:240]
+            detail = redact_text(str(exc))[:240]
             if isinstance(exc, urllib.error.HTTPError):
-                detail = exc.read().decode('utf-8', errors='replace')[:240] or detail
+                detail = redact_text(exc.read().decode('utf-8', errors='replace'))[:240] or detail
                 status_code = exc.code
             else:
                 status_code = status.HTTP_400_BAD_REQUEST if isinstance(exc, ValueError) else status.HTTP_502_BAD_GATEWAY
@@ -552,7 +560,7 @@ class AssistantChatView(APIView):
                 status_code = getattr(exc, 'status', 0)
                 yield _sse_format({
                     'type': 'error',
-                    'error': str(exc),
+                    'error': redact_text(str(exc)),
                     **({'status': status_code} if status_code else {}),
                 })
 

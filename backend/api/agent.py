@@ -112,12 +112,12 @@ class AIAgentWorkflow:
     def run_llm(cls, prompt: str, logger: AgentLogger) -> str:
         config = cls.get_active_config()
         
-        if not config or config.provider == 'mock' or not config.api_key:
+        if not config or config.provider == 'mock' or not config.has_api_key():
             logger.log("No real API credentials active. Initializing High-Fidelity Sandbox Simulator.", "WARN")
             return ""
 
         provider = config.provider
-        api_key = config.api_key
+        api_key = config.get_api_key()
         base_url = config.base_url.strip()
         model = config.model_name.strip()
 
@@ -446,7 +446,7 @@ class AIAgentWorkflow:
         audio_url = voice_urls.get(voice_id, voice_urls["female_warm"])
         
         # Real OpenAI Text-to-Speech API integration if OpenAI is configured
-        if config and config.provider == 'openai' and config.api_key:
+        if config and config.provider == 'openai' and config.has_api_key():
             logger.log("Active OpenAI configuration found. Connecting to OpenAI Audio TTS pipeline...")
             url = "https://api.openai.com/v1/audio/speech"
             if config.base_url:

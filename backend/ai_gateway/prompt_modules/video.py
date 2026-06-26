@@ -4,7 +4,7 @@ import json
 import re
 from typing import Any
 
-from ai_gateway.prompt_modules.common import _strip_json_fence
+from ai_gateway.prompt_modules.common import _strip_json_fence, compact_text, platform_strategy
 
 MOCK_VIDEO_URL = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
 MOCK_VIDEO_THUMBNAIL = 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?auto=format&fit=crop&w=640&q=80'
@@ -49,11 +49,16 @@ def build_video_generation_prompt(payload: dict[str, Any]) -> str:
         return explicit
 
     video_topic = str(payload.get('video_topic') or '').strip()
+    platform = str(payload.get('platform') or '').strip()
+    aspect_ratio = str(payload.get('aspect_ratio') or '9:16').strip()
     scenes = payload.get('scenes') or []
     parts: list[str] = []
 
     if video_topic:
         parts.append(f"Marketing video about {video_topic}.")
+    parts.append(f"Aspect ratio {aspect_ratio}; compose for social-feed viewing and safe crop.")
+    if platform:
+        parts.append(f"Platform pacing: {platform_strategy(platform)}")
 
     if isinstance(scenes, list):
         for index, scene in enumerate(scenes[:8], 1):
@@ -67,12 +72,12 @@ def build_video_generation_prompt(payload: dict[str, Any]) -> str:
                 parts.append(f"Voiceover cue: {narration}")
 
     workflow_context = str(payload.get('workflow_context') or '').strip()
-    if workflow_context and len(workflow_context) < 400:
-        parts.append(f"Brand context: {workflow_context}")
+    if workflow_context:
+        parts.append(f"Brand context: {compact_text(workflow_context, max_chars=700)}")
 
     feedback = str(payload.get('feedback') or '').strip()
     if feedback:
-        parts.append(f"Revision notes: {feedback}")
+        parts.append(f"Revision notes: {compact_text(feedback, max_chars=700)}")
 
     if not parts:
         return (
@@ -82,8 +87,9 @@ def build_video_generation_prompt(payload: dict[str, Any]) -> str:
 
     return (
         ' '.join(parts)
-        + ' 电影级构图，自然流畅运镜，专业布光，浅景深，高细节，'
-        '营销广告质感，无文字叠加，无水印。'
+        + ' Continuous narrative, clear subject continuity, cinematic but realistic camera movement, '
+        'professional lighting, controlled depth of field, high detail, advertising-grade composition, '
+        'no overlaid text, no watermark, no random logos, no distorted anatomy.'
     ).strip()
 
 

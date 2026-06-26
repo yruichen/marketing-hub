@@ -4,12 +4,21 @@ import json
 import re
 from typing import Any
 
+from ai_gateway.prompt_modules.common import (
+    append_context_lines,
+    append_feedback_line,
+    fact_guardrail_block,
+    json_contract_block,
+    platform_strategy,
+    quality_bar_block,
+)
+
 
 COPY_SYSTEM_PROMPT = (
-    '你是一位专精中国社交媒体营销的资深文案策划。'
-    '根据品牌、产品、语气与目标平台生成高转化营销文案。'
-    '只输出合法 JSON，不要用 markdown 代码块包裹。'
-    '正文以中文为主；标签与 emoji 按平台习惯使用。'
+    '你是一位资深中文增长文案策划，专精中国社交媒体内容转化。'
+    '你的任务不是写空泛广告语，而是把品牌事实、用户场景、差异化卖点和平台语感组织成可发布初稿。'
+    '正文以中文为主；标签与 emoji 必须符合平台习惯。'
+    f'{fact_guardrail_block()}'
 )
 
 COPY_JSON_SCHEMA_HINT = """{
@@ -62,7 +71,7 @@ PLATFORM_FEW_SHOT = {
 
 def _platform_hint(platform: str) -> str:
     key = (platform or '').strip().lower()
-    guidance = PLATFORM_GUIDANCE.get(key) or PLATFORM_GUIDANCE.get(platform or '')
+    guidance = PLATFORM_GUIDANCE.get(key) or PLATFORM_GUIDANCE.get(platform or '') or platform_strategy(platform)
     few_shot = PLATFORM_FEW_SHOT.get(key) or PLATFORM_FEW_SHOT.get(platform or '')
     if guidance and few_shot:
         return f'{guidance} {few_shot}'
@@ -77,21 +86,27 @@ def build_copy_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     tone = str(payload.get('tone') or '爆款活泼').strip()
     platform = str(payload.get('platform') or 'Xiaohongshu').strip()
     feedback = str(payload.get('feedback') or '').strip()
-    workflow_context = payload.get('workflow_context')
+
+    quality_bar = quality_bar_block((
+        '标题必须具体，能体现用户场景、问题、结果或反差，不写“震撼发布”等空泛词。',
+        '第一段承担钩子：让目标用户知道“这和我有关”。',
+        '正文至少包含一个使用场景、一个核心卖点、一个信任理由或差异化表达。',
+        'CTA 要与平台动作匹配，例如收藏、评论、咨询、阅读原文、试用；不要只写“了解更多”。',
+        '标签要具体且可搜索，避免“品牌”“营销”“好物”等孤立泛词过多。',
+    ))
 
     user_lines = [
-        '请根据以下输入生成营销文案：',
+        '任务：根据以下输入生成一版可发布的营销文案初稿。',
         f'- 品牌/产品名：{brand_name}',
         f'- 产品描述：{product_description or "未指定"}',
         f'- 语气风格：{tone}',
         f'- 目标平台：{platform}',
         f'- 平台写作要求：{_platform_hint(platform)}',
-        f'- 输出 JSON 结构：\n{COPY_JSON_SCHEMA_HINT}',
+        f'- {quality_bar}',
+        f'- {json_contract_block(COPY_JSON_SCHEMA_HINT)}',
     ]
-    if workflow_context:
-        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
-    if feedback:
-        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
+    append_context_lines(user_lines, payload)
+    append_feedback_line(user_lines, feedback)
 
     return [
         {'role': 'system', 'content': COPY_SYSTEM_PROMPT},

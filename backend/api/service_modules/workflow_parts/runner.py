@@ -10,6 +10,7 @@ from django.utils import timezone
 from api.audit import record_audit_log
 from api.contracts import NODE_TYPE_ALIASES
 from api.models import Asset, Campaign, GenerationTask, Organization, Project, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkspaceDraft
+from api.redaction import redact_text
 from api.service_modules.generation import create_generation_task
 from api.service_modules.workflow_parts.contracts import node_io_schema, validate_workflow_contract
 from api.service_modules.workflow_parts.payloads import (
@@ -406,16 +407,17 @@ def run_workspace_workflow(
         return draft, tasks
     except Exception as exc:
         failed_at = timezone.now()
+        error_message = redact_text(str(exc))
         draft.nodes = nodes
         draft.status = 'failed'
-        draft.last_run_summary = {'workflow_run_id': workflow_run.id, 'error': str(exc), 'failed_at': failed_at.isoformat()}
+        draft.last_run_summary = {'workflow_run_id': workflow_run.id, 'error': error_message, 'failed_at': failed_at.isoformat()}
         draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
         workflow_run.status = 'failed'
         workflow_run.failed_nodes = WorkflowNodeRun.objects.filter(workflow_run=workflow_run, status='failed').count()
         workflow_run.completed_at = failed_at
-        workflow_run.summary = {'error': str(exc), 'failed_at': failed_at.isoformat()}
+        workflow_run.summary = {'error': error_message, 'failed_at': failed_at.isoformat()}
         workflow_run.save(update_fields=['status', 'failed_nodes', 'completed_at', 'summary', 'updated_at'])
-        record_workflow_event(workflow_run, 'run_failed', payload={'error': str(exc)})
+        record_workflow_event(workflow_run, 'run_failed', payload={'error': error_message})
         raise
 
 
@@ -493,22 +495,23 @@ def retry_workspace_node(
                 ))
             record_workflow_event(workflow_run, 'retry_node_succeeded', node_run=node_run, node_id=str(node_id), payload={'task_id': task.id if task else None})
     except Exception as exc:
+        error_message = redact_text(str(exc))
         target['status'] = 'failed'
-        target['error_message'] = str(exc)
+        target['error_message'] = error_message
         failed_at = timezone.now()
         if node_run:
             node_run.status = 'failed'
             node_run.completed_at = failed_at
             node_run.duration_ms = max(0, int((failed_at - node_started_at).total_seconds() * 1000))
             node_run.error_code = 'retry_exception'
-            node_run.error_message = str(exc)
+            node_run.error_message = error_message
             node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'error_code', 'error_message', 'updated_at'])
         workflow_run.status = 'failed'
         workflow_run.failed_nodes = 1
         workflow_run.completed_at = failed_at
-        workflow_run.summary = {'mode': 'retry', 'retry_node_id': node_id, 'error': str(exc), 'failed_at': failed_at.isoformat()}
+        workflow_run.summary = {'mode': 'retry', 'retry_node_id': node_id, 'error': error_message, 'failed_at': failed_at.isoformat()}
         workflow_run.save(update_fields=['status', 'failed_nodes', 'completed_at', 'summary', 'updated_at'])
-        record_workflow_event(workflow_run, 'retry_failed', node_run=node_run, node_id=str(node_id), payload={'error': str(exc)})
+        record_workflow_event(workflow_run, 'retry_failed', node_run=node_run, node_id=str(node_id), payload={'error': error_message})
         draft.nodes = nodes
         draft.status = 'failed'
         draft.last_run_summary = {
@@ -516,7 +519,7 @@ def retry_workspace_node(
             'last_retry_workflow_run_id': workflow_run.id,
             'last_retry_node_id': node_id,
             'last_retry_at': failed_at.isoformat(),
-            'last_retry_error': str(exc),
+            'last_retry_error': error_message,
         }
         draft.save(update_fields=['nodes', 'status', 'last_run_summary', 'updated_at'])
         raise

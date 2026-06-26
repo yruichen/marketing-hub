@@ -10,6 +10,7 @@ from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, norma
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
 from ai_gateway.services import AIModelGateway
 from api.audit import record_audit_log
+from api.redaction import redact_text
 from api.serializers import (
     AssetSerializer,
     CampaignSerializer,
@@ -38,6 +39,7 @@ from api.models import (
 )
 
 from api.service_modules.workspace import ensure_demo_workspace, membership_role
+from api.service_modules.budget import assert_generation_allowed, assert_global_queue_capacity
 
 def estimate_tokens(payload: dict[str, Any], result: dict[str, Any]) -> int:
     payload_size = len(json.dumps(payload, ensure_ascii=False))
@@ -252,7 +254,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
         return task
     except Exception as exc:
         task.status = 'failed'
-        task.error_message = str(exc)
+        task.error_message = redact_text(str(exc))
         task.completed_at = timezone.now()
         task.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
         raise
@@ -275,6 +277,14 @@ def create_generation_task(
     project = project or workspace['project']
     campaign = campaign or workspace['campaign']
     user = workspace['user'] if workspace else (User.objects.filter(username=username).first() if username else None)
+    payload = payload or {}
+
+    assert_generation_allowed(
+        organization=organization,
+        task_type=task_type,
+        payload=payload,
+    )
+    assert_global_queue_capacity(task_type)
 
     task = GenerationTask.objects.create(
         organization=organization,
@@ -351,6 +361,7 @@ def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) 
 def queue_generation_task(task: GenerationTask):
     from api.tasks import process_generation_task
 
+    assert_global_queue_capacity(task.task_type)
     async_result = process_generation_task.delay(task.id)
     task.celery_task_id = async_result.id
     task.save(update_fields=['celery_task_id', 'updated_at'])
@@ -374,6 +385,7 @@ def schedule_generation_task(task: GenerationTask):
     """Queue work without blocking the HTTP response when Celery runs eagerly."""
     from django.conf import settings
 
+    assert_global_queue_capacity(task.task_type)
     if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', True):
         import threading
 

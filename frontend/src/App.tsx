@@ -18,7 +18,7 @@ import {
   UserCircle,
   XCircle,
 } from 'lucide-react';
-import { apiFetch } from './hooks/useApi';
+import { apiFetch, ensureCsrfToken } from './hooks/useApi';
 import { pathForSection, sectionFromPath } from './app/routes';
 import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
@@ -151,7 +151,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
-  const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
+  const [token, setToken] = useState<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>('checking');
   const mainRef = useRef<HTMLElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const notificationPanelRef = useRef<HTMLDivElement>(null);
@@ -283,8 +284,8 @@ export default function App() {
         detail: '部分生成、任务状态和通知可能延迟刷新。',
         actionLabel: '重新检查',
         onAction: () => {
-          void apiFetch('/ai/config/')
-            .then((res) => setApiLive(res.ok))
+          void ensureCsrfToken()
+            .then(() => setApiLive(true))
             .catch(() => setApiLive(false));
         },
       });
@@ -344,6 +345,7 @@ export default function App() {
       setToken(null);
       setUsername(null);
       setAuthUser(null);
+      setAuthStatus('anonymous');
       return null;
     }
     localStorage.setItem('mh_token', 'session');
@@ -351,16 +353,27 @@ export default function App() {
     setToken('session');
     setUsername(data.username);
     setAuthUser(data);
+    setAuthStatus('authenticated');
     return data;
   }, []);
 
   useEffect(() => {
-    if (!token) return;
     const timer = window.setTimeout(() => {
       void refreshAuthUser();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshAuthUser, token]);
+  }, [refreshAuthUser]);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setToken(null);
+      setUsername(null);
+      setAuthUser(null);
+      setAuthStatus('anonymous');
+    };
+    window.addEventListener('mh:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('mh:auth-expired', handleAuthExpired);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -594,6 +607,7 @@ export default function App() {
         const sessionMarker = data.auth_type === 'session' ? 'session' : (data.token || 'session');
         localStorage.setItem('mh_token', sessionMarker);
         setToken(sessionMarker);
+        setAuthStatus('checking');
         const me = await refreshAuthUser();
         const nextUsername = me?.username || data.username;
         localStorage.setItem('mh_username', nextUsername);
@@ -630,6 +644,7 @@ export default function App() {
       localStorage.setItem('mh_username', data.username);
       setToken('session');
       setUsername(data.username);
+      setAuthStatus('checking');
       const me = await refreshAuthUser();
       setAuthUser(me);
       navigate('/admin-console', { replace: true });
@@ -648,6 +663,7 @@ export default function App() {
     setToken(null);
     setUsername(null);
     setAuthUser(null);
+    setAuthStatus('anonymous');
     triggerToast('已成功退出登录', 'info');
   };
 
@@ -825,10 +841,8 @@ export default function App() {
     const timer = window.setTimeout(() => {
       fetchWorkspaceBootstrap();
       fetchDashboard();
-      apiFetch('/ai/config/')
-        .then((res) => {
-          if (res.ok) setApiLive(true);
-        })
+      ensureCsrfToken()
+        .then(() => setApiLive(true))
         .catch(() => setApiLive(false));
 
       apiFetch(`/billing/plans/?username=${username || DEMO_USERNAME}`)
@@ -871,7 +885,15 @@ export default function App() {
   }, [notificationOpen]);
 
   // Auth Guard Portal
-  if (!token) {
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--surface-canvas)] font-mono text-xs font-black text-[var(--editorial-text-gray)]">
+        正在确认会话...
+      </div>
+    );
+  }
+
+  if (authStatus === 'anonymous' || !token) {
     if (isAdminLoginRoute) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-[var(--surface-canvas)] p-4 text-[var(--editorial-text)]">

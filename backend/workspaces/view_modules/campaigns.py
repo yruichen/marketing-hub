@@ -91,7 +91,7 @@ class CampaignDetailView(APIView):
         require_role(request.user, campaign.project.organization, 'creator')
         user = request.user
         record_audit_log(
-            action='delete',
+            action='campaign_delete',
             actor=user,
             organization=campaign.project.organization,
             target_type='campaign',

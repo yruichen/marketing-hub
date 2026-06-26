@@ -39,6 +39,9 @@ class CopyPromptTests(SimpleTestCase):
         })
         self.assertEqual(messages[0]['role'], 'system')
         self.assertIn('Make the hook sharper.', messages[1]['content'])
+        self.assertIn('事实与合规边界', messages[0]['content'])
+        self.assertIn('质量自检', messages[1]['content'])
+        self.assertIn('小红书', messages[1]['content'])
 
     def test_normalize_copy_result_fills_defaults(self):
         normalized = normalize_copy_result(
@@ -54,7 +57,7 @@ class PromptCatalogTests(SimpleTestCase):
         asset = get_prompt_asset('marketing.copy.system')
         self.assertIsNotNone(asset)
         self.assertEqual(asset.task_type, 'copy')
-        self.assertTrue(asset.version.startswith('2026-06-25'))
+        self.assertTrue(asset.version.startswith('2026-06-27'))
         self.assertGreaterEqual(len(asset.quality_bar), 3)
         self.assertIn('marketing.review.system', prompt_registry_snapshot())
 
@@ -84,6 +87,8 @@ class StoryboardPromptTests(SimpleTestCase):
         self.assertEqual(messages[0]['role'], 'system')
         self.assertIn('30 秒', messages[1]['content'])
         self.assertIn('Make the opening hook stronger.', messages[1]['content'])
+        self.assertIn('前 3 秒', messages[1]['content'])
+        self.assertIn('可拍摄', messages[1]['content'])
 
     def test_normalize_storyboard_result_balances_scene_durations(self):
         normalized = normalize_storyboard_result(
@@ -179,7 +184,7 @@ class ModelPolicyTests(APITestCase):
             },
             prompt_key='marketing.copy.system',
         )
-        self.assertIn('gateway:prompt_version=2026-06-25.v1', response.logs)
+        self.assertIn('gateway:prompt_version=2026-06-27.v2', response.logs)
         self.assertIn('gateway:prompt_owner=content-generation', response.logs)
         self.assertIn('gateway:prompt_risk=medium', response.logs)
 
@@ -215,6 +220,8 @@ class ImagePromptEngineTests(SimpleTestCase):
         self.assertEqual(messages[0]['role'], 'system')
         self.assertIn('xiaohongshu_lifestyle', messages[1]['content'])
         self.assertIn('夏季新品护肤套装', messages[1]['content'])
+        self.assertIn('subject, scene, composition', messages[1]['content'])
+        self.assertIn('平台视觉策略', messages[1]['content'])
 
     def test_normalize_image_prompt_result_fills_defaults(self):
         normalized = normalize_image_prompt_result(
@@ -234,6 +241,8 @@ class ReviewPromptTests(SimpleTestCase):
             'platform': '小红书',
         })
         self.assertIn('绝对,第一', messages[1]['content'])
+        self.assertIn('具体 word', messages[1]['content'])
+        self.assertIn('风险提示', messages[1]['content'])
 
     def test_normalize_review_result_coerces_issues(self):
         normalized = normalize_review_result(
@@ -279,6 +288,8 @@ class VideoPromptTests(SimpleTestCase):
         })
         self.assertIn('Shot 1', prompt)
         self.assertIn('产品特写', prompt)
+        self.assertIn('Aspect ratio', prompt)
+        self.assertIn('subject continuity', prompt)
 
     def test_extract_agnes_video_url_supports_remixed_field(self):
         url = extract_agnes_video_url({'status': 'completed', 'remixed_from_video_id': 'https://cdn.example.com/a.mp4'})
@@ -362,6 +373,51 @@ class AIConfigPermissionTests(APITestCase):
                 billing_mode='byok',
             ).exists()
         )
+
+    def test_ai_config_does_not_store_plain_api_key(self):
+        raw_key = 'sk-test-secret-value'
+        self.client.login(username='ai-org-admin', password='123')
+        response = self.client.post(
+            '/api/ai/config/',
+            {
+                'organization': self.organization.slug,
+                'provider': 'agnes',
+                'api_key': raw_key,
+                'model_name': 'agnes-2.0-flash',
+                'billing_mode': 'byok',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        config = AIConfiguration.objects.get(
+            organization=self.organization,
+            provider='agnes',
+            billing_mode='byok',
+        )
+        self.assertEqual(config.api_key, '')
+        self.assertNotIn(raw_key, config.api_key_encrypted)
+        self.assertEqual(config.get_api_key(), raw_key)
+        self.assertEqual(config.api_key_last4, 'alue')
+        self.assertNotIn(raw_key, json.dumps(response.data, ensure_ascii=False))
+
+    def test_ai_config_key_rotation_changes_fingerprint(self):
+        self.client.login(username='ai-org-admin', password='123')
+        payload = {
+            'organization': self.organization.slug,
+            'provider': 'agnes',
+            'model_name': 'agnes-2.0-flash',
+            'billing_mode': 'byok',
+        }
+        response = self.client.post('/api/ai/config/', {**payload, 'api_key': 'first-key'}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        first = AIConfiguration.objects.get(organization=self.organization, provider='agnes')
+        first_fingerprint = first.api_key_fingerprint
+
+        response = self.client.post('/api/ai/config/', {**payload, 'api_key': 'second-key'}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        first.refresh_from_db()
+        self.assertNotEqual(first.api_key_fingerprint, first_fingerprint)
+        self.assertEqual(first.get_api_key(), 'second-key')
 
     def test_org_admin_cannot_manage_platform_config(self):
         self.client.login(username='ai-org-admin', password='123')

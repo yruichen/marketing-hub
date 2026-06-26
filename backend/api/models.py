@@ -3,6 +3,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils import timezone
 
 
 def hash_signup_invite_code(code: str) -> str:
@@ -518,6 +519,10 @@ class AIConfiguration(models.Model):
     )
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='mock')
     api_key = models.CharField(max_length=255, blank=True, default='')
+    api_key_encrypted = models.TextField(blank=True, default='')
+    api_key_fingerprint = models.CharField(max_length=64, blank=True, default='')
+    api_key_last4 = models.CharField(max_length=8, blank=True, default='')
+    key_updated_at = models.DateTimeField(null=True, blank=True)
     base_url = models.CharField(max_length=255, blank=True, default='')
     model_name = models.CharField(max_length=100, blank=True, default='')
     image_model_name = models.CharField(max_length=100, blank=True, default='')
@@ -533,6 +538,33 @@ class AIConfiguration(models.Model):
     def __str__(self) -> str:
         scope = self.organization.slug if self.organization_id else 'platform'
         return f"{scope}:{self.get_provider_display()} ({self.model_name or 'Default Model'})"
+
+    def set_api_key(self, raw_key: str) -> None:
+        from api.crypto import encrypt_secret, fingerprint_secret
+
+        cleaned = (raw_key or '').strip()
+        if not cleaned:
+            self.api_key = ''
+            self.api_key_encrypted = ''
+            self.api_key_fingerprint = ''
+            self.api_key_last4 = ''
+            self.key_updated_at = timezone.now()
+            return
+        self.api_key = ''
+        self.api_key_encrypted = encrypt_secret(cleaned)
+        self.api_key_fingerprint = fingerprint_secret(cleaned)
+        self.api_key_last4 = cleaned[-4:]
+        self.key_updated_at = timezone.now()
+
+    def get_api_key(self) -> str:
+        from api.crypto import decrypt_secret
+
+        if self.api_key_encrypted:
+            return decrypt_secret(self.api_key_encrypted)
+        return self.api_key or ''
+
+    def has_api_key(self) -> bool:
+        return bool(self.api_key_encrypted or self.api_key)
 
 
 class IdempotencyKey(models.Model):
@@ -568,14 +600,34 @@ class AuditLog(models.Model):
         ('login', 'Login'),
         ('member_change', 'Member Change'),
         ('key_change', 'Key Change'),
+        ('ai_key_create', 'AI Key Create'),
+        ('ai_key_update', 'AI Key Update'),
+        ('ai_key_delete', 'AI Key Delete'),
+        ('ai_key_validate', 'AI Key Validate'),
         ('export', 'Export'),
         ('delete', 'Delete'),
+        ('project_create', 'Project Create'),
+        ('project_update', 'Project Update'),
+        ('project_delete', 'Project Delete'),
+        ('folder_create', 'Folder Create'),
+        ('folder_update', 'Folder Update'),
+        ('folder_delete', 'Folder Delete'),
+        ('campaign_create', 'Campaign Create'),
+        ('campaign_update', 'Campaign Update'),
+        ('campaign_delete', 'Campaign Delete'),
+        ('asset_create', 'Asset Create'),
+        ('asset_update', 'Asset Update'),
+        ('asset_delete', 'Asset Delete'),
+        ('community_publish', 'Community Publish'),
+        ('community_unpublish', 'Community Unpublish'),
         ('billing_change', 'Billing Change'),
+        ('credit_grant', 'Credit Grant'),
         ('generation_create', 'Generation Create'),
         ('workflow_run', 'Workflow Run'),
         ('workflow_retry', 'Workflow Retry'),
         ('brainstorm', 'Brainstorm'),
         ('assistant_step', 'Assistant Step'),
+        ('cross_org_access_denied', 'Cross-org Access Denied'),
     ]
 
     organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
@@ -583,6 +635,7 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=40, choices=ACTION_CHOICES)
     target_type = models.CharField(max_length=80, blank=True, default='')
     target_id = models.CharField(max_length=80, blank=True, default='')
+    request_id = models.CharField(max_length=128, blank=True, default='')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=255, blank=True, default='')
     metadata = models.JSONField(default=dict, blank=True)

@@ -11,6 +11,7 @@ from asgiref.sync import sync_to_async
 from django.db import OperationalError, close_old_connections
 
 from api.audit import record_audit_log
+from api.redaction import redact_text
 
 from .tools import ToolContext, ToolRegistry, build_default_registry
 
@@ -552,11 +553,11 @@ class AssistantAgent:
                         yield AssistantStep(type='text', delta=text)
             except LlmUpstreamError as exc:
                 logger.warning('LLM upstream error: status=%s', exc.status)
-                yield AssistantStep(type='error', error=str(exc), status=exc.status)
+                yield AssistantStep(type='error', error=redact_text(str(exc)), status=exc.status)
                 return
             except Exception as exc:
                 logger.exception('LLM call failed')
-                yield AssistantStep(type='error', error=str(exc))
+                yield AssistantStep(type='error', error=redact_text(str(exc)))
                 return
 
             await self._audit_step(ctx, {'usage': last_usage}, step_idx, last_usage)
@@ -595,10 +596,10 @@ class AssistantAgent:
                         logger.warning('Tool %s skipped because the database is locked.', fn_name)
                     else:
                         logger.exception('Tool %s failed', fn_name)
-                    result = {'error': str(exc)}
+                    result = {'error': redact_text(str(exc))}
                 except Exception as exc:
                     logger.exception('Tool %s failed', fn_name)
-                    result = {'error': str(exc)}
+                    result = {'error': redact_text(str(exc))}
                 finally:
                     # Make sure long-lived connections don't leak across
                     # long streaming sessions.
@@ -696,7 +697,8 @@ def build_assistant_llm(organization: Any | None) -> LlmClient:
         logger.exception('Assistant: failed to resolve AIConfiguration; using mock')
         return MockLlmClient()
 
-    if config is None or not getattr(config, 'api_key', '') or config.provider == 'mock':
+    api_key = config.get_api_key() if config is not None else ''
+    if config is None or not api_key or config.provider == 'mock':
         return MockLlmClient()
 
     provider = config.provider
@@ -722,7 +724,7 @@ def build_assistant_llm(organization: Any | None) -> LlmClient:
         )
         return MockLlmClient()
 
-    return HttpLlmClient(base_url=base_url, api_key=config.api_key, model=model)
+    return HttpLlmClient(base_url=base_url, api_key=api_key, model=model)
 
 
 def build_assistant_agent(organization: Any | None) -> 'AssistantAgent':

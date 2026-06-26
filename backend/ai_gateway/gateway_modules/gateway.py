@@ -7,6 +7,7 @@ from typing import Any
 from django.conf import settings
 
 from api.models import AIConfiguration, Organization
+from api.redaction import redact_text
 from ai_gateway.gateway_modules.adapters import (
     AgnesAdapter,
     AgnesImageAdapter,
@@ -192,7 +193,7 @@ class AIModelGateway:
         SafetyPolicy.validate(prompt)
         config = ModelPolicy.select_configuration(organization=organization, task_type=task_type, role=role)
         provider = config.provider if config else fallback_provider
-        if (config is None or not config.api_key) and provider not in {'mock', 'local_proxy'}:
+        if (config is None or not config.has_api_key()) and provider not in {'mock', 'local_proxy'}:
             provider = fallback_provider
             config = None
         if provider == 'mock' and not cls._mock_provider_allowed():
@@ -254,29 +255,29 @@ class AIModelGateway:
                     ) from exc
                 if task_type == 'video':
                     if isinstance(exc, urllib.error.HTTPError):
-                        detail = exc.read().decode('utf-8', errors='replace')[:240]
+                        detail = redact_text(exc.read().decode('utf-8', errors='replace'))[:240]
                         logs.append(f'gateway:error=http_{exc.code}')
                         logs.append(f'gateway:error_detail={detail}')
                     else:
-                        logs.append(f'gateway:error={str(exc)[:240]}')
+                        logs.append(f'gateway:error={redact_text(str(exc))[:240]}')
                     raise NonRetryableGatewayError(
                         'Agnes 视频 API 调用失败（已自动重试多次）。'
-                        f' 原因：{str(exc)[:200]}。'
+                        f' 原因：{redact_text(str(exc))[:200]}。'
                         ' 若 PowerShell 可创建任务但此处失败，多为 Python SSL 链路偶发中断，请稍后重试或配置 HTTPS_PROXY。'
                     ) from exc
                 fallback_used = True
                 logs.append(f'gateway:fallback={fallback_provider}')
                 if isinstance(exc, urllib.error.HTTPError):
-                    detail = exc.read().decode('utf-8', errors='replace')[:240]
+                    detail = redact_text(exc.read().decode('utf-8', errors='replace'))[:240]
                     logs.append(f'gateway:error=http_{exc.code}')
                     logs.append(f'gateway:error_detail={detail}')
                 else:
-                    logs.append(f'gateway:error={str(exc)[:240]}')
+                    logs.append(f'gateway:error={redact_text(str(exc))[:240]}')
                 adapter = cls.ADAPTERS[fallback_provider](AIConfiguration(provider='mock'))
                 raw = adapter.invoke(prompt, model_name='mock', task_type=task_type, payload=payload, messages=messages)
                 result = cls._post_process(task_type, raw if isinstance(raw, dict) else raw.payload, payload)
             else:
-                raise NonRetryableGatewayError(str(exc)) from exc
+                raise NonRetryableGatewayError(redact_text(str(exc))) from exc
 
         if not prompt_tokens:
             prompt_tokens = max(40, len(prompt) // 4)
