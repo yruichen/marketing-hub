@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Bot, Sparkles } from 'lucide-react';
 import type { ChatMessage } from './types';
 import { MessageBubble } from './MessageBubble';
 import './assistant.css';
@@ -12,6 +13,8 @@ interface AssistantThreadProps {
     assetId?: number,
     reason?: string,
   ) => void;
+  onQuickPrompt?: (text: string) => void;
+  quickPrompts?: string[];
 }
 
 /**
@@ -23,6 +26,8 @@ export function AssistantThread({
   messages,
   sending,
   onNavigate,
+  onQuickPrompt,
+  quickPrompts = ['列出最近项目', '帮我生成一段短视频文案', '打开资产库'],
 }: AssistantThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -31,30 +36,37 @@ export function AssistantThread({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, sending]);
 
-  if (messages.length === 0) {
-    return (
-      <div className="assistant-thread" ref={scrollRef}>
-        <div className="assistant-empty">
-          👋 你好，我是 Marketing-Hub 助手。
-          <br />
-          <br />
-          试试：
-          <br />
-          · 列出我最近的项目
-          <br />
-          · 帮我生成一段小红书爆款文案
-          <br />
-          · 跳到资产库
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="assistant-thread" ref={scrollRef}>
-      {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} onNavigate={onNavigate} />
-      ))}
+      {messages.length === 0 ? (
+        <div className="assistant-empty">
+          <div className="assistant-empty__mark">
+            <Bot className="h-5 w-5" />
+          </div>
+          <strong>Marketing-Hub 助手</strong>
+          <p>我会结合当前页面、项目与历史任务回答，也可以直接帮你跳转到对应工作区。</p>
+          <div className="assistant-empty__quick">
+            <span className="assistant-empty__quick-title"><Sparkles className="h-3 w-3" /> 快速起步</span>
+            <div className="assistant-empty__quicklist">
+              {quickPrompts.map((prompt) => (
+                <button
+                  type="button"
+                  key={prompt}
+                  className="assistant-quick-btn"
+                  onClick={() => onQuickPrompt?.(prompt)}
+                  disabled={sending}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        messages.map((m) => (
+          <MessageBubble key={m.id} message={m} onNavigate={onNavigate} />
+        ))
+      )}
     </div>
   );
 }

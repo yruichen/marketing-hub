@@ -1,8 +1,10 @@
-import { Folder, Star, Archive, RefreshCw } from 'lucide-react';
-import type { FolderRecord } from '../../types/workspace';
+import { Archive, Folder, Inbox, RefreshCw, Star } from 'lucide-react';
+import type { FolderRecord, ProjectRecord } from '../../types/workspace';
+import { getProjectFolder } from './types';
 
 interface DesktopSidebarProps {
   folders: FolderRecord[];
+  projects: ProjectRecord[];
   activeFolderPath: string;
   onSelectFolder: (path: string) => void;
   onDropProject: (folder: FolderRecord) => void;
@@ -16,20 +18,28 @@ interface DesktopSidebarProps {
  */
 export function DesktopSidebar({
   folders,
+  projects,
   activeFolderPath,
   onSelectFolder,
   onDropProject,
   onRefresh,
   loading,
 }: DesktopSidebarProps) {
+  const activeCount = projects.filter((project) => !project.is_archived).length;
+  const archivedCount = projects.length - activeCount;
+  const countForFolder = (path: string) => projects.filter((project) => getProjectFolder(project) === path).length;
+
   return (
     <aside className="desktop-sidebar">
-      <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] px-4 py-3">
-        <h3 className="text-[10px] font-black uppercase tracking-wider">项目范围</h3>
+      <div className="desktop-sidebar__header">
+        <div>
+          <h3>项目范围</h3>
+          <span>{activeCount} 个进行中</span>
+        </div>
         <button
           type="button"
           onClick={onRefresh}
-          className="border border-[var(--editorial-stroke)] p-1 hover:bg-[var(--editorial-unselected)]"
+          className="desktop-sidebar__refresh"
           title="刷新"
           aria-label="刷新"
         >
@@ -44,6 +54,7 @@ export function DesktopSidebar({
       >
         <Star />
         <span className="desktop-sidebar__item__label">全部项目</span>
+        <span className="desktop-sidebar__count">{projects.length}</span>
       </button>
 
       <button
@@ -53,12 +64,16 @@ export function DesktopSidebar({
       >
         <Archive />
         <span className="desktop-sidebar__item__label">归档</span>
+        <span className="desktop-sidebar__count">{archivedCount}</span>
       </button>
 
       <div className="desktop-sidebar__section-label mt-4">文件夹</div>
 
       {folders.length === 0 && (
-        <div className="px-4 py-2 text-[10px] text-[var(--editorial-text-gray)]">暂无文件夹</div>
+        <div className="desktop-sidebar__empty">
+          <Inbox className="h-4 w-4" />
+          <span>暂无文件夹</span>
+        </div>
       )}
 
       {folders.map((folder) => (
@@ -76,15 +91,14 @@ export function DesktopSidebar({
         >
           <Folder />
           <span className="desktop-sidebar__item__label">{folder.path}</span>
+          <span className="desktop-sidebar__count">{folder.project_count || countForFolder(folder.path)}</span>
         </button>
       ))}
 
       <div className="flex-1" />
 
-      <div className="border-t border-dashed border-[var(--editorial-stroke)]/30 p-3 text-[9px] text-[var(--editorial-text-gray)] leading-relaxed">
-        选择范围会筛选中间列表。
-        <br />
-        项目移动请在详情中修改文件夹。
+      <div className="desktop-sidebar__footer">
+        <span>拖拽项目到文件夹可快速移动</span>
       </div>
     </aside>
   );

@@ -2,12 +2,151 @@ from django.contrib.auth.models import User
 from decimal import Decimal
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, Campaign, GenerationTask, Membership, Organization, Project, UsageEvent, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, Campaign, CommunityCreation, CreditLedgerEntry, GenerationTask, Membership, Organization, Project, UsageEvent, UserProfile, WorkflowTemplate, WorkspaceDraft
+
+
+class AdminConsoleSeparationTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.get(username='ROOT')
+        self.demo = User.objects.get(username='DEMO')
+        self.member = User.objects.create_user(username='member-user', password='123', email='member@example.com')
+        self.organization = Organization.objects.create(name='Member Org', slug='member-org')
+        Membership.objects.create(user=self.member, organization=self.organization, role='admin')
+
+    def test_superuser_must_use_admin_login(self):
+        org_count = Organization.objects.count()
+        response = self.client.post('/api/auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(response.data['admin_login_required'])
+        self.assertEqual(Organization.objects.count(), org_count)
+
+    def test_admin_login_sets_admin_mode_without_workspace_payload(self):
+        response = self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['admin_mode'])
+        self.assertNotIn('organization', response.data)
+
+        response = self.client.get('/api/auth/me/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['admin_mode'])
+        self.assertNotIn('project', response.data)
+
+    def test_non_superuser_cannot_use_admin_console(self):
+        self.client.login(username='member-user', password='123')
+        response = self.client.get('/api/admin-console/users/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_user_credit_grant_targets_user_organization_ledger(self):
+        self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        response = self.client.post(
+            f'/api/admin-console/users/{self.member.id}/credit-grants/',
+            {'organization_id': self.organization.id, 'amount_cents': 2500, 'reason': 'seed credits'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        entry = CreditLedgerEntry.objects.get(organization=self.organization, source='grant')
+        self.assertEqual(entry.delta_cents, 2500)
+        self.assertEqual(entry.balance_after_cents, 2500)
+        self.assertEqual(entry.metadata['target_user_id'], self.member.id)
+        self.assertEqual(entry.metadata['source'], 'admin_console_user_grant')
+
+    def test_admin_action_prevents_self_lock(self):
+        self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        response = self.client.post(f'/api/admin-console/users/{self.admin.id}/actions/freeze/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_demo_account_is_not_admin(self):
+        self.assertFalse(self.demo.is_superuser)
+        self.assertFalse(self.demo.is_staff)
+        response = self.client.post('/api/auth/login/', {'username': 'DEMO', 'password': '123'}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['demo_account'])
+        self.assertFalse(response.data['is_superuser'])
+
+
+class CreatorProfileTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='profile-user', password='123', email='profile@example.com')
+        self.viewer = User.objects.create_user(username='viewer-user', password='123', email='viewer@example.com')
+        self.organization = Organization.objects.create(name='Profile Org', slug='profile-org')
+        Membership.objects.create(user=self.user, organization=self.organization, role='creator')
+        Membership.objects.create(user=self.viewer, organization=self.organization, role='viewer')
+        CommunityCreation.objects.create(
+            organization=self.organization,
+            username='profile-user',
+            creation_type='copy',
+            title='Launch Copy',
+            content='{"title": "Launch Copy", "paragraphs": ["Hello"]}',
+            likes=3,
+        )
+        CommunityCreation.objects.create(
+            organization=self.organization,
+            username='profile-user',
+            creation_type='image',
+            title='Launch Visual',
+            content='{"prompt": "editorial desk"}',
+            likes=5,
+        )
+
+    def test_profile_me_requires_login(self):
+        response = self.client.get('/api/profiles/me/')
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_profile_me_returns_profile_stats_and_creations(self):
+        self.client.login(username='profile-user', password='123')
+        response = self.client.get('/api/profiles/me/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['profile']['username'], 'profile-user')
+        self.assertEqual(response.data['profile']['display_name'], 'profile-user')
+        self.assertTrue(response.data['is_owner'])
+        self.assertEqual(response.data['stats']['creation_count'], 2)
+        self.assertEqual(response.data['stats']['total_likes'], 8)
+        self.assertEqual(len(response.data['creations']), 2)
+
+    def test_profile_patch_validates_urls_lengths_and_lists(self):
+        self.client.login(username='profile-user', password='123')
+        response = self.client.patch('/api/profiles/me/', {
+            'display_name': 'Creator One',
+            'headline': 'Brand workflow strategist',
+            'bio': 'Makes launch kits.',
+            'location': 'Shanghai',
+            'website_url': 'https://example.com',
+            'avatar_url': 'https://example.com/avatar.png',
+            'banner_url': 'https://example.com/banner.png',
+            'specialties': ['Launch', 'Copy'],
+            'social_links': [{'label': 'LinkedIn', 'url': 'https://linkedin.com/in/creator'}],
+            'profile_visibility': 'workspace',
+            'status': 'suspended',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertEqual(profile.display_name, 'Creator One')
+        self.assertEqual(profile.status, 'pending')
+
+        response = self.client.patch('/api/profiles/me/', {
+            'website_url': 'not-a-url',
+            'bio': 'x' * 501,
+            'specialties': [str(index) for index in range(9)],
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('website_url', response.data['errors'])
+        self.assertIn('bio', response.data['errors'])
+        self.assertIn('specialties', response.data['errors'])
+
+    def test_public_profile_lookup(self):
+        self.client.login(username='viewer-user', password='123')
+        response = self.client.get('/api/profiles/profile-user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['is_owner'])
+        self.assertEqual(response.data['profile']['username'], 'profile-user')
+
+        response = self.client.get('/api/profiles/missing-user/')
+        self.assertEqual(response.status_code, 404)
 
 
 class WorkspaceUpgradeTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.get(username='ROOT')
+        self.user = User.objects.create_user(username='workspace-user', password='123')
         self.organization = Organization.objects.create(name='Test Organization', slug='test-org')
         Membership.objects.create(user=self.user, organization=self.organization, role='admin')
         self.project = Project.objects.create(
@@ -27,11 +166,11 @@ class WorkspaceUpgradeTests(APITestCase):
             objective='Validate the launch message',
         )
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
-        self.client.login(username='ROOT', password='123')
+        self.client.login(username='workspace-user', password='123')
 
     def test_copy_generation_returns_structured_payload(self):
         response = self.client.post('/api/generate/copy/', {
-            'username': 'ROOT',
+            'username': 'DEMO',
             'brand_name': 'Launchbook',
             'product_description': 'AI marketing workspace for creator teams',
             'tone': 'concise',
@@ -51,7 +190,7 @@ class WorkspaceUpgradeTests(APITestCase):
     def test_content_package_generation_returns_structured_payload(self):
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         response = self.client.post('/api/generate/content-package/', {
-            'username': 'ROOT',
+            'username': 'DEMO',
             'brief': 'Launch an AI marketing workspace for creator teams',
             'brand_name': 'Launchbook',
             'use_case': '新品上市',
@@ -72,7 +211,7 @@ class WorkspaceUpgradeTests(APITestCase):
     def test_image_generation_returns_structured_payload(self):
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         response = self.client.post('/api/generate/image/', {
-            'username': 'ROOT',
+            'username': 'DEMO',
             'prompt': 'A minimalist marketing desk setup',
             'style': 'editorial sketch',
             'aspect_ratio': '1:1',
@@ -137,7 +276,7 @@ class WorkspaceUpgradeTests(APITestCase):
             edges=[{'id': 'context-copy', 'source': 'context-1', 'target': 'copy-1'}],
         )
 
-        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'ROOT'}, format='json')
+        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'DEMO'}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['draft']['status'], 'completed')
         self.assertEqual(len(response.data['tasks']), 1)
@@ -145,7 +284,7 @@ class WorkspaceUpgradeTests(APITestCase):
 
         response = self.client.post(
             f'/api/drafts/{draft.id}/nodes/copy-1/retry/',
-            {'username': 'ROOT', 'feedback': 'Make the opening more direct.'},
+            {'username': 'DEMO', 'feedback': 'Make the opening more direct.'},
             format='json',
         )
         self.assertEqual(response.status_code, 200)

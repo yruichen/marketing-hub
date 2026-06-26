@@ -1,4 +1,5 @@
 from django.utils.text import slugify
+from rest_framework.exceptions import PermissionDenied
 
 from api.models import Campaign, Membership, Organization, Project
 from api.services import ensure_demo_workspace
@@ -13,6 +14,8 @@ def authenticated_user(request):
 
 def get_scope(request):
     user = authenticated_user(request)
+    if user and user.is_superuser:
+        raise PermissionDenied('超级管理员只能使用独立后台，不能访问普通工作台。')
     username = user.username if user else (request.query_params.get('username') or request.data.get('username'))
     workspace = ensure_demo_workspace(username)
 

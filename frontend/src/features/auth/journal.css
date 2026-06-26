@@ -1,99 +1,545 @@
 /* ==================== features/auth/journal.css ====================
-   翻开手帐视觉：3D 翻页 + 书脊高亮线。
-   改这里只影响 features/auth/ 模块，不污染 index.css 的全局样式。
-   ================================================================ */
+   Auth entrance: creative console inspired by the brainstorm workspace.
+   ================================================================== */
 
-.journal-stage {
-  /* 给 max-w-md 留 3D 透视空间，纸页不会"飞出去" */
-  perspective: 1600px;
+.auth-shell {
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--editorial-stroke) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--editorial-stroke) 4%, transparent) 1px, transparent 1px),
+    var(--editorial-bg);
+  background-size: 72px 72px;
+  background-position: center;
+  color: var(--editorial-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(18px, 4vw, 54px);
 }
 
-.journal-book {
+.auth-shell__grid {
+  width: min(1080px, 100%);
+  min-height: min(720px, calc(100vh - 48px));
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 430px);
+  align-items: center;
+  gap: clamp(24px, 5vw, 64px);
+}
+
+.auth-hero {
+  position: relative;
+  min-width: 0;
+  padding: clamp(8px, 2vw, 18px);
+}
+
+.auth-hero__badge {
+  display: inline-flex;
+  border-top: 1px solid color-mix(in srgb, var(--editorial-stroke) 36%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--editorial-stroke) 36%, transparent);
+  padding: 8px 12px;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  animation: auth-fade-up 0.42s ease-out both;
+}
+
+.auth-hero__title {
+  max-width: 690px;
+  margin: 34px 0 0;
+  color: var(--editorial-text);
+  font-family: var(--serif-font);
+  font-size: clamp(48px, 8vw, 104px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 0;
+  animation: auth-fade-up 0.48s ease-out 0.08s both;
+}
+
+.auth-hero__title span {
+  display: block;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 0 0.12em 0.08em;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-accent-yellow);
+  color: #10130f;
+  box-shadow: 5px 5px 0 var(--editorial-stroke);
+  transform: rotate(-1deg);
+}
+
+.auth-hero__brief {
+  position: relative;
+  max-width: 560px;
+  margin-top: 44px;
+  border: 1.5px solid var(--editorial-stroke);
+  background: color-mix(in srgb, var(--editorial-paper) 90%, transparent);
+  box-shadow: 5px 5px 0 var(--editorial-stroke);
+  padding: 18px;
+  animation: auth-fade-up 0.48s ease-out 0.18s both;
+}
+
+.auth-hero__brief::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  top: -12px;
+  width: 74px;
+  height: 22px;
+  border: 1px solid var(--editorial-stroke);
+  background: var(--brand-accent);
+  transform: rotate(2deg);
+}
+
+.auth-hero__brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-family: var(--mono-font);
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.auth-hero__brief-head b {
+  border: 1px solid var(--editorial-stroke);
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+.auth-hero__prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-top: 28px;
+  color: var(--editorial-text);
+  font-family: var(--mono-font);
+  font-size: clamp(16px, 2vw, 22px);
+  font-weight: 800;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.auth-hero__cursor {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 1.35em;
+  margin-top: 0.1em;
+  background: var(--brand-accent);
+  box-shadow: 0 0 0 1px var(--editorial-stroke);
+  animation: auth-caret 1s steps(2) infinite;
+}
+
+.auth-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.auth-hero__metrics span {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 10px;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.auth-hero__metrics b {
+  display: block;
+  color: var(--editorial-text);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.auth-panel-wrap {
+  min-width: 0;
+  animation: auth-panel-enter 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.auth-page {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
-  transform-style: preserve-3d;
-}
-
-/* 封面与内页共用基础卡面 */
-.journal-face {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   display: flex;
   flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+  border: 1.5px solid var(--editorial-stroke);
+  background: color-mix(in srgb, var(--editorial-paper) 96%, transparent);
+  box-shadow: 6px 6px 0 var(--editorial-stroke), var(--shadow-panel);
+  padding: 28px;
 }
 
-/* 封面在顶面，沿左侧书脊翻起 */
-.journal-flip {
+.auth-page::before {
+  content: '';
   position: absolute;
-  inset: 0;
-  transform-origin: left center;
-  transform-style: preserve-3d;
-  transition:
-    transform 0.65s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s ease 0.55s;
-  will-change: transform;
-  z-index: 2;
-}
-
-.journal-flip--open {
-  transform: rotateY(-180deg);
-  /* 翻完后让它彻底从布局消失（避免挡住内页点击） */
-  opacity: 0;
+  inset: 14px;
   pointer-events: none;
+  border: 1px dashed color-mix(in srgb, var(--editorial-stroke) 30%, transparent);
 }
 
-/* 内页放在底层，不参与翻页 */
-.journal-page-slot {
-  position: absolute;
-  inset: 0;
+.auth-page__header,
+.auth-page__mode-row,
+.auth-page__form,
+.auth-page__register-preview,
+.auth-page__footer {
+  position: relative;
   z-index: 1;
 }
 
-/* 书脊高亮线：4px 主体 + 2px 内阴影，亮/暗模式都靠 --editorial-accent-yellow */
-.journal-spine {
-  background:
-    linear-gradient(
-      to right,
-      transparent 0%,
-      var(--editorial-accent-yellow) 30%,
-      var(--editorial-accent-yellow) 70%,
-      transparent 100%
-    );
-  box-shadow:
-    inset 0 0 0 1px var(--editorial-stroke),
-    0 0 6px rgba(0, 0, 0, 0.12);
-  z-index: 3;
-  border-radius: 2px;
+.auth-page__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.dark .journal-spine {
-  box-shadow:
-    inset 0 0 0 1px var(--editorial-stroke),
-    0 0 8px rgba(0, 0, 0, 0.5);
+.auth-page__mark {
+  display: inline-flex;
+  height: 46px;
+  width: 46px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--brand-accent);
+  color: #10130f;
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
 }
 
-/* 入场小动效：避免页面刚挂载时封面"砰"地出现 */
-@keyframes journalFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.journal-stage {
-  animation: journalFadeIn 0.35s ease-out;
+.auth-page__eyebrow {
+  margin: 0 0 3px;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-/* 尊重用户的减少动画偏好 */
-@media (prefers-reduced-motion: reduce) {
-  .journal-flip {
-    transition: none;
-  }
-  .journal-flip--open {
-    transform: none;
+.auth-page__title {
+  margin: 0;
+  color: var(--editorial-text);
+  font-family: var(--serif-font);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.08;
+}
+
+.auth-page__mode-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-elevated) 64%, transparent);
+  padding: 6px;
+}
+
+.auth-page__mode {
+  height: 34px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.auth-page__mode--active {
+  border-color: var(--editorial-stroke);
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+}
+
+.auth-page__form,
+.auth-page__register-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-page__error {
+  border: 1px solid color-mix(in srgb, var(--danger-accent) 60%, var(--editorial-stroke));
+  background: color-mix(in srgb, var(--danger-accent) 12%, var(--surface-panel));
+  color: var(--danger-accent);
+  padding: 10px 12px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.auth-page__success {
+  border: 1px solid color-mix(in srgb, var(--success-accent) 60%, var(--editorial-stroke));
+  background: color-mix(in srgb, var(--success-accent) 12%, var(--surface-panel));
+  color: var(--success-accent);
+  padding: 10px 12px;
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.auth-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.auth-page__field label {
+  color: var(--editorial-text);
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-page__field input {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  color: var(--editorial-text);
+  padding: 12px;
+  font-family: var(--mono-font);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+.auth-page__field input:focus {
+  border-color: var(--editorial-stroke);
+  box-shadow: 2px 2px 0 var(--editorial-stroke);
+}
+
+.auth-page__field input::placeholder {
+  color: var(--editorial-text-gray);
+}
+
+.auth-page__field-error {
+  color: var(--danger-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.auth-page__submit {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px solid var(--editorial-stroke);
+  background: var(--editorial-stroke);
+  color: var(--editorial-bg);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--brand-accent);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, opacity 0.14s ease;
+}
+
+.auth-page__submit:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--brand-accent);
+}
+
+.auth-page__submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.auth-page__submit--ghost {
+  background: var(--surface-panel);
+  color: var(--editorial-text);
+  box-shadow: 3px 3px 0 var(--editorial-stroke);
+}
+
+.auth-page__link-btn {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--editorial-text-gray);
+  padding: 0;
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-page__link-btn:hover:not(:disabled) {
+  color: var(--editorial-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-page__link-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.auth-page__notice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  padding: 13px;
+}
+
+.auth-page__notice-card strong {
+  display: block;
+  color: var(--editorial-text);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.auth-page__notice-card p {
+  margin: 4px 0 0;
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.auth-page__fake-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed var(--border-subtle);
+  padding: 9px 0;
+  font-family: var(--mono-font);
+}
+
+.auth-page__fake-field span {
+  color: var(--editorial-text-gray);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.auth-page__fake-field b {
+  color: var(--editorial-text);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.auth-page__footer {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 14px;
+  color: var(--editorial-text-gray);
+  font-family: var(--mono-font);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.6;
+}
+
+.auth-page__footer p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.auth-page__demo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auth-page__demo button {
+  border: 1px solid var(--border-default);
+  background: var(--surface-elevated);
+  color: var(--editorial-text);
+  padding: 5px 9px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-page__demo button:hover {
+  background: var(--brand-accent-soft);
+}
+
+@keyframes auth-fade-up {
+  from {
     opacity: 0;
+    transform: translateY(8px);
   }
-  .journal-stage {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes auth-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes auth-caret {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0.25; }
+}
+
+@media (max-width: 900px) {
+  .auth-shell {
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .auth-shell__grid {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .auth-hero {
+    padding: 0;
+  }
+
+  .auth-hero__title {
+    margin-top: 24px;
+    font-size: clamp(42px, 14vw, 72px);
+  }
+
+  .auth-hero__brief {
+    margin-top: 28px;
+  }
+
+  .auth-page {
+    padding: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-hero__badge,
+  .auth-hero__title,
+  .auth-hero__brief,
+  .auth-panel-wrap {
+    animation: none;
+  }
+
+  .auth-hero__cursor {
     animation: none;
   }
 }

@@ -14,6 +14,24 @@ export interface AiConfig {
   is_active: boolean;
 }
 
+export interface ProviderModelOption {
+  id: string;
+  label: string;
+  capabilities: Array<'text' | 'image' | 'audio' | 'video' | string>;
+}
+
+export interface ProviderModelListResponse {
+  provider: string;
+  base_url: string;
+  source: 'live';
+  models: ProviderModelOption[];
+  defaults: {
+    model_name: string;
+    image_model_name: string;
+    video_model_name: string;
+  };
+}
+
 export type ConfigScope = 'all' | 'text' | 'image' | 'audio' | 'video';
 export type BillingMode = 'platform' | 'byok';
 
@@ -23,10 +41,13 @@ export const providerDefaultScope = (provider: string): ConfigScope => {
 };
 
 export const providerSupportsImageConfig = (provider: string) =>
-  ['mock', 'agnes', 'openai', 'gemini'].includes(provider);
+  provider === 'agnes';
 
 export const providerSupportsVideoConfig = (provider: string) =>
-  ['mock', 'agnes'].includes(provider);
+  provider === 'agnes';
+
+export const providerSupportsAudioConfig = (provider: string) =>
+  provider === 'openai';
 
 export const configScopeLabels: Record<string, string> = {
   all: '全部能力',

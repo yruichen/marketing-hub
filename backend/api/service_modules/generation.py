@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
@@ -31,6 +31,7 @@ from api.models import (
     Membership,
     Organization,
     Project,
+    CreditLedgerEntry,
     UsageEvent,
     WorkflowTemplate,
     WorkspaceDraft,
@@ -66,7 +67,25 @@ def persist_usage(task: GenerationTask, result: dict[str, Any], provider: str = 
     task.token_count = total_tokens
     task.cost_usd = cost
     task.save(update_fields=['token_count', 'cost_usd', 'updated_at'])
+    persist_credit_debit(event)
     return event
+
+
+def persist_credit_debit(event: UsageEvent) -> CreditLedgerEntry:
+    delta_cents = -int((event.cost_usd or Decimal('0')) * Decimal('100'))
+    balance = CreditLedgerEntry.objects.filter(organization=event.organization).aggregate(total=models.Sum('delta_cents'))['total'] or 0
+    return CreditLedgerEntry.objects.create(
+        organization=event.organization,
+        source='usage',
+        delta_cents=delta_cents,
+        balance_after_cents=balance + delta_cents,
+        usage_event=event,
+        metadata={
+            'generation_task_id': event.generation_task_id,
+            'provider': event.provider,
+            'model_name': event.model_name,
+        },
+    )
 
 
 def run_generation_task(task: GenerationTask) -> GenerationTask:
@@ -217,7 +236,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
         task.token_count = max(prompt_tokens + completion_tokens, estimate_tokens(task.payload, result))
         task.cost_usd = cost_usd if cost_usd else estimate_cost(task.token_count)
         task.save(update_fields=['result', 'status', 'completed_at', 'error_message', 'token_count', 'cost_usd', 'updated_at'])
-        UsageEvent.objects.create(
+        usage_event = UsageEvent.objects.create(
             organization=task.organization,
             project=task.project,
             campaign=task.campaign,
@@ -229,6 +248,7 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             total_tokens=task.token_count,
             cost_usd=task.cost_usd,
         )
+        persist_credit_debit(usage_event)
         return task
     except Exception as exc:
         task.status = 'failed'
@@ -379,4 +399,3 @@ def create_asset_from_payload(
         tags=payload.get('tags', []),
         metadata=payload.get('metadata', {}),
     )
-

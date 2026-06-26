@@ -4,6 +4,8 @@ import type { GenerationTaskRecord } from '../../types/workspace';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { VideoOutput } from './types';
 
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 interface SubmitOptions {
@@ -70,7 +72,7 @@ export function useGenerationTask({
         body: JSON.stringify({
           task_type: taskType,
           payload,
-          username: username || 'ROOT',
+          username: username || DEMO_USERNAME,
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
           campaign: workspaceScope?.campaign.id,
@@ -126,7 +128,7 @@ export function useGenerationTask({
         body: JSON.stringify({
           task_type: 'video',
           payload,
-          username: username || 'ROOT',
+          username: username || DEMO_USERNAME,
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
           campaign: workspaceScope?.campaign.id,

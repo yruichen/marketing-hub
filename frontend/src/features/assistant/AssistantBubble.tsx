@@ -16,7 +16,8 @@ export function AssistantBubble() {
       aria-label={open ? '关闭 AI 助手' : '打开 AI 助手'}
       title={open ? '关闭 AI 助手' : 'Marketing-Hub 助手'}
     >
-      {open ? <X className="h-5 w-5" /> : <Bot className="h-6 w-6" />}
+      <span className="assistant-bubble__label">AI 助手</span>
+      {open ? <X className="assistant-bubble__icon" /> : <Bot className="assistant-bubble__icon" />}
     </button>
   );
 }

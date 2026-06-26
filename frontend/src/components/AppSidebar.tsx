@@ -1,13 +1,18 @@
 import type { AppSection } from '../shared/stores/uiStore';
 import { NAV_SECTIONS } from '../app/navigation';
 
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+
 type AppSidebarProps = {
   activeTab: AppSection;
   onNavigate: (tab: AppSection) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   username: string | null;
+  isSuperuser?: boolean;
+  onOpenProfile?: () => void;
   onLogout: () => void;
+  className?: string;
 };
 
 export function AppSidebar({
@@ -16,10 +21,13 @@ export function AppSidebar({
   darkMode,
   onToggleDarkMode,
   username,
+  isSuperuser = false,
+  onOpenProfile,
   onLogout,
+  className = '',
 }: AppSidebarProps) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 w-[272px] border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none xl:static xl:w-auto xl:h-full xl:min-h-0 xl:overflow-hidden flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0">
+    <aside className={`h-full w-[272px] border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none flex flex-col justify-between shrink-0 px-3 xl:px-4 pt-4 xl:pt-5 pb-3 border-b-0 ${className}`}>
       <div className="flex min-h-0 flex-1 flex-col gap-5">
         <div className="select-none rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 px-3 py-3 shadow-[var(--shadow-panel)]">
           <div className="mb-2 h-1.5 w-10 rounded-full bg-[var(--brand-accent)]" />
@@ -31,14 +39,14 @@ export function AppSidebar({
           </p>
         </div>
 
-        <nav className="flex flex-col gap-4 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
+        <nav className="app-sidebar-nav flex flex-col gap-4 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--editorial-text-gray)] mb-2 px-2">
                 {section.title}
               </p>
               <div className="flex flex-col gap-0.5">
-                {section.items.map((item) => {
+                {section.items.filter((item) => item.id !== 'admin' || isSuperuser).map((item) => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
                   return (
@@ -86,12 +94,16 @@ export function AppSidebar({
             />
           </button>
         </div>
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 p-2.5 text-xs font-bold flex flex-col gap-1">
-          <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 p-2.5 text-left text-xs font-bold flex flex-col gap-1 transition hover:bg-[var(--surface-hover)]"
+        >
+          <span className="text-[var(--editorial-text)]">{username || DEMO_USERNAME}</span>
           <span className="text-[8px] rounded-full bg-[var(--surface-muted)] text-[var(--editorial-text-gray)] px-2 py-0.5 inline-block w-fit">
-            管理员
+            {isSuperuser ? '超级管理员' : '测试用户'}
           </span>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onLogout}

@@ -6,6 +6,7 @@ describe('app routes', () => {
     expect(pathForSection('projects')).toBe('/projects');
     expect(pathForSection('builder')).toBe('/workflows');
     expect(pathForSection('content')).toBe('/generation');
+    expect(pathForSection('profile')).toBe('/profile');
     expect(pathForSection('config')).toBe('/settings');
   });
 
@@ -16,5 +17,6 @@ describe('app routes', () => {
     expect(sectionFromPath('/generation/video')).toBe('video');
     expect(pathForSection('video')).toBe('/generation/video');
     expect(sectionFromPath('/templates/public')).toBe('community');
+    expect(sectionFromPath('/profile/DEMO')).toBe('profile');
   });
 });

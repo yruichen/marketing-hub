@@ -4,6 +4,8 @@ import type { ContentPackage } from '../generation/types';
 import type { OnboardingState } from '../onboarding/types';
 import type { WorkspaceScope } from '../dashboard/types';
 
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+
 export interface ContentPackageInputs {
   onboarding: OnboardingState;
   contentBrief: string;
@@ -62,7 +64,7 @@ export function buildContentPackageRequest(inputs: ContentPackageInputs & { user
     template: onboarding.template,
     platform: onboarding.channels[0] || copyInput.platform,
     duration: storyboardDuration,
-    username: username || 'ROOT',
+    username: username || DEMO_USERNAME,
     organization: workspaceScope?.organization.slug,
     project: workspaceScope?.project.slug,
     campaign: workspaceScope?.campaign.id,

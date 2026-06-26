@@ -17,6 +17,14 @@ from django.core.exceptions import ImproperlyConfigured
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+ENV_FILE = BASE_DIR / '.env'
+if ENV_FILE.exists():
+    for line in ENV_FILE.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#') or '=' not in stripped:
+            continue
+        key, value = stripped.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -181,7 +189,16 @@ CELERY_TASK_EAGER_PROPAGATES = os.getenv('CELERY_TASK_EAGER_PROPAGATES', 'true')
 OBJECT_STORAGE_BACKEND = os.getenv('OBJECT_STORAGE_BACKEND', 'local')
 OBJECT_STORAGE_BUCKET = os.getenv('OBJECT_STORAGE_BUCKET', '')
 
+EMAIL_PROVIDER = os.getenv('EMAIL_PROVIDER', 'console').strip().lower()
+RESEND_API_KEY = os.getenv('RESEND_API_KEY', '').strip()
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Marketing Hub <no-reply@example.com>').strip()
+FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+
 MARKETING_HUB_BOOTSTRAP_DEMO = os.getenv('MARKETING_HUB_BOOTSTRAP_DEMO', 'true' if DEBUG else 'false').lower() == 'true'
+MARKETING_HUB_ADMIN_USERNAME = os.getenv('MARKETING_HUB_ADMIN_USERNAME', 'ROOT').strip() or 'ROOT'
+MARKETING_HUB_ADMIN_PASSWORD = os.getenv('MARKETING_HUB_ADMIN_PASSWORD', '123')
+MARKETING_HUB_DEMO_USERNAME = os.getenv('MARKETING_HUB_DEMO_USERNAME', 'DEMO').strip() or 'DEMO'
+MARKETING_HUB_DEMO_PASSWORD = os.getenv('MARKETING_HUB_DEMO_PASSWORD', '123')
 AI_ALLOW_MOCK_PROVIDER = os.getenv('AI_ALLOW_MOCK_PROVIDER', 'true' if DEBUG else 'false').lower() == 'true'
 AI_ALLOW_MOCK_FALLBACK = os.getenv('AI_ALLOW_MOCK_FALLBACK', 'true' if DEBUG else 'false').lower() == 'true'
 ALLOW_UNAUTHENTICATED_API = os.getenv('ALLOW_UNAUTHENTICATED_API', 'true' if DEBUG else 'false').lower() == 'true'

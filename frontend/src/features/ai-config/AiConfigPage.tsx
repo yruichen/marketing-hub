@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { KeyRound, PlugZap, Sparkles } from 'lucide-react';
+import { KeyRound, PlugZap, RefreshCw, Sparkles } from 'lucide-react';
 import { useAiConfig } from './useAiConfig';
 import {
   providerDefaultScope,
+  providerSupportsAudioConfig,
   providerSupportsImageConfig,
   providerSupportsVideoConfig,
   configScopeLabels,
@@ -29,7 +30,11 @@ export function AiConfigPage({
     showKey,
     setShowKey,
     loading,
+    fetchingModels,
+    modelOptions,
+    setModelOptions,
     fetchConfigs,
+    handleFetchModels,
     handleSaveConfig,
   } = useAiConfig({ workspaceScope, username, triggerToast, onWorkspaceRefresh });
 
@@ -40,19 +45,20 @@ export function AiConfigPage({
   const availableScopes = Object.entries(configScopeLabels).filter(([value]) => {
     if (value === 'image' && !providerSupportsImageConfig(activeConfigForm.provider)) return false;
     if (value === 'video' && !providerSupportsVideoConfig(activeConfigForm.provider)) return false;
+    if (value === 'audio' && !providerSupportsAudioConfig(activeConfigForm.provider)) return false;
     if (activeConfigForm.provider === 'anthropic' && value !== 'text') return false;
     return true;
   });
 
-  const showTextModel = activeConfigForm.provider !== 'mock'
-    && activeConfigForm.config_scope !== 'image'
+  const showTextModel = activeConfigForm.config_scope !== 'image'
     && activeConfigForm.config_scope !== 'video';
-  const showImageModel = activeConfigForm.provider !== 'mock'
-    && providerSupportsImageConfig(activeConfigForm.provider)
+  const showImageModel = providerSupportsImageConfig(activeConfigForm.provider)
     && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'image');
-  const showVideoModel = activeConfigForm.provider !== 'mock'
-    && providerSupportsVideoConfig(activeConfigForm.provider)
+  const showVideoModel = providerSupportsVideoConfig(activeConfigForm.provider)
     && (activeConfigForm.config_scope === 'all' || activeConfigForm.config_scope === 'video');
+  const textModelOptions = modelOptions.filter((model) => model.capabilities.includes('text'));
+  const imageModelOptions = modelOptions.filter((model) => model.capabilities.includes('image'));
+  const videoModelOptions = modelOptions.filter((model) => model.capabilities.includes('video'));
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-5 overflow-hidden font-mono xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -80,15 +86,18 @@ export function AiConfigPage({
               value={activeConfigForm.provider}
               onChange={(event) => {
                 const provider = event.target.value;
+                setModelOptions([]);
                 setActiveConfigForm({
                   ...activeConfigForm,
                   provider,
                   config_scope: providerDefaultScope(provider),
+                  model_name: '',
+                  image_model_name: '',
+                  video_model_name: '',
                 });
               }}
               className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-bold text-[var(--editorial-text)] focus:outline-none"
             >
-              <option value="mock">演示模式</option>
               <option value="agnes">Agnes AI</option>
               <option value="gemini">Google Gemini</option>
               <option value="openai">OpenAI</option>
@@ -115,8 +124,8 @@ export function AiConfigPage({
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           {[
-            { id: 'platform', label: '演示/平台托管', hint: '无需填 Key' },
-            { id: 'byok', label: '自有 API Key', hint: '走自己的模型账户' },
+            { id: 'byok', label: '自有 API Key', hint: '输入后可立即获取模型' },
+            { id: 'platform', label: '平台密钥', hint: '使用服务端已配置密钥' },
           ].map((mode) => (
             <button
               key={mode.id}
@@ -134,28 +143,28 @@ export function AiConfigPage({
           ))}
         </div>
 
-        {activeConfigForm.provider !== 'mock' && (
-          <div className="mt-5 space-y-4">
-            <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
-              3. API Key
-              <div className="relative">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={activeConfigForm.api_key}
-                  onChange={(event) => setActiveConfigForm({ ...activeConfigForm, api_key: event.target.value })}
-                  className="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 pr-16 text-xs text-[var(--editorial-text)] focus:outline-none"
-                  placeholder="留空则保留已保存的密钥"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]"
-                >
-                  {showKey ? '隐藏' : '显示'}
-                </button>
-              </div>
-            </label>
+        <div className="mt-5 space-y-4">
+          <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
+            3. API Key
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={activeConfigForm.api_key}
+                onChange={(event) => setActiveConfigForm({ ...activeConfigForm, api_key: event.target.value })}
+                className="w-full rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 pr-16 text-xs text-[var(--editorial-text)] focus:outline-none"
+                placeholder="留空则使用已保存或服务端配置的密钥"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]"
+              >
+                {showKey ? '隐藏' : '显示'}
+              </button>
+            </div>
+          </label>
 
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_160px]">
             <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
               Base URL（可选）
               <input
@@ -166,47 +175,92 @@ export function AiConfigPage({
                 placeholder={activeConfigForm.provider === 'agnes' ? 'https://apihub.agnes-ai.com/v1' : 'https://api.example.com/v1'}
               />
             </label>
+            <button
+              type="button"
+              onClick={handleFetchModels}
+              disabled={fetchingModels}
+              className="mt-5 inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[var(--editorial-stroke)] bg-[var(--brand-accent)] px-3 text-[10px] font-black uppercase tracking-wider text-black shadow-editorial-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${fetchingModels ? 'animate-spin' : ''}`} />
+              获取模型
+            </button>
+          </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {showTextModel && (
                 <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
                   文本模型
-                  <input
-                    type="text"
-                    value={activeConfigForm.model_name}
-                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, model_name: event.target.value })}
-                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
-                    placeholder={activeConfigForm.provider === 'anthropic' ? 'claude-3-5-sonnet' : activeConfigForm.provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o-mini'}
-                  />
+                  {textModelOptions.length ? (
+                    <select
+                      value={activeConfigForm.model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    >
+                      {textModelOptions.map((model) => (
+                        <option key={model.id} value={model.id}>{model.label || model.id}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={activeConfigForm.model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                      placeholder="先点击获取模型"
+                    />
+                  )}
                 </label>
               )}
               {showImageModel && (
                 <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
                   图片模型
-                  <input
-                    type="text"
-                    value={activeConfigForm.image_model_name}
-                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, image_model_name: event.target.value })}
-                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
-                    placeholder={activeConfigForm.provider === 'agnes' ? 'agnes-image-2.0-flash' : 'dall-e-3'}
-                  />
+                  {imageModelOptions.length ? (
+                    <select
+                      value={activeConfigForm.image_model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, image_model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    >
+                      {imageModelOptions.map((model) => (
+                        <option key={model.id} value={model.id}>{model.label || model.id}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={activeConfigForm.image_model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, image_model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                      placeholder="先点击获取模型"
+                    />
+                  )}
                 </label>
               )}
               {showVideoModel && (
                 <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
                   视频模型
-                  <input
-                    type="text"
-                    value={activeConfigForm.video_model_name}
-                    onChange={(event) => setActiveConfigForm({ ...activeConfigForm, video_model_name: event.target.value })}
-                    className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
-                    placeholder="agnes-video-v2.0"
-                  />
+                  {videoModelOptions.length ? (
+                    <select
+                      value={activeConfigForm.video_model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, video_model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                    >
+                      {videoModelOptions.map((model) => (
+                        <option key={model.id} value={model.id}>{model.label || model.id}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={activeConfigForm.video_model_name}
+                      onChange={(event) => setActiveConfigForm({ ...activeConfigForm, video_model_name: event.target.value })}
+                      className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--editorial-text)] focus:outline-none"
+                      placeholder="先点击获取模型"
+                    />
+                  )}
                 </label>
               )}
             </div>
-          </div>
-        )}
+        </div>
 
         <button
           type="submit"

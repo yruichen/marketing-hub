@@ -28,6 +28,7 @@ SYSTEM_PROMPT = """你是 Marketing-Hub 的全局 AI 助手。
 - 简洁、中文优先、动作明确
 - 工具调用前简短说明意图（不超过 15 个字）
 - 工具调用后用 1-3 句总结关键信息
+- 不向用户输出后台日志、函数参数、JSON 调试信息或代码执行细节
 - 不编造数据，不确定时直接说"我查一下"
 """
 
@@ -36,13 +37,14 @@ SYSTEM_PROMPT = """你是 Marketing-Hub 的全局 AI 助手。
 class AssistantStep:
     """One streaming event. Emitted by the agent and serialized to SSE."""
 
-    type: str  # 'text' | 'tool_call' | 'tool_result' | 'done' | 'error'
+    type: str  # 'status' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error'
     delta: str = ''
     name: str = ''
     args: dict[str, Any] = field(default_factory=dict)
     result: Any = None
     error: str = ''
     status: int = 0  # upstream HTTP status when type == 'error'
+    status_text: str = ''
     usage: dict[str, int] = field(default_factory=dict)
 
 
@@ -453,6 +455,19 @@ TOOL_HINTS: dict[str, str] = {
 }
 
 
+TOOL_STATUS_LABELS: dict[str, str] = {
+    'list_projects': '正在查询项目列表',
+    'get_project': '正在读取项目详情',
+    'get_dashboard': '正在汇总工作台数据',
+    'create_copy': '正在生成营销文案',
+    'navigate': '正在准备页面跳转',
+}
+
+
+def tool_status_label(name: str) -> str:
+    return TOOL_STATUS_LABELS.get(name, '正在调用工作区工具')
+
+
 class AssistantAgent:
     """
     Multi-turn tool-calling agent. Streams AssistantStep events.
@@ -509,6 +524,10 @@ class AssistantAgent:
         for step_idx in range(self.max_steps):
             started = time.monotonic()
             try:
+                yield AssistantStep(
+                    type='status',
+                    status_text='正在理解需求' if step_idx == 0 else '正在整理查询结果',
+                )
                 if streaming:
                     text, tool_calls, last_usage = '', [], {}
                     async for delta in self.llm.chat_stream(
@@ -561,6 +580,7 @@ class AssistantAgent:
                 except json.JSONDecodeError:
                     parsed_args = {}
 
+                yield AssistantStep(type='status', status_text=tool_status_label(fn_name))
                 yield AssistantStep(type='tool_call', name=fn_name, args=parsed_args)
                 try:
                     spec = self.registry.get(fn_name)
@@ -583,12 +603,24 @@ class AssistantAgent:
                     # Make sure long-lived connections don't leak across
                     # long streaming sessions.
                     close_old_connections()
+                yield AssistantStep(
+                    type='status',
+                    status_text=(
+                        f'{tool_status_label(fn_name).replace("正在", "已完成", 1)}'
+                        if not (isinstance(result, dict) and result.get('error'))
+                        else '工具调用遇到问题，正在调整回答'
+                    ),
+                )
                 yield AssistantStep(type='tool_result', name=fn_name, result=result)
                 running.append({
                     'role': 'tool',
                     'tool_call_id': tc.get('id', ''),
                     'name': fn_name,
-                    'content': json.dumps(result, ensure_ascii=False),
+                    'content': (
+                        '内部工具结果，仅用于生成面向用户的自然语言回答。'
+                        '不要原样输出 JSON、字段名、函数名、参数或后台日志。\n'
+                        f'{json.dumps(result, ensure_ascii=False)}'
+                    ),
                 })
 
             logger.info(

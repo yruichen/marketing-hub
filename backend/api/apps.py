@@ -8,25 +8,42 @@ def create_demo_user_and_config(sender, **kwargs):
 
     from django.contrib.auth.models import User
 
-    from ai_gateway.services import AGNES_DEFAULT_BASE_URL, AGNES_DEFAULT_MODEL
-    from api.models import AIConfiguration
+    from ai_gateway.services import AGNES_DEFAULT_BASE_URL
+    from api.models import AIConfiguration, UserProfile
+    from api.service_modules.workspace import ensure_demo_workspace
 
-    # Create demo ROOT user only for local/dev bootstrap.
-    if settings.MARKETING_HUB_BOOTSTRAP_DEMO and not User.objects.filter(username='ROOT').exists():
-        User.objects.create_superuser('ROOT', 'root@marketinghub.local', '123')
-        print("--- Demo Superuser 'ROOT' with password '123' created. ---")
-
-    # Create Default AI Configuration for local/demo runs only.
-    if settings.MARKETING_HUB_BOOTSTRAP_DEMO and not AIConfiguration.objects.filter(provider='mock').exists():
-        AIConfiguration.objects.create(
-            provider='mock',
-            api_key='',
-            base_url='',
-            model_name='gpt-mock-agent',
-            billing_mode='platform',
-            is_active=True,
+    # Local/dev bootstrap creates separate admin and demo identities.
+    if settings.MARKETING_HUB_BOOTSTRAP_DEMO:
+        admin_username = settings.MARKETING_HUB_ADMIN_USERNAME
+        demo_username = settings.MARKETING_HUB_DEMO_USERNAME
+        if not User.objects.filter(username=admin_username).exists():
+            User.objects.create_superuser(
+                admin_username,
+                f'{admin_username.lower()}@marketinghub.local',
+                settings.MARKETING_HUB_ADMIN_PASSWORD,
+            )
+            print(f"--- Admin Superuser '{admin_username}' created. ---")
+        demo_user, created = User.objects.get_or_create(
+            username=demo_username,
+            defaults={
+                'email': f'{demo_username.lower()}@marketinghub.local',
+                'is_staff': False,
+                'is_superuser': False,
+            },
         )
-        print('--- Default Mock AI Configuration initialized. ---')
+        if created:
+            demo_user.set_password(settings.MARKETING_HUB_DEMO_PASSWORD)
+            demo_user.save(update_fields=['password'])
+            print(f"--- Demo User '{demo_username}' created. ---")
+        UserProfile.objects.update_or_create(
+            user=demo_user,
+            defaults={
+                'email_verified': True,
+                'status': 'active',
+                'signup_source': 'local_demo',
+            },
+        )
+        ensure_demo_workspace(demo_username)
 
     agnes_key = os.getenv('AGNES_API_KEY', '').strip()
     if agnes_key:
@@ -37,7 +54,7 @@ def create_demo_user_and_config(sender, **kwargs):
             defaults={
                 'api_key': agnes_key,
                 'base_url': os.getenv('AGNES_BASE_URL', AGNES_DEFAULT_BASE_URL).strip(),
-                'model_name': os.getenv('AGNES_MODEL', AGNES_DEFAULT_MODEL).strip(),
+                'model_name': os.getenv('AGNES_MODEL', '').strip(),
                 'billing_mode': 'platform',
                 'is_active': auto_activate,
             },

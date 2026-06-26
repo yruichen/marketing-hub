@@ -202,8 +202,7 @@ export function DashboardPage({
 
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)]">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_12%_0%,color-mix(in_srgb,var(--brand-accent)_18%,transparent),transparent_30%),radial-gradient(circle_at_92%_8%,color-mix(in_srgb,var(--editorial-accent-blue)_10%,transparent),transparent_28%)]" />
+      <section className="rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)]">
         <div className="relative">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -376,7 +375,7 @@ export function DashboardPage({
               {providerRows.slice(0, 5).map((item) => (
                 <div key={item.provider}>
                   <div className="mb-1 flex justify-between gap-3 text-xs">
-                    <span className="truncate font-black">{item.provider || 'mock'}</span>
+                    <span className="truncate font-black">{item.provider || '未配置'}</span>
                     <span className="font-mono text-[var(--editorial-text-gray)]">${formatUsd(item.cost_usd)}</span>
                   </div>
                   <div className="h-3 border border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]">
@@ -388,7 +387,7 @@ export function DashboardPage({
             </div>
           ) : (
             <div className="mt-4">
-              <EmptyPanel title="暂无 provider 成本" description="接入真实模型或运行 mock 任务后，这里会按 provider 汇总成本。" action="检查 AI 设置" onAction={() => setActiveTab('config')} />
+              <EmptyPanel title="暂无 provider 成本" description="接入真实模型并运行任务后，这里会按 provider 汇总成本。" action="检查 AI 设置" onAction={() => setActiveTab('config')} />
             </div>
           )}
         </div>

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
-from api.models import GenerationTask, Project, UsageEvent
+from api.models import CreditLedgerEntry, GenerationTask, Project, UsageEvent
 from api.scope import get_scope
 
 
@@ -38,6 +38,8 @@ class BillingPlansView(APIView):
             .annotate(total_tokens=Sum('total_tokens'), cost_usd=Sum('cost_usd'))
             .order_by('-cost_usd')[:6]
         ]
+        credit_balance_cents = CreditLedgerEntry.objects.filter(organization=org).aggregate(value=Sum('delta_cents'))['value'] or 0
+        credit_grants = org.credit_grants.order_by('-created_at')[:6]
 
         return {
             'current_plan': org.subscription_plan,
@@ -54,6 +56,18 @@ class BillingPlansView(APIView):
                 'failed_tasks': tasks_by_status.get('failed', 0),
             },
             'usage_by_provider': usage_by_provider,
+            'credit_balance_cents': credit_balance_cents,
+            'credit_balance_usd': str(Decimal(credit_balance_cents) / Decimal('100')),
+            'recent_credit_grants': [
+                {
+                    'amount_cents': grant.amount_cents,
+                    'amount_usd': str(Decimal(grant.amount_cents) / Decimal('100')),
+                    'reason': grant.reason,
+                    'expires_at': grant.expires_at.isoformat() if grant.expires_at else None,
+                    'created_at': grant.created_at.isoformat(),
+                }
+                for grant in credit_grants
+            ],
             'recent_usage': [
                 {
                     'provider': item.provider,
