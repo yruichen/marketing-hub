@@ -12,6 +12,7 @@ import {
   PenLine,
   Settings,
   Sparkles,
+  UserRound,
   Video,
   Workflow,
 } from 'lucide-react';
@@ -128,6 +129,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: Library,
       },
       {
+        id: 'profile',
+        label: '个人主页',
+        hint: '创作者资料与作品墙',
+        icon: UserRound,
+      },
+      {
         id: 'billing',
         label: '计费',
         hint: '用量与套餐',
@@ -151,6 +158,7 @@ export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [
   'audio',
   'video',
   'content',
+  'projects',
   'builder',
   'config',
 ];
@@ -217,9 +225,17 @@ export const TAB_META: Record<
     title: '模板库',
     subtitle: '浏览社区模板与灵感',
   },
+  profile: {
+    title: '个人主页',
+    subtitle: '展示创作者身份、擅长领域与公开作品',
+  },
   billing: {
     title: '计费与用量',
     subtitle: '查看套餐与 Token 消耗',
+  },
+  admin: {
+    title: '运营后台',
+    subtitle: '管理测试用户、组织额度、生成任务与安全日志',
   },
   config: {
     title: 'AI 设置',

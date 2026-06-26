@@ -26,6 +26,7 @@ export interface AssistantToolCall {
   name: string;
   args: Record<string, unknown>;
   result?: unknown;
+  status?: 'running' | 'done' | 'error';
 }
 
 export interface PageContext {
@@ -39,8 +40,9 @@ export interface PageContext {
 }
 
 export interface AssistantSseEvent {
-  type: 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
+  type: 'status' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
   delta?: string;
+  status_text?: string;
   name?: string;
   args?: Record<string, unknown>;
   result?: unknown;
@@ -71,4 +73,5 @@ export interface ChatMessage {
   content: string;
   toolCalls: AssistantToolCall[];
   pending?: boolean;
+  statusText?: string;
 }

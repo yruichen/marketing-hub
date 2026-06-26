@@ -20,9 +20,14 @@ import { useFilteredProjects } from './useFilteredProjects';
 import { useGroupedByFolder } from './useGroupedByFolder';
 import {
   EMPTY_BRAND_CONTEXT,
+  formatProjectCost,
+  getProjectActivityTime,
+  getProjectFolder,
+  getProjectStatus,
   type ProjectDetail,
   type ProjectForm,
   type ProjectManagerProps,
+  type ProjectSortKey,
   type ViewMode,
 } from './types';
 import './desktop.css';
@@ -41,6 +46,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectDetail | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState(ALL_FILTER);
@@ -48,6 +54,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [folderFilter, setFolderFilter] = useState(ALL_FILTER);
   const [sidebarFolderPath, setSidebarFolderPath] = useState<string>(ALL_FILTER);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sortKey, setSortKey] = useState<ProjectSortKey>('recent');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [newFolderName] = useState('默认文件夹');
   const [newProject, setNewProject] = useState<ProjectForm>({
@@ -97,9 +104,11 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           setSelectedProject(detail);
           setSelectedIds([detail.id]);
           setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(detail.brand_context || {}) });
+          setInspectorOpen(false);
         } else {
           setSelectedProject(null);
           setSelectedIds([]);
+          setInspectorOpen(false);
         }
       } catch {
         triggerToast('项目列表加载失败', 'error');
@@ -118,13 +127,14 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   }, [fetchProjects]);
 
   const loadProject = useCallback(
-    async (projectId: number) => {
+    async (projectId: number, openInspector = true) => {
       setLoading(true);
       try {
         const detail = await apiGet<ProjectDetail>(`/projects/${projectId}/`);
         setSelectedProject(detail);
         setSelectedIds([detail.id]);
         setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(detail.brand_context || {}) });
+        setInspectorOpen(openInspector);
       } catch {
         triggerToast('项目详情加载失败', 'error');
       } finally {
@@ -140,12 +150,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       const detail = (event as CustomEvent<{ projectId: number }>).detail;
       if (!detail?.projectId) return;
       if (selectedProject?.id === detail.projectId) {
-        void loadProject(detail.projectId);
+        void loadProject(detail.projectId, inspectorOpen);
       }
     };
     window.addEventListener('mh:assets-updated', onAssetsUpdated);
     return () => window.removeEventListener('mh:assets-updated', onAssetsUpdated);
-  }, [selectedProject?.id, loadProject]);
+  }, [selectedProject?.id, inspectorOpen, loadProject]);
 
   // ===== actions =====
   const createFolder = async (name: string) => {
@@ -196,7 +206,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         status_tag: 'creating',
       });
       await fetchProjects(project.id);
-      await loadProject(project.id);
+      await loadProject(project.id, true);
     } catch {
       triggerToast('项目创建失败', 'error');
     } finally {
@@ -267,7 +277,10 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     if (!window.confirm('请再次确认：确实要永久删除这个项目吗？')) return;
     try {
       await apiDelete(`/projects/${project.id}/`);
-      if (selectedProject?.id === project.id) setSelectedProject(null);
+      if (selectedProject?.id === project.id) {
+        setSelectedProject(null);
+        setInspectorOpen(false);
+      }
       await fetchProjects();
       triggerToast('项目已删除', 'info');
     } catch {
@@ -276,9 +289,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   };
 
   const handleDropToFolder = async (project: ProjectRecord, folder: FolderRecord) => {
-    if ((project.folder_path_display || project.folder_path || '默认文件夹') === folder.path) return;
+    if (getProjectFolder(project) === folder.path) return;
     try {
-      await apiPatch<ProjectRecord>(`/projects/${project.id}/`, { folder_id: folder.id, folder_path: folder.path });
+      await apiPatch<ProjectRecord>(`/projects/${project.id}/`, {
+        ...(folder.id > 0 ? { folder_id: folder.id } : {}),
+        folder_path: folder.path,
+      });
       await fetchProjects(project.id);
       triggerToast('项目已移动到目标文件夹', 'success');
     } catch {
@@ -315,22 +331,95 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   };
 
   // ===== derived state =====
-  const folderOptions = useMemo(() => [ALL_FILTER, ...folders.map((f) => f.path)], [folders]);
+  const displayFolders = useMemo(() => {
+    const foldersByPath = new Map<string, FolderRecord>();
+    const projectCountByPath = new Map<string, number>();
+
+    for (const project of projects) {
+      const path = getProjectFolder(project);
+      projectCountByPath.set(path, (projectCountByPath.get(path) || 0) + 1);
+    }
+
+    for (const folder of folders) {
+      const path = folder.path || folder.name || '默认文件夹';
+      if (!foldersByPath.has(path)) {
+        foldersByPath.set(path, { ...folder, path });
+      }
+    }
+
+    for (const project of projects) {
+      const path = getProjectFolder(project);
+      if (!foldersByPath.has(path)) {
+        foldersByPath.set(path, {
+          id: -foldersByPath.size - 1,
+          organization_id: project.organization_id,
+          parent_id: null,
+          name: path,
+          slug: path,
+          path,
+          sort_order: foldersByPath.size,
+          permission_scope: 'workspace',
+          is_archived: false,
+          project_count: 0,
+          created_at: project.created_at,
+          updated_at: project.updated_at,
+        });
+      }
+    }
+
+    return Array.from(foldersByPath.values())
+      .map((folder) => ({
+        ...folder,
+        project_count: projectCountByPath.get(folder.path) || 0,
+      }))
+      .sort((a, b) => (a.sort_order - b.sort_order) || a.path.localeCompare(b.path, 'zh-CN'));
+  }, [folders, projects]);
+
+  const folderOptions = useMemo(() => [ALL_FILTER, ...displayFolders.map((f) => f.path)], [displayFolders]);
 
   const sidebarScopedProjects = useMemo(() => {
     if (sidebarFolderPath === ALL_FILTER) return projects;
     if (sidebarFolderPath === ARCHIVED_PSEUDO) return projects.filter((p) => p.is_archived);
-    return projects.filter((p) => (p.folder_path_display || p.folder_path || '默认文件夹') === sidebarFolderPath);
+    return projects.filter((p) => getProjectFolder(p) === sidebarFolderPath);
   }, [projects, sidebarFolderPath]);
 
-  const filteredProjects = useFilteredProjects(sidebarScopedProjects, {
+  const filteredProjectsBase = useFilteredProjects(sidebarScopedProjects, {
     search,
     platformFilter,
     statusFilter,
     folderFilter,
   });
 
-  const groupedByFolder = useGroupedByFolder(folders, filteredProjects);
+  const filteredProjects = useMemo(() => {
+    const sorted = [...filteredProjectsBase];
+    sorted.sort((a, b) => {
+      if (sortKey === 'name') return a.name.localeCompare(b.name, 'zh-CN');
+      if (sortKey === 'campaigns') return (b.campaign_count || 0) - (a.campaign_count || 0);
+      if (sortKey === 'assets') return (b.asset_count || 0) - (a.asset_count || 0);
+      if (sortKey === 'cost') return Number(b.total_cost_usd || 0) - Number(a.total_cost_usd || 0);
+      return Date.parse(getProjectActivityTime(b)) - Date.parse(getProjectActivityTime(a));
+    });
+    return sorted;
+  }, [filteredProjectsBase, sortKey]);
+
+  const groupedByFolder = useGroupedByFolder(displayFolders, filteredProjects);
+
+  const projectStats = useMemo(() => {
+    const active = projects.filter((p) => !p.is_archived).length;
+    const review = projects.filter((p) => getProjectStatus(p) === 'review' || (p.pending_review_count || 0) > 0).length;
+    const assets = projects.reduce((sum, p) => sum + (p.asset_count || 0), 0);
+    const campaigns = projects.reduce((sum, p) => sum + (p.campaign_count || 0), 0);
+    const spend = projects.reduce((sum, p) => sum + Number(p.total_cost_usd || 0), 0);
+    return {
+      total: projects.length,
+      active,
+      review,
+      assets,
+      campaigns,
+      spend: formatProjectCost(String(spend)),
+      archived: projects.length - active,
+    };
+  }, [projects]);
 
   // ===== selection / open =====
   const onSelectProject = (project: ProjectRecord, event: MouseEvent) => {
@@ -339,12 +428,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       return;
     }
     setSelectedIds([project.id]);
-    void loadProject(project.id);
+    void loadProject(project.id, false);
   };
 
   const onOpenProject = async (project: ProjectRecord) => {
     setSelectedIds([project.id]);
-    await loadProject(project.id);
+    await loadProject(project.id, true);
   };
 
   const setProjectAsCurrent = (project: ProjectRecord, campaign?: CampaignRecord) => {
@@ -375,7 +464,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   return (
     <div className="desktop-shell relative">
       <DesktopSidebar
-        folders={folders}
+        folders={displayFolders}
+        projects={projects}
         activeFolderPath={sidebarFolderPath}
         onSelectFolder={(path) => {
           setSidebarFolderPath(path);
@@ -395,6 +485,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
 
       <div className="desktop-canvas">
         <DesktopToolbar
+          organizationName={organization?.name || 'Marketing Hub'}
           search={search}
           onSearchChange={setSearch}
           platformFilter={platformFilter}
@@ -406,21 +497,27 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           onFolderFilterChange={setFolderFilter}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          sortKey={sortKey}
+          onSortKeyChange={setSortKey}
           selectedCount={selectedIds.length}
+          filteredCount={filteredProjects.length}
+          stats={projectStats}
           onSelectAll={onSelectAll}
           onClearSelection={onClearSelection}
           onBatchArchive={() => void batchPatch({ is_archived: true }, '已批量归档')}
           onBatchReview={() => void batchPatch({ status_tag: 'review' }, '已批量设为待审')}
           onBatchExport={batchExport}
-        onCreateProjectClick={() => setShowCreateProject((v) => !v)}
+          onCreateProjectClick={() => setShowCreateProject((v) => !v)}
           onCreateFolderClick={() => setShowCreateFolder((v) => !v)}
+          createProjectOpen={showCreateProject}
+          createFolderOpen={showCreateFolder}
         />
 
         {showCreateProject ? (
-          <div className="border-b border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4">
+          <div className="desktop-create-panel">
             <CreateProjectForm
               form={newProject}
-              folders={folders}
+              folders={displayFolders}
               loading={loading}
               onChange={setNewProject}
               onCreate={() => void createProject()}
@@ -429,8 +526,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         ) : null}
 
         {showCreateFolder ? (
-          <div className="border-b border-dashed border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] p-4">
-            <div className="text-[10px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">快速创建文件夹</div>
+          <div className="desktop-create-panel desktop-create-panel--compact">
+            <div className="desktop-create-panel__title">快速创建文件夹</div>
             <CreateFolderForm
               onCreate={(name) => {
                 void createFolder(name);
@@ -445,10 +542,11 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         <DesktopCanvas
           viewMode={viewMode}
           projects={filteredProjects}
-          folders={folders}
+          folders={displayFolders}
           activeProjectId={activeProjectId}
           selectedIds={selectedIds}
           groupedByFolder={groupedByFolder}
+          loading={loading}
           onSelectProject={onSelectProject}
           onOpenProject={(p) => void onOpenProject(p)}
           onSetCurrentProject={setProjectAsCurrent}
@@ -461,16 +559,16 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           totalCount={projects.length}
           filteredCount={filteredProjects.length}
           selectedCount={selectedIds.length}
-          folderCount={folders.length}
+          folderCount={displayFolders.length}
           onClearFilters={onClearFilters}
         />
       </div>
 
       <Inspector
-        open={!!selectedProject}
+        open={inspectorOpen && !!selectedProject}
         selectedProject={selectedProject}
         draftContext={draftContext}
-        folders={folders}
+        folders={displayFolders}
         newCampaignName={newCampaignName}
         onNewCampaignNameChange={setNewCampaignName}
         onCreateCampaign={() => void createCampaign()}
@@ -489,7 +587,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         onDelete={() => {
           if (selectedProject) void deleteProject(selectedProject);
         }}
-        onClose={() => setSelectedProject(null)}
+        onClose={() => setInspectorOpen(false)}
         onOpenAssetsLibrary={onOpenAssetsLibrary ?? (() => undefined)}
       />
 

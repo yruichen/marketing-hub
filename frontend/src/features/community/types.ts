@@ -3,7 +3,7 @@ import type { CreationContent } from '../generation/types';
 export interface CommunityItem {
   id: number;
   username: string;
-  creation_type: 'copy' | 'image' | 'storyboard' | 'audio';
+  creation_type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video';
   creation_type_display: string;
   title: string;
   content: CreationContent;

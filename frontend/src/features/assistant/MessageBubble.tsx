@@ -80,10 +80,13 @@ export function MessageBubble({ message, onNavigate }: MessageBubbleProps) {
             {message.pending ? <span className="assistant-md__caret" /> : null}
           </div>
         ) : message.pending ? (
-          <span className="assistant-md__thinking">思考中</span>
+          <span className="assistant-md__thinking">{message.statusText || '思考中'}</span>
         ) : (
           <span className="assistant-md__thinking">暂无内容</span>
         )}
+        {!isUser && message.pending && message.content && message.statusText ? (
+          <div className="assistant-msg__status">{message.statusText}</div>
+        ) : null}
       </div>
       {message.toolCalls.length > 0 ? (
         <div className="assistant-msg__tools">

@@ -595,6 +595,20 @@
   font-style: italic;
 }
 
+.assistant-msg__status {
+  margin-top: 6px;
+  border-top: 1px dashed color-mix(in srgb, var(--editorial-stroke) 60%, transparent);
+  padding-top: 5px;
+  color: var(--editorial-text-gray);
+  font-size: 10px;
+  font-style: italic;
+}
+
+.assistant-msg__status::after {
+  content: ' ▍';
+  animation: assistant-blink 1s steps(2) infinite;
+}
+
 @keyframes assistant-msg-enter {
   from {
     opacity: 0;
@@ -785,43 +799,45 @@
 
 /* Tool call card */
 .assistant-tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   border: 1px solid var(--editorial-stroke);
-  background: var(--editorial-paper);
+  background: color-mix(in srgb, var(--editorial-paper) 88%, transparent);
   padding: 8px 10px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--editorial-text);
   overflow-wrap: anywhere;
   word-break: break-word;
   min-width: 0;
 }
 
+.assistant-tool--running {
+  border-style: dashed;
+}
+
+.assistant-tool--error {
+  border-color: color-mix(in srgb, var(--error-accent, #dc2626) 50%, var(--editorial-stroke));
+}
+
+.assistant-tool__icon {
+  margin-top: 1px;
+  height: 13px;
+  width: 13px;
+  flex: 0 0 auto;
+  color: var(--editorial-accent-blue);
+}
+
 .assistant-tool__name {
   font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 9px;
+  font-size: 11px;
   color: var(--editorial-accent-blue);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.assistant-tool__args {
-  font-family: var(--mono-font);
-  font-size: 9px;
+.assistant-tool__summary {
+  font-size: 10px;
   color: var(--editorial-text-gray);
-  margin-bottom: 4px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.assistant-tool__result {
-  border-top: 1px dashed var(--editorial-stroke);
-  padding-top: 4px;
-  font-size: 9px;
-  color: var(--editorial-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 /* Navigate action — surfaced as a button instead of raw JSON so the

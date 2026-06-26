@@ -5,14 +5,14 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('mh_onboarding_complete', 'true');
     localStorage.setItem('mh_token', 'demo');
-    localStorage.setItem('mh_username', 'ROOT');
+    localStorage.setItem('mh_username', 'DEMO');
     localStorage.setItem('mh_project_slug', 'core-launch');
   });
   await installMocks(page);
 });
 
 test('opens the main routes without console errors', async ({ page }) => {
-  const routes = ['/', '/projects', '/generation', '/workflows', '/templates', '/billing', '/settings'] as const;
+  const routes = ['/', '/projects', '/generation', '/workflows', '/templates', '/profile', '/billing', '/settings'] as const;
   for (const route of routes) {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));

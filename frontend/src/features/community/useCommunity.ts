@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { apiFetch } from '../../hooks/useApi';
 import type { CommunityItem } from './types';
+
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
 import type { WorkspaceScope } from '../dashboard/types';
 
 interface UseCommunityOptions {
@@ -87,7 +89,7 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username || 'ROOT',
+          username: username || DEMO_USERNAME,
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
           campaign: workspaceScope?.campaign.id,

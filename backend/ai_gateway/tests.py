@@ -313,16 +313,16 @@ class AIConfigPermissionTests(APITestCase):
         self.client = Client(enforce_csrf_checks=True)
         self.user = User.objects.get(username='ROOT')
 
-    def test_post_ai_config_allows_demo_username_without_session(self):
+    def test_post_ai_config_allows_admin_username_without_session(self):
         csrf_response = self.client.get('/api/ai/config/')
         csrf_token = csrf_response.headers.get('X-CSRFToken') or self.client.cookies['csrftoken'].value
         response = self.client.post(
             '/api/ai/config/',
             {
-                'provider': 'mock',
-                'api_key': '',
-                'model_name': 'gpt-mock-agent',
-                'billing_mode': 'platform',
+                'provider': 'agnes',
+                'api_key': 'test-key',
+                'model_name': 'agnes-2.0-flash',
+                'billing_mode': 'byok',
                 'username': 'ROOT',
             },
             content_type='application/json',
@@ -333,7 +333,7 @@ class AIConfigPermissionTests(APITestCase):
 
 class AssistantAgentTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.get(username='ROOT')
+        self.user = User.objects.create_user(username='assistant-agent-user', password='123')
         self.organization = Organization.objects.create(
             name='Agent Test Org', slug='agent-test-org'
         )
@@ -487,15 +487,14 @@ def _parse_sse(body: str) -> list[dict]:
 class AssistantSessionCrudTests(APITestCase):
     def setUp(self):
         self.client_ = Client(enforce_csrf_checks=True)
-        self.user = User.objects.get(username='ROOT')
+        self.user = User.objects.create_user(username='assistant-session-user', password='123')
         self.organization = Organization.objects.create(
             name='Assistant View Test', slug='asst-view-test'
         )
         Membership.objects.create(
             user=self.user, organization=self.organization, role='admin'
         )
-        # Authenticate via demo session cookie
-        self.client_.login(username='ROOT', password='123')
+        self.client_.login(username='assistant-session-user', password='123')
 
     def _csrf(self):
         resp = self.client_.get('/api/ai/config/')
@@ -596,7 +595,7 @@ class AssistantSessionCrudTests(APITestCase):
 class AssistantChatStreamingTests(APITestCase):
     def setUp(self):
         from ai_gateway.agent import AssistantAgent
-        self.user = User.objects.get(username='ROOT')
+        self.user = User.objects.create_user(username='assistant-chat-user', password='123')
         self.organization = Organization.objects.create(
             name='Chat Stream Test', slug='chat-stream-test'
         )
@@ -610,7 +609,7 @@ class AssistantChatStreamingTests(APITestCase):
         agent_mod.AssistantAgent = lambda **kw: AssistantAgent(llm=_PlainEchoLlm())
         self.addCleanup(lambda: setattr(agent_mod, 'AssistantAgent', self._orig_agent_cls))
         self.client_ = Client(enforce_csrf_checks=True)
-        self.client_.login(username='ROOT', password='123')
+        self.client_.login(username='assistant-chat-user', password='123')
 
     def _csrf(self):
         resp = self.client_.get('/api/ai/config/')

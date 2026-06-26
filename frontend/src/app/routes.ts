@@ -9,7 +9,9 @@ const sectionToPath: Record<AppSection, string> = {
   assets: '/assets',
   review: '/review',
   community: '/templates',
+  profile: '/profile',
   billing: '/billing',
+  admin: '/admin-console',
   config: '/settings',
   copy: '/generation/copy',
   image: '/generation/image',
@@ -29,7 +31,9 @@ export function sectionFromPath(pathname: string): AppSection {
   if (pathname.startsWith('/assets')) return 'assets';
   if (pathname.startsWith('/review')) return 'review';
   if (pathname.startsWith('/templates')) return 'community';
+  if (pathname.startsWith('/profile')) return 'profile';
   if (pathname.startsWith('/billing')) return 'billing';
+  if (pathname.startsWith('/admin-console')) return 'admin';
   if (pathname.startsWith('/settings')) return 'config';
   if (pathname.startsWith('/generation/copy')) return 'copy';
   if (pathname.startsWith('/generation/image')) return 'image';

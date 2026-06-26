@@ -2,6 +2,7 @@ from django.urls import path
 
 from ai_gateway.views import (
     AIConfigView,
+    AIConfigModelsView,
     AssistantChatView,
     AssistantSessionDetailView,
     AssistantSessionListView,
@@ -12,6 +13,7 @@ from ai_gateway.views import (
 
 urlpatterns = [
     path('ai/config/', AIConfigView.as_view(), name='ai_config'),
+    path('ai/config/models/', AIConfigModelsView.as_view(), name='ai_config_models'),
     path('ai/image-style-skills/', ImageStyleSkillsView.as_view(), name='image_style_skills'),
     path('assistant/chat', AssistantChatView.as_view(), name='assistant_chat'),
     path(
@@ -30,4 +32,3 @@ urlpatterns = [
         name='assistant_session_messages',
     ),
 ]
-

@@ -10,7 +10,7 @@ from .registry import ToolRegistry, make_tool
 # Mirrors frontend's AppSection. Hardcoded here to avoid cross-app import.
 NAV_TARGETS = {
     'brainstorm', 'dashboard', 'projects', 'content', 'builder', 'assets',
-    'review', 'community', 'billing', 'config', 'copy', 'image',
+    'review', 'community', 'profile', 'billing', 'config', 'copy', 'image',
     'storyboard', 'audio',
 }
 

@@ -12,6 +12,7 @@ export const NAV_TAB_LABELS: Record<string, string> = {
   assets: '资产库',
   review: '审核',
   community: '社区',
+  profile: '个人主页',
   billing: '订阅',
   config: '配置',
   copy: '文案生成',

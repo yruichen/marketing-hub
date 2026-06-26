@@ -9,6 +9,7 @@ interface CommunityPageProps {
   username: string | null;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   onLikeUpdate?: (id: number, likes: number) => void;
+  onOpenProfile?: (username: string) => void;
 }
 
 const SCENE_CHIPS = ['小红书种草', '新品上市', '短视频分镜', '品牌调性', '视觉 Prompt', '口播脚本'];
@@ -18,6 +19,7 @@ export function CommunityPage({
   username,
   triggerToast,
   onLikeUpdate,
+  onOpenProfile,
 }: CommunityPageProps) {
   const {
     communityItems,
@@ -96,7 +98,7 @@ export function CommunityPage({
         </section>
       ) : (
         <>
-          {featured && <FeaturedTemplate item={featured} onLike={handleLike} />}
+          {featured && <FeaturedTemplate item={featured} onLike={handleLike} onOpenProfile={onOpenProfile} />}
 
           <section className="template-market__section-head">
             <div>
@@ -108,7 +110,7 @@ export function CommunityPage({
 
           <section className="template-market__grid">
             {rest.map((item) => (
-              <TemplateCard key={item.id} item={item} onLike={handleLike} />
+              <TemplateCard key={item.id} item={item} onLike={handleLike} onOpenProfile={onOpenProfile} />
             ))}
           </section>
         </>
@@ -117,7 +119,7 @@ export function CommunityPage({
   );
 }
 
-function FeaturedTemplate({ item, onLike }: { item: CommunityItem; onLike: (id: number) => void }) {
+function FeaturedTemplate({ item, onLike, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onOpenProfile?: (username: string) => void }) {
   return (
     <section className="template-market__featured">
       <div className="template-market__featured-visual">
@@ -131,7 +133,10 @@ function FeaturedTemplate({ item, onLike }: { item: CommunityItem; onLike: (id: 
           <button type="button" onClick={() => onLike(item.id)}>
             <Heart className="h-4 w-4" /> {item.likes}
           </button>
-          <span>{item.username} · {item.created_at}</span>
+          <button type="button" className="template-author-link" onClick={() => onOpenProfile?.(item.username)}>
+            {item.username}
+          </button>
+          <span>{item.created_at}</span>
           {item.similarity_score !== undefined && <span>匹配 {Math.round(item.similarity_score * 100)}%</span>}
         </div>
       </div>
@@ -139,7 +144,7 @@ function FeaturedTemplate({ item, onLike }: { item: CommunityItem; onLike: (id: 
   );
 }
 
-function TemplateCard({ item, onLike }: { item: CommunityItem; onLike: (id: number) => void }) {
+function TemplateCard({ item, onLike, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onOpenProfile?: (username: string) => void }) {
   return (
     <article className="template-card">
       <TemplateVisual item={item} />
@@ -152,7 +157,9 @@ function TemplateCard({ item, onLike }: { item: CommunityItem; onLike: (id: numb
         <p>{templateSummary(item)}</p>
       </div>
       <footer className="template-card__footer">
-        <span>{item.username}</span>
+        <button type="button" className="template-author-link" onClick={() => onOpenProfile?.(item.username)}>
+          {item.username}
+        </button>
         <button type="button" onClick={() => onLike(item.id)}>
           <Heart className="h-3.5 w-3.5" /> {item.likes}
         </button>
@@ -186,14 +193,16 @@ function TemplateVisual({ item, large = false }: { item: CommunityItem; large?: 
     );
   }
 
-  if (item.creation_type === 'storyboard') {
+  if (item.creation_type === 'storyboard' || item.creation_type === 'video') {
     return (
       <div className={`template-visual template-visual--storyboard ${large ? 'is-large' : ''}`}>
         <Video className="h-8 w-8" />
         <div className="template-scenes">
-          {(item.content.scenes || []).slice(0, 3).map((scene, index) => (
-            <span key={index}>S{scene.scene_number || index + 1}</span>
-          ))}
+          {item.creation_type === 'video'
+            ? <span>VIDEO</span>
+            : (item.content.scenes || []).slice(0, 3).map((scene, index) => (
+              <span key={index}>S{scene.scene_number || index + 1}</span>
+            ))}
         </div>
       </div>
     );
@@ -220,6 +229,9 @@ function templateSummary(item: CommunityItem) {
   }
   if (item.creation_type === 'audio') {
     return item.content.text || `约 ${item.content.estimated_audio_duration_seconds || '-'} 秒口播音频模板`;
+  }
+  if (item.creation_type === 'video') {
+    return item.content.prompt || item.content.video_topic || '可复用的视频生成模板';
   }
   return item.title;
 }

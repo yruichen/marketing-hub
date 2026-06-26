@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
@@ -172,7 +173,7 @@ class WorkflowTemplateCollectionView(APIView):
             source_campaign=Campaign.objects.filter(pk=request.data.get('campaign_id'), project=project).first() if request.data.get('campaign_id') else None,
             title=request.data.get('title', project.name),
             description=request.data.get('description', ''),
-            author_username=request.data.get('username', 'ROOT'),
+            author_username=request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME),
             brand_context=request.data.get('brand_context', {}) if isinstance(request.data.get('brand_context', {}), dict) else {},
             nodes=request.data.get('nodes', []) if isinstance(request.data.get('nodes', []), list) else [],
             edges=request.data.get('edges', []) if isinstance(request.data.get('edges', []), list) else [],

@@ -1,7 +1,93 @@
+import hashlib
 import json
 
 from django.contrib.auth.models import User
 from django.db import models
+
+
+def hash_signup_invite_code(code: str) -> str:
+    return hashlib.sha256(code.strip().upper().encode('utf-8')).hexdigest()
+
+
+class UserProfile(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('suspended', 'Suspended'),
+        ('deleted', 'Deleted'),
+    ]
+    VISIBILITY_CHOICES = [
+        ('workspace', 'Workspace'),
+        ('private', 'Private'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    email_verified = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    display_name = models.CharField(max_length=80, blank=True, default='')
+    headline = models.CharField(max_length=120, blank=True, default='')
+    bio = models.TextField(blank=True, default='')
+    location = models.CharField(max_length=80, blank=True, default='')
+    website_url = models.CharField(max_length=500, blank=True, default='')
+    avatar_url = models.CharField(max_length=500, blank=True, default='')
+    banner_url = models.CharField(max_length=500, blank=True, default='')
+    specialties = models.JSONField(default=list, blank=True)
+    social_links = models.JSONField(default=list, blank=True)
+    profile_visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='workspace')
+    signup_source = models.CharField(max_length=60, blank=True, default='')
+    signup_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_login_user_agent = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f'{self.user.username}:{self.status}'
+
+
+class SignupInvite(models.Model):
+    code_hash = models.CharField(max_length=128, unique=True)
+    label = models.CharField(max_length=100, blank=True, default='')
+    max_uses = models.PositiveIntegerField(default=1)
+    used_count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_signup_invites')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return self.label or f'invite:{self.id}'
+
+
+class SecurityEvent(models.Model):
+    RISK_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    ]
+
+    event_type = models.CharField(max_length=40)
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='security_events')
+    email = models.EmailField(blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True, default='')
+    risk_level = models.CharField(max_length=20, choices=RISK_CHOICES, default='low')
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['event_type', '-created_at']),
+            models.Index(fields=['email', '-created_at']),
+            models.Index(fields=['ip_address', '-created_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.event_type}:{self.email or self.user_id or self.ip_address}'
 
 
 class Organization(models.Model):
@@ -217,7 +303,7 @@ class WorkflowTemplate(models.Model):
     source_campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_templates')
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True, default='')
-    author_username = models.CharField(max_length=100, default='ROOT')
+    author_username = models.CharField(max_length=100, default='DEMO')
     brand_context = models.JSONField(default=dict, blank=True)
     nodes = models.JSONField(default=list, blank=True)
     edges = models.JSONField(default=list, blank=True)
@@ -253,6 +339,48 @@ class UsageEvent(models.Model):
 
     def __str__(self) -> str:
         return f'{self.provider}:{self.total_tokens}'
+
+
+class CreditGrant(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='credit_grants')
+    granted_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='credit_grants')
+    amount_cents = models.PositiveIntegerField(default=0)
+    reason = models.CharField(max_length=160)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.organization.slug}: +{self.amount_cents}c'
+
+
+class CreditLedgerEntry(models.Model):
+    SOURCE_CHOICES = [
+        ('grant', 'Grant'),
+        ('usage', 'Usage'),
+        ('adjustment', 'Adjustment'),
+    ]
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='credit_ledger')
+    source = models.CharField(max_length=40, choices=SOURCE_CHOICES)
+    delta_cents = models.IntegerField()
+    balance_after_cents = models.IntegerField()
+    usage_event = models.ForeignKey(UsageEvent, null=True, blank=True, on_delete=models.SET_NULL, related_name='credit_ledger_entries')
+    credit_grant = models.ForeignKey(CreditGrant, null=True, blank=True, on_delete=models.SET_NULL, related_name='ledger_entries')
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['organization', '-created_at']),
+            models.Index(fields=['source', '-created_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.organization.slug}:{self.source}:{self.delta_cents}c'
 
 
 class AIConfiguration(models.Model):
@@ -375,7 +503,7 @@ class CommunityCreation(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='community_creations', null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
     campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
-    username = models.CharField(max_length=100, default='ROOT')
+    username = models.CharField(max_length=100, default='DEMO')
     creation_type = models.CharField(max_length=20, choices=CREATION_TYPES)
     title = models.CharField(max_length=255)
     content = models.TextField(help_text='JSON-serialized creation details')

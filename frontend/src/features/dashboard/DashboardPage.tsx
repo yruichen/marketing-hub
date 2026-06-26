@@ -375,7 +375,7 @@ export function DashboardPage({
               {providerRows.slice(0, 5).map((item) => (
                 <div key={item.provider}>
                   <div className="mb-1 flex justify-between gap-3 text-xs">
-                    <span className="truncate font-black">{item.provider || 'mock'}</span>
+                    <span className="truncate font-black">{item.provider || '未配置'}</span>
                     <span className="font-mono text-[var(--editorial-text-gray)]">${formatUsd(item.cost_usd)}</span>
                   </div>
                   <div className="h-3 border border-[var(--editorial-stroke)] bg-[var(--editorial-unselected)]">
@@ -387,7 +387,7 @@ export function DashboardPage({
             </div>
           ) : (
             <div className="mt-4">
-              <EmptyPanel title="暂无 provider 成本" description="接入真实模型或运行 mock 任务后，这里会按 provider 汇总成本。" action="检查 AI 设置" onAction={() => setActiveTab('config')} />
+              <EmptyPanel title="暂无 provider 成本" description="接入真实模型并运行任务后，这里会按 provider 汇总成本。" action="检查 AI 设置" onAction={() => setActiveTab('config')} />
             </div>
           )}
         </div>

@@ -3,7 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 
+from django.conf import settings
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.middleware.csrf import get_token
@@ -16,9 +21,6 @@ from rest_framework.views import APIView
 from ai_gateway.agent import LlmUpstreamError, build_assistant_agent
 from ai_gateway.services import (
     AGNES_DEFAULT_BASE_URL,
-    AGNES_DEFAULT_IMAGE_MODEL,
-    AGNES_DEFAULT_MODEL,
-    AGNES_DEFAULT_VIDEO_MODEL,
 )
 from ai_gateway.tools import ToolContext
 from api.audit import record_audit_log
@@ -33,6 +35,13 @@ from api.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+PROVIDER_BASE_URLS = {
+    'agnes': AGNES_DEFAULT_BASE_URL,
+    'openai': 'https://api.openai.com/v1',
+    'gemini': 'https://generativelanguage.googleapis.com/v1beta',
+    'anthropic': 'https://api.anthropic.com/v1',
+}
 
 
 def looks_like_masked_api_key(value: str) -> bool:
@@ -65,6 +74,138 @@ def normalize_config_scope(provider: str, config_scope: str) -> str:
     return scope
 
 
+def _model_id(item) -> str:
+    if isinstance(item, str):
+        return item.strip()
+    if not isinstance(item, dict):
+        return ''
+    raw = item.get('id') or item.get('name') or item.get('model') or ''
+    value = str(raw).strip()
+    if value.startswith('models/'):
+        return value.split('/', 1)[1]
+    return value
+
+
+def _infer_capabilities(provider: str, model_id: str, item: dict | None = None) -> list[str]:
+    if isinstance(item, dict):
+        raw_capabilities = (
+            item.get('capabilities')
+            or item.get('supported_capabilities')
+            or item.get('modalities')
+            or item.get('supported_modalities')
+            or []
+        )
+        if isinstance(raw_capabilities, str):
+            raw_capabilities = [raw_capabilities]
+        normalized = {str(value).lower() for value in raw_capabilities if str(value).strip()}
+        inferred = []
+        if normalized & {'text', 'chat', 'completion', 'completions', 'vision'}:
+            inferred.append('text')
+        if normalized & {'image', 'images', 'image_generation'}:
+            inferred.append('image')
+        if normalized & {'video', 'videos', 'video_generation'}:
+            inferred.append('video')
+        if normalized & {'audio', 'speech', 'transcription'}:
+            inferred.append('audio')
+        model_type = str(item.get('type') or '').lower()
+        if model_type in {'text', 'image', 'video', 'audio'} and model_type not in inferred:
+            inferred.append(model_type)
+        if inferred:
+            return inferred
+
+    lowered = model_id.lower()
+    methods = set(item.get('supportedGenerationMethods') or []) if isinstance(item, dict) else set()
+    if provider == 'agnes':
+        if 'video' in lowered:
+            return ['video']
+        if 'image' in lowered or 'img' in lowered:
+            return ['image']
+        return ['text']
+    if provider == 'openai':
+        if lowered.startswith(('dall-e', 'gpt-image')):
+            return ['image']
+        if 'tts' in lowered or 'transcribe' in lowered or 'whisper' in lowered:
+            return ['audio']
+        return ['text']
+    if provider == 'gemini':
+        if 'generateContent' in methods or 'streamGenerateContent' in methods:
+            return ['text']
+        return ['text']
+    return ['text']
+
+
+def _model_defaults_from_options(models: list[dict]) -> dict[str, str]:
+    defaults = {'model_name': '', 'image_model_name': '', 'video_model_name': ''}
+    field_by_capability = {
+        'text': 'model_name',
+        'image': 'image_model_name',
+        'video': 'video_model_name',
+    }
+    for capability, field in field_by_capability.items():
+        selected = next(
+            (model for model in models if capability in model.get('capabilities', [])),
+            None,
+        )
+        if selected:
+            defaults[field] = selected.get('id', '')
+    return defaults
+
+
+def _provider_env_key(provider: str) -> str:
+    return {
+        'agnes': 'AGNES_API_KEY',
+        'openai': 'OPENAI_API_KEY',
+        'gemini': 'GEMINI_API_KEY',
+        'anthropic': 'ANTHROPIC_API_KEY',
+    }.get(provider, '')
+
+
+def _request_json(url: str, *, headers: dict[str, str], timeout: int = 20) -> dict:
+    req = urllib.request.Request(url, headers=headers, method='GET')
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def _fetch_live_models(provider: str, *, api_key: str, base_url: str) -> list[dict]:
+    if not api_key:
+        raise ValueError('API key is required to fetch model list.')
+
+    if provider in {'agnes', 'openai'}:
+        url = f'{base_url.rstrip("/")}/models'
+        body = _request_json(url, headers={'Authorization': f'Bearer {api_key}'})
+        items = body.get('data') if isinstance(body, dict) else []
+    elif provider == 'gemini':
+        root = (base_url or PROVIDER_BASE_URLS['gemini']).rstrip('/')
+        separator = '&' if '?' in root else '?'
+        url = f'{root}/models{separator}{urllib.parse.urlencode({"key": api_key})}'
+        body = _request_json(url, headers={})
+        items = body.get('models') if isinstance(body, dict) else []
+    elif provider == 'anthropic':
+        root = (base_url or PROVIDER_BASE_URLS['anthropic']).rstrip('/')
+        body = _request_json(
+            f'{root}/models',
+            headers={
+                'x-api-key': api_key,
+                'anthropic-version': '2023-06-01',
+            },
+        )
+        items = body.get('data') if isinstance(body, dict) else []
+    else:
+        items = []
+
+    models = []
+    for item in items or []:
+        model_id = _model_id(item)
+        if not model_id:
+            continue
+        models.append({
+            'id': model_id,
+            'label': model_id,
+            'capabilities': _infer_capabilities(provider, model_id, item if isinstance(item, dict) else None),
+        })
+    return models
+
+
 class AIConfigView(APIView):
     permission_classes = [CanManageAIConfiguration]
 
@@ -72,6 +213,8 @@ class AIConfigView(APIView):
     def get(self, request):
         _, org, _, _ = get_scope(request)
         configs = AIConfiguration.objects.filter(Q(organization__isnull=True) | Q(organization=org))
+        if not settings.AI_ALLOW_MOCK_PROVIDER:
+            configs = configs.exclude(provider='mock')
         return with_csrf_token(
             Response(AIConfigurationSerializer(configs.order_by('-is_active', '-updated_at'), many=True).data),
             request,
@@ -80,7 +223,12 @@ class AIConfigView(APIView):
     def post(self, request):
         actor = resolve_staff_user_from_request(request)
         _, org, _, _ = get_scope(request)
-        provider = request.data.get('provider', 'mock')
+        provider = request.data.get('provider', 'agnes')
+        if provider == 'mock' and not settings.AI_ALLOW_MOCK_PROVIDER:
+            return Response(
+                {'detail': 'Mock provider is disabled for this environment.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         api_key = request.data.get('api_key', '').strip()
         base_url = request.data.get('base_url', '').strip()
         model_name = request.data.get('model_name', '').strip()
@@ -93,12 +241,6 @@ class AIConfigView(APIView):
 
         if provider == 'agnes':
             base_url = base_url or AGNES_DEFAULT_BASE_URL
-            if config_scope in {'text', 'all'} and not model_name:
-                model_name = AGNES_DEFAULT_MODEL
-            if config_scope in {'image', 'all'} and not image_model_name:
-                image_model_name = AGNES_DEFAULT_IMAGE_MODEL
-            if config_scope in {'video', 'all'} and not video_model_name:
-                video_model_name = AGNES_DEFAULT_VIDEO_MODEL
 
         config, _ = AIConfiguration.objects.update_or_create(
             provider=provider,
@@ -148,6 +290,86 @@ class AIConfigView(APIView):
         )
 
 
+class AIConfigModelsView(APIView):
+    permission_classes = [CanManageAIConfiguration]
+
+    def post(self, request):
+        _, org, _, _ = get_scope(request)
+        provider = (request.data.get('provider') or 'agnes').strip()
+        if provider == 'mock':
+            return Response(
+                {'detail': 'Mock provider does not expose production models.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if provider not in PROVIDER_BASE_URLS:
+            return Response(
+                {'detail': f'Unsupported provider: {provider}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        billing_mode = request.data.get('billing_mode', 'platform')
+        organization = org if billing_mode == 'byok' else None
+        config_scope = normalize_config_scope(provider, request.data.get('config_scope', 'all'))
+        base_url = (request.data.get('base_url') or '').strip()
+        api_key = request.data.get('api_key', '').strip()
+
+        if looks_like_masked_api_key(api_key):
+            api_key = ''
+
+        saved_config = AIConfiguration.objects.filter(
+            provider=provider,
+            organization=organization,
+            config_scope=config_scope,
+        ).first() or AIConfiguration.objects.filter(
+            provider=provider,
+            organization=organization,
+            is_active=True,
+        ).order_by('-updated_at').first()
+
+        if not api_key and saved_config:
+            api_key = saved_config.api_key
+        if not base_url and saved_config:
+            base_url = saved_config.base_url
+        base_url = base_url or PROVIDER_BASE_URLS[provider]
+        if not api_key:
+            env_key = _provider_env_key(provider)
+            api_key = os.getenv(env_key, '').strip() if env_key else ''
+
+        try:
+            models = _fetch_live_models(provider, api_key=api_key, base_url=base_url)
+        except (ValueError, urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            detail = str(exc)[:240]
+            if isinstance(exc, urllib.error.HTTPError):
+                detail = exc.read().decode('utf-8', errors='replace')[:240] or detail
+                status_code = exc.code
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST if isinstance(exc, ValueError) else status.HTTP_502_BAD_GATEWAY
+            logger.info('Model fetch failed for provider=%s: %s', provider, detail)
+            return with_csrf_token(
+                Response({'detail': detail}, status=status_code),
+                request,
+            )
+
+        if not models:
+            detail = 'Provider returned an empty model list.'
+            logger.info('Model fetch failed for provider=%s: %s', provider, detail)
+            return with_csrf_token(
+                Response({'detail': detail}, status=status.HTTP_502_BAD_GATEWAY),
+                request,
+            )
+
+        return with_csrf_token(
+            Response({
+                'provider': provider,
+                'base_url': base_url,
+                'source': 'live',
+                'models': models,
+                'defaults': _model_defaults_from_options(models),
+            }),
+            request,
+        )
+
+
 # ================================================================
 # Global Assistant views
 # ================================================================
@@ -183,6 +405,7 @@ class AssistantChatView(APIView):
     Response: text/event-stream.
 
     Events (one JSON object per `data:` line):
+        {type: 'status',    status_text: str}
         {type: 'text',      delta: str}
         {type: 'tool_call',  name, args}
         {type: 'tool_result',name, result}
@@ -270,6 +493,7 @@ class AssistantChatView(APIView):
                         'args': step.args,
                         'result': step.result,
                         'error': step.error,
+                        'status_text': step.status_text,
                     }
                     # Surface upstream LLM status (e.g. 429) so the UI
                     # can show a specific message instead of "unknown".

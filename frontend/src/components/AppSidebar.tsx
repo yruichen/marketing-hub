@@ -1,12 +1,16 @@
 import type { AppSection } from '../shared/stores/uiStore';
 import { NAV_SECTIONS } from '../app/navigation';
 
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+
 type AppSidebarProps = {
   activeTab: AppSection;
   onNavigate: (tab: AppSection) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   username: string | null;
+  isSuperuser?: boolean;
+  onOpenProfile?: () => void;
   onLogout: () => void;
   className?: string;
 };
@@ -17,6 +21,8 @@ export function AppSidebar({
   darkMode,
   onToggleDarkMode,
   username,
+  isSuperuser = false,
+  onOpenProfile,
   onLogout,
   className = '',
 }: AppSidebarProps) {
@@ -33,14 +39,14 @@ export function AppSidebar({
           </p>
         </div>
 
-        <nav className="flex flex-col gap-4 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
+        <nav className="app-sidebar-nav flex flex-col gap-4 font-mono flex-1 min-h-0 overflow-y-auto pr-1">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--editorial-text-gray)] mb-2 px-2">
                 {section.title}
               </p>
               <div className="flex flex-col gap-0.5">
-                {section.items.map((item) => {
+                {section.items.filter((item) => item.id !== 'admin' || isSuperuser).map((item) => {
                   const isActive = activeTab === item.id;
                   const Icon = item.icon;
                   return (
@@ -88,12 +94,16 @@ export function AppSidebar({
             />
           </button>
         </div>
-        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 p-2.5 text-xs font-bold flex flex-col gap-1">
-          <span className="text-[var(--editorial-text)]">{username || 'ROOT'}</span>
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 p-2.5 text-left text-xs font-bold flex flex-col gap-1 transition hover:bg-[var(--surface-hover)]"
+        >
+          <span className="text-[var(--editorial-text)]">{username || DEMO_USERNAME}</span>
           <span className="text-[8px] rounded-full bg-[var(--surface-muted)] text-[var(--editorial-text-gray)] px-2 py-0.5 inline-block w-fit">
-            管理员
+            {isSuperuser ? '超级管理员' : '测试用户'}
           </span>
-        </div>
+        </button>
         <button
           type="button"
           onClick={onLogout}

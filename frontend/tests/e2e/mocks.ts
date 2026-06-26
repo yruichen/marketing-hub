@@ -145,7 +145,7 @@ const template = {
   source_campaign_id: 201,
   title: 'Core Launch Workflow',
   description: '4 nodes / 3 edges',
-  author_username: 'ROOT',
+  author_username: 'DEMO',
   brand_context: project.brand_context,
   nodes: workflowNodes,
   edges: workflowEdges,
@@ -185,7 +185,7 @@ const dashboard = {
       brand_context: project.brand_context,
     },
     campaign: campaigns[0],
-    username: 'ROOT',
+    username: 'DEMO',
   },
   metrics: {
     task_count: 15,
@@ -205,7 +205,7 @@ const dashboard = {
     audio: 1,
   },
   recent_usage: [
-    { provider: 'mock', model_name: 'default', total_tokens: 816, cost_usd: '0.0163', created_at: now },
+    { provider: 'agnes', model_name: 'agnes-2.0-flash', total_tokens: 816, cost_usd: '0.0163', created_at: now },
   ],
 };
 
@@ -227,12 +227,15 @@ const billing = {
 const aiConfig = [
   {
     id: 1,
-    provider: 'mock',
-    provider_display: 'Mock Sandbox',
+    provider: 'agnes',
+    provider_display: 'Agnes AI',
     api_key: 'Unset',
-    base_url: '',
-    model_name: 'gpt-mock-agent',
-    billing_mode: 'platform',
+    base_url: 'https://apihub.agnes-ai.com/v1',
+    model_name: 'agnes-2.0-flash',
+    image_model_name: 'agnes-image-2.0-flash',
+    video_model_name: 'agnes-video-v2.0',
+    config_scope: 'all',
+    billing_mode: 'byok',
     is_active: true,
   },
 ];
@@ -240,7 +243,7 @@ const aiConfig = [
 const community = [
   {
     id: 801,
-    username: 'ROOT',
+    username: 'DEMO',
     creation_type: 'copy',
     creation_type_display: '文案',
     title: 'Core Launch 开场文案',
@@ -253,13 +256,41 @@ const community = [
   },
 ];
 
+const profile = {
+  profile: {
+    username: 'DEMO',
+    email: 'demo@example.com',
+    display_name: 'DEMO',
+    headline: 'Campaign creator',
+    bio: 'Builds launch kits in Marketing Hub.',
+    location: 'Shanghai',
+    website_url: 'https://example.com',
+    avatar_url: '',
+    banner_url: '',
+    specialties: ['Copy', 'Launch'],
+    social_links: [{ label: 'Site', url: 'https://example.com' }],
+    profile_visibility: 'workspace',
+    created_at: now,
+    updated_at: now,
+  },
+  stats: {
+    creation_count: 1,
+    total_likes: 8,
+    favorite_type: 'copy',
+    favorite_type_display: '文案',
+    latest_published_at: now,
+  },
+  creations: community,
+  is_owner: true,
+};
+
 function json(payload: RoutePayload, status = 200) {
   return { status, contentType: 'application/json', body: JSON.stringify(payload) };
 }
 
 export async function installMocks(page: Page) {
   await page.route('**/api/auth/login/', async (route) => {
-    await route.fulfill(json({ token: 'demo-token', username: 'ROOT' }));
+    await route.fulfill(json({ token: 'demo-token', username: 'DEMO' }));
   });
   await page.route('**/api/ai/config/', async (route) => {
     if (route.request().method() === 'POST') {
@@ -267,6 +298,23 @@ export async function installMocks(page: Page) {
       return;
     }
     await route.fulfill(json(aiConfig));
+  });
+  await page.route('**/api/ai/config/models/', async (route) => {
+    await route.fulfill(json({
+      provider: 'agnes',
+      base_url: 'https://apihub.agnes-ai.com/v1',
+      source: 'live',
+      models: [
+        { id: 'agnes-2.0-flash', label: 'agnes-2.0-flash', capabilities: ['text'] },
+        { id: 'agnes-image-2.0-flash', label: 'agnes-image-2.0-flash', capabilities: ['image'] },
+        { id: 'agnes-video-v2.0', label: 'agnes-video-v2.0', capabilities: ['video'] },
+      ],
+      defaults: {
+        model_name: 'agnes-2.0-flash',
+        image_model_name: 'agnes-image-2.0-flash',
+        video_model_name: 'agnes-video-v2.0',
+      },
+    }));
   });
   await page.route('**/api/workspace/bootstrap/**', async (route) => {
     await route.fulfill(json(workspaceBootstrap));
@@ -286,6 +334,13 @@ export async function installMocks(page: Page) {
   });
   await page.route('**/api/community/search/**', async (route) => {
     await route.fulfill(json({ results: community, rag_logs: ['检索到历史素材 1 条'] }));
+  });
+  await page.route('**/api/profiles/**', async (route) => {
+    if (route.request().method() === 'PATCH') {
+      await route.fulfill(json(profile));
+      return;
+    }
+    await route.fulfill(json(profile));
   });
   await page.route('**/api/tasks/**', async (route) => {
     if (route.request().method() === 'POST') {

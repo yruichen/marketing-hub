@@ -2,6 +2,7 @@ import json
 from decimal import Decimal
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
@@ -62,10 +63,15 @@ def ensure_demo_workspace(username: str | None = None) -> dict[str, Any]:
     )
 
     user_obj = None
+    if username is None:
+        username = settings.MARKETING_HUB_DEMO_USERNAME
     if username:
         user_obj = User.objects.filter(username=username).first()
         if user_obj:
-            Membership.objects.get_or_create(user=user_obj, organization=org, defaults={'role': 'admin'})
+            if user_obj.is_superuser:
+                user_obj = None
+            else:
+                Membership.objects.get_or_create(user=user_obj, organization=org, defaults={'role': 'admin'})
 
     return {
         'organization': org,

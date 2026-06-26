@@ -21,6 +21,15 @@ interface UseAssistantChatResult {
   loadHistory: (history: ChatMessage[]) => void;
 }
 
+const WAITING_HINTS = [
+  '正在连接助手',
+  '正在理解需求',
+  '任务可能需要一点时间，仍在处理',
+  '正在等待模型返回结果',
+  '还在继续处理，请稍候',
+  '正在整理最终回复',
+];
+
 function newId(): string {
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -80,6 +89,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         content: '',
         toolCalls: [],
         pending: true,
+        statusText: WAITING_HINTS[0],
       };
       setMessages((prev) => [...prev, userMsg, initialAssistant]);
       setSending(true);
@@ -92,15 +102,33 @@ export function useAssistantChat(): UseAssistantChatResult {
       // React re-renders.
       const liveToolCalls: ChatMessage['toolCalls'] = [];
       let liveContent = '';
+      let liveStatusText = WAITING_HINTS[0];
+      const streamStartedAt = Date.now();
       const commit = () => {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: liveContent, toolCalls: [...liveToolCalls] }
+              ? { ...m, content: liveContent, toolCalls: [...liveToolCalls], statusText: liveStatusText }
               : m,
           ),
         );
       };
+      const statusTimer = window.setInterval(() => {
+        const elapsedSeconds = Math.floor((Date.now() - streamStartedAt) / 1000);
+        const nextHint = elapsedSeconds >= 45
+          ? WAITING_HINTS[5]
+          : elapsedSeconds >= 25
+            ? WAITING_HINTS[4]
+            : elapsedSeconds >= 12
+              ? WAITING_HINTS[3]
+              : elapsedSeconds >= 5
+                ? WAITING_HINTS[2]
+                : '';
+        if (nextHint && nextHint !== liveStatusText) {
+          liveStatusText = nextHint;
+          commit();
+        }
+      }, 3000);
 
       try {
         const res = await apiStream('/assistant/chat', {
@@ -145,14 +173,27 @@ export function useAssistantChat(): UseAssistantChatResult {
             const event = parseSseEvent(rawEvent);
             if (!event) continue;
 
-            if (event.type === 'text' && event.delta) {
+            if (event.type === 'status' && event.status_text) {
+              liveStatusText = event.status_text;
+              commit();
+            } else if (event.type === 'text' && event.delta) {
               liveContent += event.delta;
               commit();
             } else if (event.type === 'tool_call' && event.name) {
-              liveToolCalls.push({
-                name: event.name,
-                args: event.args ?? {},
-              });
+              liveStatusText = toolStatusText(event.name, 'running');
+              if (event.name === 'navigate') {
+                liveToolCalls.push({
+                  name: event.name,
+                  args: event.args ?? {},
+                  status: 'running',
+                });
+              } else {
+                liveToolCalls.push({
+                  name: event.name,
+                  args: {},
+                  status: 'running',
+                });
+              }
               commit();
               // Browser-side tool intents (e.g. clipboard, file picker).
               // navigate is intentionally NOT handled here — it surfaces
@@ -162,18 +203,24 @@ export function useAssistantChat(): UseAssistantChatResult {
                 try {
                   const result = await handler(event.args ?? {});
                   liveToolCalls[liveToolCalls.length - 1].result = result;
+                  liveToolCalls[liveToolCalls.length - 1].status = 'done';
                   commit();
                 } catch (err) {
                   liveToolCalls[liveToolCalls.length - 1].result = {
                     error: err instanceof Error ? err.message : 'client tool failed',
                   };
+                  liveToolCalls[liveToolCalls.length - 1].status = 'error';
                   commit();
                 }
               }
             } else if (event.type === 'tool_result' && event.name) {
               const last = liveToolCalls[liveToolCalls.length - 1];
               if (last && last.name === event.name) {
-                last.result = event.result;
+                last.status = hasToolError(event.result) ? 'error' : 'done';
+                if (event.name === 'navigate') {
+                  last.result = event.result;
+                }
+                liveStatusText = toolStatusText(event.name, last.status);
                 commit();
               }
             } else if (event.type === 'done') {
@@ -200,10 +247,11 @@ export function useAssistantChat(): UseAssistantChatResult {
         const message = err instanceof Error ? err.message : '未知错误';
         setError(message);
       } finally {
+        window.clearInterval(statusTimer);
         setSending(false);
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, pending: false } : m,
+            m.id === assistantId ? { ...m, pending: false, statusText: '' } : m,
           ),
         );
         abortRef.current = null;
@@ -213,4 +261,22 @@ export function useAssistantChat(): UseAssistantChatResult {
   );
 
   return { messages, sending, error, send, reset, loadHistory };
+}
+
+function hasToolError(result: unknown): boolean {
+  return Boolean(result && typeof result === 'object' && 'error' in result);
+}
+
+function toolStatusText(name: string, status: 'running' | 'done' | 'error'): string {
+  const labels: Record<string, string> = {
+    list_projects: '查询项目列表',
+    get_project: '读取项目详情',
+    get_dashboard: '汇总工作台数据',
+    create_copy: '生成营销文案',
+    navigate: '准备页面跳转',
+  };
+  const label = labels[name] || '调用工作区工具';
+  if (status === 'running') return `正在${label}`;
+  if (status === 'error') return `${label}遇到问题，正在调整回答`;
+  return `已完成${label}`;
 }

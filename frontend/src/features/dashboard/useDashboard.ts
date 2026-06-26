@@ -3,13 +3,15 @@ import { apiFetch } from '../../hooks/useApi';
 import type { DashboardSnapshot, WorkspaceScope } from './types';
 import type { CampaignRecord, ProjectRecord, OrganizationRecord } from '../../types/workspace';
 
+const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+
 export function useWorkspaceScope(username: string | null) {
   const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope | null>(null);
 
   const fetchWorkspaceBootstrap = useCallback(async () => {
     try {
       const params = new URLSearchParams({
-        username: username || 'ROOT',
+        username: username || DEMO_USERNAME,
       });
       const storedProject = localStorage.getItem('mh_project_slug');
       const storedCampaign = localStorage.getItem('mh_campaign_id');
@@ -57,7 +59,7 @@ export function useWorkspaceScope(username: string | null) {
             status: campaign.status,
           }
         : prev?.campaign || { id: 0, name: 'Default Campaign', objective: '', status: 'active' },
-      username: currentUsername || 'ROOT',
+      username: currentUsername || DEMO_USERNAME,
     }));
   }, []);
 
@@ -70,7 +72,7 @@ export function useDashboardSnapshot(username: string | null) {
   const fetchDashboard = useCallback(async (): Promise<DashboardSnapshot | null> => {
     try {
       const params = new URLSearchParams({
-        username: username || 'ROOT',
+        username: username || DEMO_USERNAME,
       });
       const storedProject = localStorage.getItem('mh_project_slug');
       const storedCampaign = localStorage.getItem('mh_campaign_id');

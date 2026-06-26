@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
@@ -56,7 +57,7 @@ class WorkspaceBootstrapView(APIView):
                 'organization': serialize_organization(org),
                 'project': serialize_project(project),
                 'campaign': serialize_campaign(campaign),
-                'username': username.username if username else request.query_params.get('username', 'ROOT'),
+                'username': username.username if username else request.query_params.get('username', settings.MARKETING_HUB_DEMO_USERNAME),
             },
             'organizations': [serialize_organization(item) for item in organizations],
             'projects': [serialize_project(item) for item in projects],
@@ -82,7 +83,7 @@ class WorkspaceBootstrapView(APIView):
                 'organization': serialize_organization(org),
                 'project': serialize_project(project),
                 'campaign': serialize_campaign(campaign),
-                'username': username.username if username else request.data.get('username', 'ROOT'),
+                'username': username.username if username else request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME),
             }
         })
 
@@ -112,7 +113,7 @@ class WorkspaceView(APIView):
         project_name = request.data.get('project_name', 'Core Launch')
         project_slug = slugify(request.data.get('project_slug') or project_name or 'core-launch')
         campaign_name = request.data.get('campaign_name', 'Product Launch')
-        user_name = request.data.get('username', 'ROOT')
+        user_name = request.data.get('username', settings.MARKETING_HUB_DEMO_USERNAME)
 
         org, _ = Organization.objects.get_or_create(slug=org_slug, defaults={'name': org_name})
         project, _ = Project.objects.get_or_create(
