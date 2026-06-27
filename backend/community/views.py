@@ -8,14 +8,16 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.models import CommunityCreation
+from api.audit import record_audit_log
+from api.legal import require_current_policy_consent
+from api.models import Asset, CommunityCreation, ContentReport, GenerationTask
 from api.scope import get_scope
 from api.access import require_role
-from api.serializers import CommunityCreationSerializer
+from api.serializers import CommunityCreationSerializer, ContentReportSerializer
 
 
 def visible_community_creations(request):
-    query = CommunityCreation.objects.select_related('organization', 'project', 'campaign')
+    query = CommunityCreation.objects.select_related('organization', 'project', 'campaign').filter(moderation_status='visible')
     user = getattr(request, 'user', None)
     if not user or not getattr(user, 'is_authenticated', False):
         return query.filter(visibility='public')
@@ -60,9 +62,31 @@ class CommunityCreationView(APIView):
 
         if not creation_type or not title or not content_dict:
             return Response({'error': 'Missing required fields'}, status=status.HTTP_400_BAD_REQUEST)
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         visibility = request.data.get('visibility', 'private')
         if visibility not in dict(CommunityCreation.VISIBILITY_CHOICES):
             visibility = 'private'
+        if visibility == 'public' and not request.data.get('responsibility_confirmed'):
+            return Response({'error': 'Public publishing requires responsibility_confirmed=true.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        metadata = request.data.get('metadata') or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        source_asset = None
+        source_task = None
+        source_asset_id = request.data.get('source_asset_id') or metadata.get('source_asset_id')
+        source_task_id = request.data.get('source_task_id') or metadata.get('generation_task_id') or metadata.get('source_task_id')
+        if source_asset_id:
+            source_asset = Asset.objects.filter(pk=source_asset_id, organization=org).first()
+        if source_task_id:
+            source_task = GenerationTask.objects.filter(pk=source_task_id, organization=org).first()
+        ai_generated = bool(request.data.get('ai_generated') or metadata.get('ai_generated') or source_task_id)
+        metadata.setdefault('ai_generated', ai_generated)
+        if source_task:
+            metadata.setdefault('source_task_id', source_task.id)
+            metadata.setdefault('provider', source_task.result.get('data', {}).get('provider') if isinstance(source_task.result, dict) else '')
 
         item = CommunityCreation.objects.create(
             organization=org,
@@ -79,6 +103,23 @@ class CommunityCreationView(APIView):
             visibility=visibility,
             published_at=timezone.now() if visibility == 'public' else None,
             published_by=user if visibility == 'public' else None,
+            metadata=metadata,
+            ai_generated=ai_generated,
+            source_asset=source_asset,
+            source_task=source_task,
+            review_status='pending' if visibility == 'public' and ai_generated else 'not_reviewed',
+        )
+        record_audit_log(
+            action='community_publish',
+            actor=user,
+            organization=org,
+            target_type='community_creation',
+            target_id=str(item.id),
+            metadata={
+                'visibility': visibility,
+                'ai_generated': ai_generated,
+                'responsibility_confirmed': bool(request.data.get('responsibility_confirmed')),
+            },
         )
 
         return Response({'message': 'Creation shared to the community workspace!', 'id': item.id}, status=status.HTTP_201_CREATED)
@@ -102,7 +143,7 @@ class RAGSearchView(APIView):
         if not query:
             return Response({'results': [], 'rag_logs': ['请输入品牌关键词后再检索。']})
 
-        creations = visible_community_creations(request).select_related('organization', 'project')[:100]
+        creations = visible_community_creations(request).exclude(visibility='private').select_related('organization', 'project')[:100]
         results = []
         for item in creations:
             haystack = f"{item.title} {item.content} {' '.join(item.tags)}"
@@ -133,3 +174,81 @@ class RAGSearchView(APIView):
                 '当前使用本地关键词相似度作为检索策略。',
             ],
         })
+
+
+class CommunityReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        item = visible_community_creations(request).filter(pk=pk).first()
+        if not item:
+            return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        reason = str(request.data.get('reason') or 'other').strip()
+        if reason not in dict(ContentReport.REASON_CHOICES):
+            reason = 'other'
+        description = str(request.data.get('description') or '').strip()[:4000]
+        report = ContentReport.objects.create(
+            organization=item.organization,
+            target_type='community_creation',
+            target_id=str(item.id),
+            reporter=request.user,
+            reason=reason,
+            description=description,
+        )
+        item.reported_count += 1
+        item.save(update_fields=['reported_count'])
+        record_audit_log(
+            action='content_report',
+            actor=request.user,
+            organization=item.organization,
+            target_type='community_creation',
+            target_id=str(item.id),
+            metadata={'report_id': report.id, 'reason': reason},
+        )
+        return Response(ContentReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+
+class CommunityModerationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'ops')
+        item = CommunityCreation.objects.filter(pk=pk, organization=org).first()
+        if not item:
+            return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        moderation_status = str(request.data.get('moderation_status') or item.moderation_status).strip()
+        if moderation_status not in dict(CommunityCreation.MODERATION_STATUS_CHOICES):
+            return Response({'error': 'Unsupported moderation_status'}, status=status.HTTP_400_BAD_REQUEST)
+        review_status = str(request.data.get('review_status') or item.review_status).strip()
+        if review_status not in dict(CommunityCreation.REVIEW_STATUS_CHOICES):
+            return Response({'error': 'Unsupported review_status'}, status=status.HTTP_400_BAD_REQUEST)
+        reason = str(request.data.get('reason') or '').strip()
+
+        item.moderation_status = moderation_status
+        item.review_status = review_status
+        item.takedown_reason = reason
+        item.takedown_at = timezone.now() if moderation_status in {'hidden', 'removed'} else None
+        item.save(update_fields=['moderation_status', 'review_status', 'takedown_reason', 'takedown_at'])
+
+        report_id = request.data.get('report_id')
+        if report_id:
+            report = ContentReport.objects.filter(pk=report_id, organization=org).first()
+            if report:
+                report.status = 'resolved' if moderation_status in {'hidden', 'removed'} else 'rejected'
+                report.handled_by = user
+                report.handled_at = timezone.now()
+                report.resolution_note = reason
+                report.save(update_fields=['status', 'handled_by', 'handled_at', 'resolution_note'])
+
+        record_audit_log(
+            action='content_moderation',
+            actor=user,
+            organization=org,
+            target_type='community_creation',
+            target_id=str(item.id),
+            metadata={'moderation_status': moderation_status, 'review_status': review_status, 'reason': reason, 'report_id': report_id},
+        )
+        return Response(CommunityCreationSerializer(item).data)

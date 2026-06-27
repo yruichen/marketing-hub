@@ -1,8 +1,23 @@
 from django.contrib.auth.models import User
 from decimal import Decimal
+from django.core.checks import Tags, run_checks
+from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, Campaign, CommunityCreation, CreditLedgerEntry, GenerationTask, Membership, Organization, Project, UsageEvent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, GenerationTask, Membership, Organization, PolicyDocument, Project, UsageEvent, UserConsent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft
+from api.audit import record_audit_log
+from api.redaction import redact_text
+
+
+def grant_required_policy_consents(user):
+    for doc in PolicyDocument.objects.filter(is_active=True, policy_type__in=['terms', 'privacy']):
+        UserConsent.objects.get_or_create(
+            user=user,
+            policy_type=doc.policy_type,
+            policy_version=doc.version,
+            defaults={'source': 'test'},
+        )
 
 
 class AdminConsoleSeparationTests(APITestCase):
@@ -166,6 +181,7 @@ class WorkspaceUpgradeTests(APITestCase):
             objective='Validate the launch message',
         )
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        grant_required_policy_consents(self.user)
         self.client.login(username='workspace-user', password='123')
 
     def test_copy_generation_returns_structured_payload(self):
@@ -446,6 +462,8 @@ class SecurityAccessLayerTests(APITestCase):
         Membership.objects.create(user=self.viewer, organization=self.organization, role='viewer')
         Membership.objects.create(user=self.ops, organization=self.organization, role='ops')
         Membership.objects.create(user=self.other_user, organization=self.other_org, role='admin')
+        for user in [self.admin, self.creator, self.viewer, self.ops, self.other_user]:
+            grant_required_policy_consents(user)
         self.project = Project.objects.create(organization=self.organization, name='Owned Project', slug='owned-project')
         self.other_project = Project.objects.create(organization=self.other_org, name='Other Project', slug='other-project')
         self.campaign = Campaign.objects.create(project=self.project, name='Owned Campaign')
@@ -508,6 +526,84 @@ class SecurityAccessLayerTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.content)
         task = GenerationTask.objects.get(pk=response.data['task']['id'])
         self.assertEqual(task.requested_by, self.creator)
+
+    @override_settings(GENERATION_DAILY_BUDGET_CENTS_DEFAULT=0)
+    def test_over_budget_generation_returns_402_without_creating_task(self):
+        self.client.login(username='sec-creator', password='123')
+        before = GenerationTask.objects.filter(organization=self.organization).count()
+        response = self.client.post(
+            '/api/generate/copy/',
+            {
+                'organization': self.organization.slug,
+                'brand_name': 'Secure',
+                'product_description': 'Safe launch',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 402)
+        self.assertEqual(GenerationTask.objects.filter(organization=self.organization).count(), before)
+
+    @override_settings(GENERATION_MAX_RUNNING_TASKS_DEFAULT=1)
+    def test_running_task_limit_returns_429_without_creating_task(self):
+        GenerationTask.objects.create(
+            organization=self.organization,
+            project=self.project,
+            requested_by=self.creator,
+            task_type='copy',
+            status='running',
+        )
+        self.client.login(username='sec-creator', password='123')
+        before = GenerationTask.objects.filter(organization=self.organization).count()
+        response = self.client.post(
+            '/api/generate/copy/',
+            {
+                'organization': self.organization.slug,
+                'brand_name': 'Secure',
+                'product_description': 'Safe launch',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(GenerationTask.objects.filter(organization=self.organization).count(), before)
+
+    @override_settings(GENERATION_MAX_PAYLOAD_BYTES=256)
+    def test_oversized_payload_returns_400_without_creating_task(self):
+        self.client.login(username='sec-creator', password='123')
+        before = GenerationTask.objects.filter(organization=self.organization).count()
+        response = self.client.post(
+            '/api/generate/copy/',
+            {
+                'organization': self.organization.slug,
+                'brand_name': 'Secure',
+                'product_description': 'x' * 1000,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(GenerationTask.objects.filter(organization=self.organization).count(), before)
+
+    @override_settings(GENERATION_QUEUE_MAX_DEPTH=1)
+    def test_global_queue_limit_returns_429_without_creating_task(self):
+        GenerationTask.objects.create(
+            organization=self.other_org,
+            project=self.other_project,
+            requested_by=self.other_user,
+            task_type='copy',
+            status='queued',
+        )
+        self.client.login(username='sec-creator', password='123')
+        before = GenerationTask.objects.filter(organization=self.organization).count()
+        response = self.client.post(
+            '/api/generate/copy/',
+            {
+                'organization': self.organization.slug,
+                'brand_name': 'Secure',
+                'product_description': 'Safe launch',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(GenerationTask.objects.filter(organization=self.organization).count(), before)
 
     def test_billing_read_write_roles(self):
         self.client.login(username='sec-viewer', password='123')
@@ -581,6 +677,271 @@ class SecurityAccessLayerTests(APITestCase):
         response = self.client.get('/api/community/search/?q=alpha')
         self.assertEqual(response.status_code, 200)
         result_ids = {item['id'] for item in response.data['results']}
-        self.assertIn(own_private.id, result_ids)
+        self.assertNotIn(own_private.id, result_ids)
         self.assertIn(public_item.id, result_ids)
         self.assertNotIn(other_private.id, result_ids)
+
+    def test_asset_create_audit_action_is_valid_choice(self):
+        self.client.login(username='sec-creator', password='123')
+        response = self.client.post(
+            '/api/workspace/assets/',
+            {
+                'organization': self.organization.slug,
+                'title': 'Manual Asset',
+                'asset_type': 'document',
+                'rights_confirmed': True,
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        audit = AuditLog.objects.filter(action='asset_create').first()
+        self.assertIsNotNone(audit)
+        self.assertIn(('asset_create', 'Asset Create'), AuditLog.ACTION_CHOICES)
+
+    @override_settings(GENERATION_QUEUED_TTL_SECONDS=60, GENERATION_RUNNING_TIMEOUT_SECONDS=60)
+    def test_recover_stale_generation_tasks_marks_failed(self):
+        queued = GenerationTask.objects.create(
+            organization=self.organization,
+            project=self.project,
+            requested_by=self.creator,
+            task_type='copy',
+            status='queued',
+        )
+        running = GenerationTask.objects.create(
+            organization=self.organization,
+            project=self.project,
+            requested_by=self.creator,
+            task_type='copy',
+            status='running',
+        )
+        cutoff = timezone.now() - timezone.timedelta(minutes=5)
+        GenerationTask.objects.filter(pk__in=[queued.pk, running.pk]).update(created_at=cutoff, updated_at=cutoff)
+
+        from api.tasks import recover_stale_work
+
+        result = recover_stale_work()
+        self.assertEqual(result['queued_expired'], 1)
+        self.assertEqual(result['running_timed_out'], 1)
+        queued.refresh_from_db()
+        running.refresh_from_db()
+        self.assertEqual(queued.status, 'failed')
+        self.assertEqual(running.status, 'failed')
+
+
+class LegalLaunchReadinessTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='legal-user', password='123', email='legal@example.com')
+        self.ops = User.objects.create_user(username='legal-ops', password='123', email='ops@example.com')
+        self.organization = Organization.objects.create(name='Legal Org', slug='legal-org')
+        Membership.objects.create(user=self.user, organization=self.organization, role='creator')
+        Membership.objects.create(user=self.ops, organization=self.organization, role='ops')
+        self.project = Project.objects.create(organization=self.organization, name='Legal Project', slug='legal-project')
+        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+
+    def test_register_requires_terms_and_privacy_flags(self):
+        response = self.client.post('/api/auth/register/', {
+            'email': 'new-legal@example.com',
+            'username': 'new-legal',
+            'password': 'StrongPass123!',
+            'organization_name': 'New Legal Org',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('服务条款', response.data['error'])
+
+    def test_policy_consent_endpoint_records_versions(self):
+        self.client.login(username='legal-user', password='123')
+        response = self.client.post('/api/legal/consents/', {
+            'policy_types': ['terms', 'privacy'],
+            'source': 'settings_modal',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.data['policy_consents']['requires_consent'])
+        self.assertEqual(UserConsent.objects.filter(user=self.user).count(), 2)
+
+    def test_generation_requires_current_policy_consent(self):
+        self.client.login(username='legal-user', password='123')
+        response = self.client.post('/api/generate/copy/', {
+            'organization': self.organization.slug,
+            'brand_name': 'Legal',
+            'product_description': 'Launch readiness',
+        }, format='json')
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(response.data['requires_consent'])
+
+        grant_required_policy_consents(self.user)
+        response = self.client.post('/api/generate/copy/', {
+            'organization': self.organization.slug,
+            'brand_name': 'Legal',
+            'product_description': 'Launch readiness',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        asset = Asset.objects.get(metadata__generation_task_id=response.data['task']['id'])
+        self.assertTrue(asset.metadata['ai_generated'])
+        self.assertEqual(asset.metadata['organization_id'], self.organization.id)
+        self.assertIn('source_inputs_digest', asset.metadata)
+        self.assertEqual(response.data['result']['ai_generated'], True)
+
+    def test_asset_creation_requires_rights_confirmation(self):
+        grant_required_policy_consents(self.user)
+        self.client.login(username='legal-user', password='123')
+        response = self.client.post('/api/workspace/assets/', {
+            'organization': self.organization.slug,
+            'title': 'Unconfirmed asset',
+            'asset_type': 'document',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post('/api/workspace/assets/', {
+            'organization': self.organization.slug,
+            'title': 'Confirmed asset',
+            'asset_type': 'document',
+            'rights_confirmed': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.data['metadata']['license_status'], 'user_confirmed')
+        self.assertEqual(response.data['metadata']['rights_confirmed_by'], self.user.id)
+
+    def test_public_community_publish_report_and_moderate(self):
+        grant_required_policy_consents(self.user)
+        grant_required_policy_consents(self.ops)
+        self.client.login(username='legal-user', password='123')
+        response = self.client.post('/api/community/creations/', {
+            'organization': self.organization.slug,
+            'project': self.project.slug,
+            'creation_type': 'copy',
+            'title': 'Public legal copy',
+            'content': {'title': 'Public legal copy', 'paragraphs': ['claim']},
+            'visibility': 'public',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.post('/api/community/creations/', {
+            'organization': self.organization.slug,
+            'project': self.project.slug,
+            'creation_type': 'copy',
+            'title': 'Public legal copy',
+            'content': {'title': 'Public legal copy', 'paragraphs': ['claim']},
+            'visibility': 'public',
+            'responsibility_confirmed': True,
+            'ai_generated': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        creation_id = response.data['id']
+
+        response = self.client.post(f'/api/community/creations/{creation_id}/report/', {
+            'reason': 'false_advertising',
+            'description': 'Unverified claim',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(ContentReport.objects.filter(target_id=str(creation_id)).count(), 1)
+        self.assertEqual(CommunityCreation.objects.get(pk=creation_id).reported_count, 1)
+
+        self.client.logout()
+        self.client.login(username='legal-ops', password='123')
+        response = self.client.post(f'/api/community/creations/{creation_id}/moderate/', {
+            'organization': self.organization.slug,
+            'moderation_status': 'hidden',
+            'review_status': 'flagged',
+            'reason': 'Pending legal review',
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['moderation_status'], 'hidden')
+        self.assertTrue(AuditLog.objects.filter(action='content_moderation', target_id=str(creation_id)).exists())
+
+
+class ProductionSecurityChecksTests(APITestCase):
+    @override_settings(
+        DEBUG=False,
+        ALLOW_UNAUTHENTICATED_API=True,
+        MARKETING_HUB_BOOTSTRAP_DEMO=True,
+        AI_ALLOW_MOCK_FALLBACK=True,
+        CORS_ALLOW_ALL_ORIGINS=True,
+        SESSION_COOKIE_SECURE=False,
+        CSRF_COOKIE_SECURE=False,
+        FIELD_ENCRYPTION_KEY='',
+    )
+    def test_deploy_check_fails_for_dangerous_production_settings(self):
+        errors = run_checks(tags=[Tags.security], include_deployment_checks=True)
+        ids = {error.id for error in errors}
+        self.assertTrue({'api.E001', 'api.E002', 'api.E003', 'api.E004', 'api.E010', 'api.E011', 'api.E012'}.issubset(ids))
+
+
+class CsrfEndpointTests(APITestCase):
+    def test_auth_csrf_is_anonymous_probe(self):
+        response = self.client.get('/api/auth/csrf/', HTTP_X_REQUEST_ID='test-request-id')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers.get('X-CSRFToken'))
+        self.assertEqual(response.headers.get('X-Request-ID'), 'test-request-id')
+
+    def test_ai_config_is_not_anonymous_csrf_probe(self):
+        response = self.client.get('/api/ai/config/')
+        self.assertIn(response.status_code, (401, 403))
+
+
+class SprintCSecurityEnhancementTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='sprint-c-user', password='123')
+        self.organization = Organization.objects.create(name='Sprint C Org', slug='sprint-c-org')
+        Membership.objects.create(user=self.user, organization=self.organization, role='creator')
+        grant_required_policy_consents(self.user)
+
+    def test_audit_log_records_request_id_and_redacts_metadata(self):
+        record = record_audit_log(
+            action='asset_create',
+            actor=self.user,
+            organization=self.organization,
+            target_type='asset',
+            target_id='1',
+            request_id='rid-123',
+            metadata={
+                'api_key': 'secret-key',
+                'url': 'https://example.com/models?key=secret-key&safe=1',
+                'authorization': 'Bearer abc123',
+            },
+        )
+        self.assertEqual(record.request_id, 'rid-123')
+        self.assertEqual(record.metadata['api_key'], '[redacted]')
+        self.assertIn('key=%5Bredacted%5D', record.metadata['url'])
+        self.assertEqual(record.metadata['authorization'], '[redacted]')
+
+    def test_asset_source_url_rejects_non_https_and_internal_hosts(self):
+        self.client.login(username='sprint-c-user', password='123')
+        for url in ['http://example.com/file.png', 'https://127.0.0.1/file.png', 'data:text/plain,hello']:
+            response = self.client.post(
+                '/api/workspace/assets/',
+                {
+                    'organization': self.organization.slug,
+                    'title': 'Bad URL',
+                    'asset_type': 'image',
+                    'source_url': url,
+                    'rights_confirmed': True,
+                },
+                format='json',
+            )
+            self.assertEqual(response.status_code, 400, url)
+
+    def test_asset_source_url_accepts_external_https(self):
+        self.client.login(username='sprint-c-user', password='123')
+        response = self.client.post(
+            '/api/workspace/assets/',
+            {
+                'organization': self.organization.slug,
+                'title': 'External URL',
+                'asset_type': 'image',
+                'source_url': 'https://cdn.example.com/file.png',
+                'rights_confirmed': True,
+            },
+            format='json',
+            HTTP_X_REQUEST_ID='asset-rid',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.headers.get('X-Request-ID'), 'asset-rid')
+        self.assertEqual(response.data['source_url'], 'https://cdn.example.com/file.png')
+        self.assertEqual(AuditLog.objects.filter(action='asset_create').latest('created_at').request_id, 'asset-rid')
+
+    def test_redact_text_removes_provider_key_query_and_bearer(self):
+        text = 'failed https://generativelanguage.googleapis.com/v1/models?key=secret-key Authorization: Bearer abc123'
+        redacted = redact_text(text)
+        self.assertNotIn('secret-key', redacted)
+        self.assertNotIn('abc123', redacted)
+        self.assertIn('[redacted]', redacted)

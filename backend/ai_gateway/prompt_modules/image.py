@@ -4,7 +4,16 @@ import json
 import re
 from typing import Any
 
-from ai_gateway.prompt_modules.common import _strip_json_fence
+from ai_gateway.prompt_modules.common import (
+    _strip_json_fence,
+    append_context_lines,
+    append_feedback_line,
+    compact_text,
+    fact_guardrail_block,
+    json_contract_block,
+    platform_strategy,
+    quality_bar_block,
+)
 
 ASPECT_RATIO_SIZE_MAP = {
     '1:1': '1024x1024',
@@ -34,16 +43,23 @@ def build_image_generation_prompt(payload: dict[str, Any]) -> str:
 
     parts: list[str] = []
     if user_prompt:
-        parts.append(user_prompt)
+        parts.append(f'Core subject and marketing idea: {user_prompt}')
     if style:
-        parts.append(f'视觉风格：{style}')
+        parts.append(f'Visual style guide: {style}')
     if platform:
-        parts.append(f'适配 {platform} 社交媒体营销主视觉')
-    parts.append('高清细节，专业构图，主体清晰，光影自然，无文字水印，无畸形肢体')
-    parts.append(f'画幅比例：{aspect_ratio}')
+        parts.append(f'Use case: social marketing key visual for {platform}; {platform_strategy(platform)}')
+    workflow_context = compact_text(payload.get('workflow_context'), max_chars=700)
+    if workflow_context:
+        parts.append(f'Brand context: {workflow_context}')
+    parts.append(
+        'Advertising-grade composition, clear hero subject, believable product context, '
+        'precise lighting, natural shadows, high-detail materials, clean background hierarchy, '
+        'room for platform crop, no overlaid text, no watermark, no distorted hands or anatomy'
+    )
+    parts.append(f'Aspect ratio: {aspect_ratio}')
     if negative_prompt:
-        parts.append(f'避免：{negative_prompt}')
-    return '。'.join(part for part in parts if part)
+        parts.append(f'Negative prompt: {negative_prompt}')
+    return '. '.join(part for part in parts if part)
 
 
 def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, Any]:
@@ -75,10 +91,10 @@ def normalize_image_result(result: Any, payload: dict[str, Any]) -> dict[str, An
 
 
 IMAGE_PROMPT_SYSTEM_PROMPT = (
-    '你是一位 AI 绘画提示词工程师，专精中国社交媒体营销视觉。'
-    '根据品牌信息、内容主题与风格 Skill，生成可直接用于文生图模型的详细 prompt。'
-    'prompt 字段用英文撰写（模型友好），同时提供 prompt_zh 中文摘要。'
-    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    '你是一位资深 AI 视觉提示词工程师，专精营销主视觉、社交媒体封面和产品广告图。'
+    '根据品牌信息、内容主题与风格 Skill，生成可直接用于文生图模型的高精度英文 prompt。'
+    'prompt 字段必须用英文撰写，prompt_zh 用中文解释画面意图。'
+    f'{fact_guardrail_block()}'
 )
 
 IMAGE_PROMPT_JSON_SCHEMA_HINT = """{
@@ -99,10 +115,16 @@ def build_image_prompt_messages(payload: dict[str, Any]) -> list[dict[str, str]]
     negative_prompt = str(payload.get('negative_prompt') or '').strip()
     upstream_text = str(payload.get('upstream_text') or '').strip()
     feedback = str(payload.get('feedback') or '').strip()
-    workflow_context = payload.get('workflow_context')
+
+    quality_bar = quality_bar_block((
+        '英文 prompt 必须包含 subject, scene, composition, camera/framing, lighting, material/detail, mood/style, quality constraints。',
+        '画面必须服务营销目标：主体明确、卖点可感知、平台裁切友好，不生成文字海报。',
+        '负面词必须合并用户显式排除项，并补充常见生成缺陷。',
+        'composition_notes 要说明主体位置、留白、画幅使用和社媒封面可读性。',
+    ))
 
     user_lines = [
-        '请为以下营销场景生成文生图 prompt：',
+        '任务：为以下营销场景生成文生图 prompt。',
         f'- 品牌：{brand_name}',
         f'- 画面主题/产品描述：{subject or upstream_text or "未指定"}',
         f'- 风格 Skill：{style_text or "默认编辑风"}',
@@ -112,16 +134,16 @@ def build_image_prompt_messages(payload: dict[str, Any]) -> list[dict[str, str]]
     user_lines.extend([
         f'- 目标画幅：{aspect_ratio}',
         f'- 发布平台：{platform}',
-        f'- 输出 JSON 结构：\n{IMAGE_PROMPT_JSON_SCHEMA_HINT}',
+        f'- 平台视觉策略：{platform_strategy(platform)}',
+        f'- {quality_bar}',
+        f'- {json_contract_block(IMAGE_PROMPT_JSON_SCHEMA_HINT)}',
     ])
-    if upstream_text and upstream_text != subject:
-        user_lines.append(f'- 上游节点内容参考：\n{upstream_text[:2000]}')
     if negative_prompt:
         user_lines.append(f'- 必须排除的元素：{negative_prompt}')
-    if workflow_context:
-        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
-    if feedback:
-        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
+    if upstream_text and upstream_text != subject:
+        user_lines.append(f'- 上游节点内容参考：{compact_text(upstream_text, max_chars=2000)}')
+    append_context_lines(user_lines, payload)
+    append_feedback_line(user_lines, feedback)
 
     return [
         {'role': 'system', 'content': IMAGE_PROMPT_SYSTEM_PROMPT},
@@ -150,6 +172,13 @@ def normalize_image_prompt_result(result: Any, payload: dict[str, Any]) -> dict[
     if not prompt:
         subject = str(payload.get('subject') or payload.get('upstream_text') or 'marketing visual').strip()
         prompt = f'{subject}, {style_text}, aspect ratio {aspect_ratio}, professional marketing photography'
+
+    default_negatives = 'low quality, blurry, watermark, logo-like random text, distorted anatomy, extra fingers, cluttered layout'
+    if negative_prompt:
+        if default_negatives not in negative_prompt:
+            negative_prompt = f'{negative_prompt}, {default_negatives}'
+    else:
+        negative_prompt = default_negatives
 
     return {
         'prompt': prompt,

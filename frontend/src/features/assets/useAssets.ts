@@ -23,6 +23,7 @@ export interface AssetCreateInput {
   metadata?: Record<string, unknown>;
   project_id?: number | null;
   campaign_id?: number | null;
+  rights_confirmed?: boolean;
 }
 
 export type AssetUpdateInput = Partial<Omit<AssetCreateInput, 'project_id' | 'campaign_id'>> & {

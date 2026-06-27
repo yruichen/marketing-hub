@@ -11,11 +11,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+RUNNING_TESTS = 'test' in sys.argv
 
 ENV_FILE = BASE_DIR / '.env'
 if ENV_FILE.exists():
@@ -67,6 +69,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'api.middleware.RequestIDMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -163,7 +166,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Configurations
 CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'true' if DEBUG else 'false').lower() == 'true'
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['X-CSRFToken']
+CORS_EXPOSE_HEADERS = ['X-CSRFToken', 'X-Request-ID']
 CSRF_TRUSTED_ORIGINS = [
     origin
     for origin in os.getenv(
@@ -215,6 +218,7 @@ EMAIL_PROVIDER = os.getenv('EMAIL_PROVIDER', 'console').strip().lower()
 RESEND_API_KEY = os.getenv('RESEND_API_KEY', '').strip()
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Marketing Hub <no-reply@example.com>').strip()
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
+FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '').strip()
 
 MARKETING_HUB_BOOTSTRAP_DEMO = os.getenv('MARKETING_HUB_BOOTSTRAP_DEMO', 'true' if DEBUG else 'false').lower() == 'true'
 MARKETING_HUB_ADMIN_USERNAME = os.getenv('MARKETING_HUB_ADMIN_USERNAME', 'ROOT').strip() or 'ROOT'
@@ -227,6 +231,22 @@ ALLOW_UNAUTHENTICATED_API = os.getenv('ALLOW_UNAUTHENTICATED_API', 'true' if DEB
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('DATA_UPLOAD_MAX_MEMORY_SIZE', str(2 * 1024 * 1024)))
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('FILE_UPLOAD_MAX_MEMORY_SIZE', str(5 * 1024 * 1024)))
+GENERATION_MAX_PAYLOAD_BYTES = int(os.getenv('GENERATION_MAX_PAYLOAD_BYTES', str(64 * 1024)))
+GENERATION_DAILY_BUDGET_CENTS_DEFAULT = int(os.getenv('GENERATION_DAILY_BUDGET_CENTS_DEFAULT', '5000'))
+GENERATION_MAX_RUNNING_TASKS_DEFAULT = int(os.getenv('GENERATION_MAX_RUNNING_TASKS_DEFAULT', '5'))
+GENERATION_MAX_QUEUED_TASKS_DEFAULT = int(os.getenv('GENERATION_MAX_QUEUED_TASKS_DEFAULT', '50'))
+GENERATION_QUEUE_MAX_DEPTH = int(os.getenv('GENERATION_QUEUE_MAX_DEPTH', '500'))
+GENERATION_QUEUED_TTL_SECONDS = int(os.getenv('GENERATION_QUEUED_TTL_SECONDS', str(30 * 60)))
+GENERATION_RUNNING_TIMEOUT_SECONDS = int(os.getenv('GENERATION_RUNNING_TIMEOUT_SECONDS', str(30 * 60)))
+WORKFLOW_RUN_QUEUED_TTL_SECONDS = int(os.getenv('WORKFLOW_RUN_QUEUED_TTL_SECONDS', str(30 * 60)))
+WORKFLOW_RUN_RUNNING_TIMEOUT_SECONDS = int(os.getenv('WORKFLOW_RUN_RUNNING_TIMEOUT_SECONDS', str(60 * 60)))
+GENERATION_MAX_VIDEO_SECONDS = int(os.getenv('GENERATION_MAX_VIDEO_SECONDS', '60'))
+GENERATION_REQUIRE_CREDIT_BALANCE = os.getenv('GENERATION_REQUIRE_CREDIT_BALANCE', 'false').lower() == 'true'
+
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', str(60 * 60)))
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', str(55 * 60)))
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv('CELERY_WORKER_PREFETCH_MULTIPLIER', '1'))
+CELERY_TASK_ACKS_LATE = os.getenv('CELERY_TASK_ACKS_LATE', 'true').lower() == 'true'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

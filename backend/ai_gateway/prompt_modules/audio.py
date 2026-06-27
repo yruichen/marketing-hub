@@ -4,13 +4,19 @@ import json
 import re
 from typing import Any
 
-from ai_gateway.prompt_modules.common import _strip_json_fence
+from ai_gateway.prompt_modules.common import (
+    _strip_json_fence,
+    append_context_lines,
+    append_feedback_line,
+    fact_guardrail_block,
+    json_contract_block,
+    quality_bar_block,
+)
 
 AUDIO_SYSTEM_PROMPT = (
-    '你是一位中文营销配音导演。'
-    '根据给定文本与音色设定，输出适合 TTS 朗读的优化脚本及元数据。'
-    '只输出合法 JSON，不要用 markdown 代码块包裹。'
-    'optimized_text 应口语化、停顿自然、适合口播。'
+    '你是一位中文营销配音导演，负责把文案改成自然、清楚、适合 TTS 或真人口播的脚本。'
+    'optimized_text 应口语化、停顿自然、句子短，保留原文核心事实和品牌承诺。'
+    f'{fact_guardrail_block()}'
 )
 
 AUDIO_JSON_SCHEMA_HINT = """{
@@ -29,19 +35,24 @@ def build_audio_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     except (TypeError, ValueError):
         speed = 1.0
     feedback = str(payload.get('feedback') or '').strip()
-    workflow_context = payload.get('workflow_context')
+
+    quality_bar = quality_bar_block((
+        '去掉不适合朗读的书面堆叠和过长句。',
+        '通过标点和 pause_markers 表达自然停顿，但不要插入 SSML。',
+        'voice_direction 要包含语气、速度、重音和情绪起伏。',
+        '不得改变原文核心事实、价格、承诺和行动号召。',
+    ))
 
     user_lines = [
-        '请优化以下配音脚本：',
+        '任务：优化以下配音脚本。',
         f'- 原始文本：\n{text or "（空）"}',
         f'- 音色 ID：{voice_id}',
         f'- 语速倍率：{speed}',
-        f'- 输出 JSON 结构：\n{AUDIO_JSON_SCHEMA_HINT}',
+        f'- {quality_bar}',
+        f'- {json_contract_block(AUDIO_JSON_SCHEMA_HINT)}',
     ]
-    if workflow_context:
-        user_lines.append(f'- 品牌上下文：{workflow_context}')
-    if feedback:
-        user_lines.append(f'- 修改意见：{feedback}')
+    append_context_lines(user_lines, payload, label='品牌上下文')
+    append_feedback_line(user_lines, feedback)
 
     return [
         {'role': 'system', 'content': AUDIO_SYSTEM_PROMPT},

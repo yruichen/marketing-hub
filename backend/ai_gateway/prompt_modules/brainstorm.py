@@ -4,10 +4,10 @@ import json
 import re
 from typing import Any
 
-from ai_gateway.prompt_modules.common import _strip_json_fence
+from ai_gateway.prompt_modules.common import _strip_json_fence, compact_text, fact_guardrail_block, json_contract_block, quality_bar_block
 
 BRAINSTORM_SYSTEM_PROMPT = (
-    '你是营销工作流架构师 AI。'
+    '你是营销工作流架构师 AI，负责把模糊创意拆成可执行的多节点内容生产流程。'
     '根据用户的创意需求，设计由 AI 处理节点组成的有向无环图（DAG）工作流。'
     '从需求中推断 brand_context（品牌名、受众、语气、卖点、视觉风格、活动目标）。'
     '根据需求选择合适的节点类型：\n'
@@ -25,7 +25,7 @@ BRAINSTORM_SYSTEM_PROMPT = (
     'cinematic_film, illustration_hand, corporate_b2b, cyber_neon。'
     '节点水平间距约 300px（x 从 80 起，y 约 120），width=260，height=166。'
     '边必须构成有效 DAG，无环。'
-    '只输出合法 JSON，不要用 markdown 代码块包裹。'
+    f'{fact_guardrail_block()}'
 )
 
 BRAINSTORM_JSON_SCHEMA_HINT = """{
@@ -88,15 +88,23 @@ def build_brainstorm_messages(idea: str, brand_context_hint: dict[str, Any]) -> 
         config_hint = _BRAINSTORM_NODE_CONFIG_HINTS.get(node_type, 'config (object)')
         io_lines.append(f'  - {node_type}: inputs=[{inputs}] outputs=[{outputs}] {config_hint}')
 
+    quality_bar = quality_bar_block((
+        '工作流必须能直接运行，节点 config 要填入足够任务信息，不能只放空节点。',
+        '至少包含 context 起点；需要发布内容时优先包含 copy；需要视觉时使用 image_prompt -> image_generation 或 image。',
+        '高风险或对外发布内容应加入 review 节点。',
+        '节点之间的数据流要合理：上游 brief/copy/storyboard/image_prompt 应连接到下游生成节点。',
+        '节点数量保持克制，默认 3-7 个，除非用户需求明显复杂。',
+    ))
     system_parts = [
         BRAINSTORM_SYSTEM_PROMPT,
         f'\nAvailable node types and their IO schemas:\n' + '\n'.join(io_lines),
-        f'\nRequired JSON output schema:\n{BRAINSTORM_JSON_SCHEMA_HINT}',
+        f'\n{quality_bar}',
+        f'\n{json_contract_block(BRAINSTORM_JSON_SCHEMA_HINT)}',
     ]
 
     user_lines = [
         'Generate a marketing workflow for the following idea:',
-        idea,
+        compact_text(idea, max_chars=3000),
     ]
     if brand_context_hint:
         user_lines.append(

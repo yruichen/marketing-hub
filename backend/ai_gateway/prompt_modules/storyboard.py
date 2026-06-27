@@ -4,13 +4,20 @@ import json
 import re
 from typing import Any
 
-from ai_gateway.prompt_modules.common import _strip_json_fence
+from ai_gateway.prompt_modules.common import (
+    _strip_json_fence,
+    append_context_lines,
+    append_feedback_line,
+    fact_guardrail_block,
+    json_contract_block,
+    platform_strategy,
+    quality_bar_block,
+)
 
 STORYBOARD_SYSTEM_PROMPT = (
-    '你是一位专精短视频营销的导演与分镜策划。'
-    '按场景输出视觉描述与旁白脚本，适配抖音/小红书等竖屏传播节奏。'
-    '只输出合法 JSON，不要用 markdown 代码块包裹。'
-    'visual_description 用中文描述镜头；audio_narration 为可念读的口播文案。'
+    '你是一位短视频营销导演与分镜策划，擅长把品牌卖点转成可拍摄、可配音、可剪辑的镜头脚本。'
+    'visual_description 用中文描述具体镜头动作、主体、景别、运镜、光线和情绪；audio_narration 必须是可直接朗读的中文口播。'
+    f'{fact_guardrail_block()}'
 )
 
 STORYBOARD_JSON_SCHEMA_HINT = """{
@@ -33,24 +40,29 @@ def build_storyboard_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
     duration = int(payload.get('duration') or payload.get('total_duration_seconds') or 30)
     target_audience = str(payload.get('target_audience') or 'General audience').strip()
     feedback = str(payload.get('feedback') or '').strip()
-    workflow_context = payload.get('workflow_context')
     platform = str(payload.get('platform') or '').strip()
 
+    quality_bar = quality_bar_block((
+        '第 1 个场景必须在前 3 秒给出注意力钩子，不能慢热。',
+        '每个场景必须有具体可拍摄动作，不要只写抽象情绪或营销概念。',
+        '旁白要口语化、短句、可念读，并与画面动作同步。',
+        '场景之间要有问题、转折、证明、行动承接的逻辑推进。',
+        f'各场景 duration_seconds 之和必须等于 {duration} 秒。',
+    ))
+
     user_lines = [
-        '请根据以下输入生成分镜脚本：',
+        '任务：根据以下输入生成短视频分镜脚本。',
         f'- 视频主题：{video_topic}',
         f'- 目标总时长：{duration} 秒',
         f'- 目标受众：{target_audience}',
         '- 场景数量：3 到 6 个，逻辑连贯。',
-        f'- 各场景 duration_seconds 之和必须等于 {duration} 秒。',
-        f'- 输出 JSON 结构：\n{STORYBOARD_JSON_SCHEMA_HINT}',
+        f'- {quality_bar}',
+        f'- {json_contract_block(STORYBOARD_JSON_SCHEMA_HINT)}',
     ]
     if platform:
-        user_lines.insert(5, f'- 发布平台：{platform}（请适配该平台的内容节奏与镜头风格）')
-    if workflow_context:
-        user_lines.append(f'- 工作流/品牌上下文：{workflow_context}')
-    if feedback:
-        user_lines.append(f'- 修改意见（必须严格执行）：{feedback}')
+        user_lines.insert(5, f'- 发布平台：{platform}；{platform_strategy(platform)}')
+    append_context_lines(user_lines, payload)
+    append_feedback_line(user_lines, feedback)
 
     return [
         {'role': 'system', 'content': STORYBOARD_SYSTEM_PROMPT},

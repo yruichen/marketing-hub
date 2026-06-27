@@ -9,6 +9,7 @@ from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_s
 from api.models import GenerationTask, WorkflowRun
 from api.permissions import organization_for_user
 from api.access import get_task_for_member, require_role
+from api.legal import require_current_policy_consent
 from api.throttles import GenerationBurstThrottle, OrgRateThrottle
 from api.scope import as_bool, get_scope
 from ai_gateway.content_package import generate_content_package
@@ -73,6 +74,9 @@ class ContentPackageView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -94,6 +98,9 @@ class MarketingCopyView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -148,6 +155,9 @@ class ImageGenerateView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -182,6 +192,9 @@ class StoryboardView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -224,6 +237,9 @@ class AudioVoiceoverView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -266,6 +282,9 @@ class VideoGenerateView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -313,6 +332,9 @@ class TaskQueueView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -346,6 +368,9 @@ class TaskDetailView(APIView):
     def post(self, request, pk: int):
         task = get_task_for_member(request.user, pk)
         require_role(request.user, task.organization, 'creator')
+        policy_block = require_current_policy_consent(request.user)
+        if policy_block:
+            return policy_block
         org = task.organization
         replay, idempotency = idempotency_response(request, org)
         if replay:
@@ -367,6 +392,9 @@ class WorkflowRunView(APIView):
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         require_role(request.user, draft.organization, 'creator')
+        policy_block = require_current_policy_consent(request.user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay
@@ -434,6 +462,9 @@ class WorkflowNodeRetryView(APIView):
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         require_role(request.user, draft.organization, 'creator')
+        policy_block = require_current_policy_consent(request.user)
+        if policy_block:
+            return policy_block
         replay, idempotency = idempotency_response(request, draft.organization)
         if replay:
             return replay
@@ -464,6 +495,9 @@ class BrainstormView(APIView):
 
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         request_username = user.username
         replay, idempotency = idempotency_response(request, org)
         if replay:

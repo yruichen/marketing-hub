@@ -182,6 +182,10 @@ export function ImagePanel({
             </div>
           </div>
 
+          <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
+            AI 生成初稿，发布前需人工审核
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
             <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)] p-2 relative flex justify-center items-center overflow-hidden min-h-[220px]">
               {isRunning ? (

@@ -24,7 +24,7 @@ export async function ensureCsrfToken() {
   if (cachedCsrfToken) {
     return cachedCsrfToken;
   }
-  const response = await fetch(`${API_BASE_URL}/ai/config/`, {
+  const response = await fetch(`${API_BASE_URL}/auth/csrf/`, {
     credentials: 'include',
   });
   captureCsrfToken(response);
@@ -60,6 +60,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     credentials: 'include',
   });
   captureCsrfToken(response);
+  const authProbePaths = ['/auth/login/', '/admin-auth/login/', '/auth/register/', '/auth/csrf/', '/auth/me/'];
+  if (response.status === 401 && !authProbePaths.some((authPath) => path.startsWith(authPath))) {
+    localStorage.removeItem('mh_token');
+    localStorage.removeItem('mh_username');
+    window.dispatchEvent(new CustomEvent('mh:auth-expired'));
+  }
   return response;
 }
 

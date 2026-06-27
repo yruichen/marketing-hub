@@ -9,6 +9,7 @@ import urllib.request
 from typing import Any
 
 from api.models import AIConfiguration
+from api.redaction import redact_text
 from ai_gateway.gateway_modules.constants import (
     AGNES_DEFAULT_BASE_URL,
     AGNES_DEFAULT_IMAGE_MODEL,
@@ -195,7 +196,7 @@ class ChatCompletionsAdapter(ProviderAdapter):
         req = urllib.request.Request(
             self._chat_completions_url(),
             data=json.dumps(request_payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {self._config.api_key}'},
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {self._config.get_api_key()}'},
             method='POST',
         )
         with urllib.request.urlopen(req, timeout=self.request_timeout) as response:
@@ -271,14 +272,14 @@ class AgnesImageAdapter(ProviderAdapter):
         req = urllib.request.Request(
             self._images_generations_url(),
             data=json.dumps(request_payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {self._config.api_key}'},
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {self._config.get_api_key()}'},
             method='POST',
         )
         try:
             with urllib.request.urlopen(req, timeout=self.request_timeout) as response:
                 body = json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode('utf-8', errors='replace')
+            detail = redact_text(exc.read().decode('utf-8', errors='replace'))
             raise RetryableGatewayError(f'Agnes image API error {exc.code}: {detail}') from exc
 
         data = body.get('data') or []
@@ -319,7 +320,7 @@ class AgnesVideoAdapter(ProviderAdapter):
     def _auth_headers(self) -> dict[str, str]:
         return {
             'Content-Type': 'application/json',
-            'Authorization': f'Bearer {self._config.api_key}',
+            'Authorization': f'Bearer {self._config.get_api_key()}',
         }
 
     def _ssl_context(self) -> ssl.SSLContext:
@@ -347,7 +348,7 @@ class AgnesVideoAdapter(ProviderAdapter):
                     raise RetryableGatewayError('Agnes video API returned non-object JSON')
                 return body
             except urllib.error.HTTPError as exc:
-                detail = exc.read().decode('utf-8', errors='replace')
+                detail = redact_text(exc.read().decode('utf-8', errors='replace'))
                 if exc.code in {429, 503} and attempt + 1 < self.max_request_retries:
                     time.sleep(min(2 ** attempt, 8))
                     continue
@@ -475,9 +476,10 @@ class GeminiAdapter(ProviderAdapter):
         messages: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         model = model_name or 'gemini-2.0-flash'
-        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self._config.api_key}'
+        api_key = self._config.get_api_key()
+        url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
         if self._config.base_url:
-            url = f'{self._config.base_url.rstrip("/")}/v1beta/models/{model}:generateContent?key={self._config.api_key}'
+            url = f'{self._config.base_url.rstrip("/")}/v1beta/models/{model}:generateContent?key={api_key}'
         request_payload = {'contents': [{'parts': [{'text': prompt}]}], 'generationConfig': {'responseMimeType': 'application/json'}}
         req = urllib.request.Request(
             url,
@@ -518,7 +520,7 @@ class AnthropicAdapter(ProviderAdapter):
             data=json.dumps(request_payload).encode('utf-8'),
             headers={
                 'Content-Type': 'application/json',
-                'x-api-key': self._config.api_key,
+                'x-api-key': self._config.get_api_key(),
                 'anthropic-version': '2023-06-01',
             },
             method='POST',

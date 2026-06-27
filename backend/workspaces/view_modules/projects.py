@@ -103,7 +103,7 @@ class FolderDetailView(APIView):
         require_role(request.user, folder.organization, 'creator')
         user = request.user
         record_audit_log(
-            action='delete',
+            action='folder_delete',
             actor=user,
             organization=folder.organization,
             target_type='folder',
@@ -229,7 +229,7 @@ class ProjectDetailView(APIView):
         require_role(request.user, project.organization, 'creator')
         user = request.user
         record_audit_log(
-            action='delete',
+            action='project_delete',
             actor=user,
             organization=project.organization,
             target_type='project',

@@ -185,6 +185,9 @@ export function CopyPanel({
           </div>
 
           <div className="space-y-5">
+            <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
+              AI 生成初稿，发布前需人工审核
+            </div>
             <div className="bg-[var(--editorial-bg)]/40 p-4 border border-[var(--editorial-stroke)]/40 rounded-none">
               <h4 className="serif-header font-bold text-base leading-snug text-[var(--editorial-text)]">{copyOutput.title}</h4>
             </div>

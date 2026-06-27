@@ -18,7 +18,7 @@ import {
   UserCircle,
   XCircle,
 } from 'lucide-react';
-import { apiFetch } from './hooks/useApi';
+import { apiFetch, ensureCsrfToken } from './hooks/useApi';
 import { pathForSection, sectionFromPath } from './app/routes';
 import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
@@ -74,6 +74,15 @@ type AuthMeResponse = {
   project?: string;
   campaign?: number;
   role?: string;
+  policy_consents?: {
+    requires_consent: boolean;
+    missing?: Array<{
+      policy_type: string;
+      version: string;
+      title: string;
+      content_url: string;
+    }>;
+  };
 };
 
 type TopbarNotification = {
@@ -135,6 +144,81 @@ function profileUsernameFromPath(pathname: string) {
   }
 }
 
+const LEGAL_COPY: Record<string, { title: string; body: string[] }> = {
+  terms: {
+    title: '服务条款（Beta）',
+    body: [
+      '这是 Marketing Hub beta 阶段的服务条款占位页，用于测试版本追踪和用户同意流程。',
+      '正式上线前，服务范围、账户责任、可接受使用、AI 输出责任、暂停/终止、免责声明和争议处理条款必须由法务复核后替换。',
+      '当前产品中的 AI 生成内容均为初稿，发布前需要用户自行进行真实性、合法性、广告合规和知识产权审核。',
+    ],
+  },
+  privacy: {
+    title: '隐私政策（Beta）',
+    body: [
+      '这是 Marketing Hub beta 阶段的隐私政策占位页，用于测试个人信息告知、版本追踪和同意记录。',
+      '正式上线前，需要补齐运营主体、联系方式、数据类型、处理目的、保存期限、第三方共享、跨境数据和用户权利流程。',
+      '平台会处理账号信息、组织成员信息、项目/品牌上下文、生成输入输出、素材、AI provider 调用记录、审计日志和额度记录。',
+    ],
+  },
+  'ai-usage': {
+    title: 'AI 生成内容使用规则（Beta）',
+    body: [
+      'AI 输出仅作为营销内容初稿，不构成平台对广告真实性、合规性、版权或商业效果的担保。',
+      '用户公开发布前必须进行人工审核，高风险行业内容应经过专业人士复核。',
+    ],
+  },
+  community: {
+    title: '社区发布规则（Beta）',
+    body: [
+      '社区内容不得包含违法、侵权、虚假广告、未授权素材、个人敏感信息或规避审核的内容。',
+      '被举报内容可被临时隐藏、下架并进入复核流程。',
+    ],
+  },
+  'asset-rights': {
+    title: '素材上传授权声明（Beta）',
+    body: [
+      '上传素材前，用户必须确认其拥有权利或已取得在工作区内使用、编辑、生成和发布所需授权。',
+      '未经授权的商标、肖像、字体、音乐、图片和视频素材不得用于公开模板或社区内容。',
+    ],
+  },
+  billing: {
+    title: '订阅、额度、退款和发票规则（Beta）',
+    body: [
+      '正式收费前必须明确价格、额度消耗、超额策略、退款、取消、发票和税务说明。',
+      '当前 beta 文本仅用于产品流程验证，不作为正式商业收费条款。',
+    ],
+  },
+  byok: {
+    title: 'BYOK 数据处理和密钥安全说明（Beta）',
+    body: [
+      '用户配置自有模型 key 时，应确认其遵守第三方 provider 的服务条款和数据处理规则。',
+      '平台应加密存储 key，不在日志和响应中输出明文 key，并支持删除和轮换。',
+    ],
+  },
+};
+
+function LegalPage({ slug, onBack }: { slug: string; onBack: () => void }) {
+  const doc = LEGAL_COPY[slug] || LEGAL_COPY.terms;
+  return (
+    <main className="min-h-screen bg-[var(--surface-canvas)] px-4 py-8 text-[var(--editorial-text)]">
+      <section className="mx-auto max-w-3xl border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-6 shadow-[8px_8px_0_var(--editorial-stroke)]">
+        <span className="font-mono text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">Marketing Hub Legal</span>
+        <h1 className="serif-header mt-3 text-3xl font-black">{doc.title}</h1>
+        <div className="mt-5 grid gap-4 text-sm font-semibold leading-7 text-[var(--editorial-text-muted)]">
+          {doc.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+        </div>
+        <div className="mt-6 border-t border-dashed border-[var(--editorial-stroke)] pt-4 text-xs font-bold text-[var(--danger-accent)]">
+          Beta 占位文本，不构成正式法律意见；公开上线前必须由律师复核替换。
+        </div>
+        <button type="button" onClick={onBack} className="mt-5 border border-[var(--editorial-stroke)] bg-[var(--editorial-stroke)] px-4 py-2 font-mono text-xs font-black text-[var(--editorial-bg)]">
+          返回
+        </button>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -151,7 +235,8 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
-  const [token, setToken] = useState<string | null>(localStorage.getItem('mh_token'));
+  const [token, setToken] = useState<string | null>(null);
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>('checking');
   const mainRef = useRef<HTMLElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const notificationPanelRef = useRef<HTMLDivElement>(null);
@@ -170,6 +255,8 @@ export default function App() {
   const routeSection = sectionFromPath(location.pathname);
   const routeProfileUsername = profileUsernameFromPath(location.pathname);
   const isAdminLoginRoute = location.pathname.startsWith('/admin-login');
+  const isLegalRoute = location.pathname.startsWith('/legal/');
+  const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
   const activeTab = routeSynced ? activeSection : routeSection;
   const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !sidebarCollapsed;
   const rightPanelAvailable = activeTab !== 'builder';
@@ -283,8 +370,8 @@ export default function App() {
         detail: '部分生成、任务状态和通知可能延迟刷新。',
         actionLabel: '重新检查',
         onAction: () => {
-          void apiFetch('/ai/config/')
-            .then((res) => setApiLive(res.ok))
+          void ensureCsrfToken()
+            .then(() => setApiLive(true))
             .catch(() => setApiLive(false));
         },
       });
@@ -344,6 +431,7 @@ export default function App() {
       setToken(null);
       setUsername(null);
       setAuthUser(null);
+      setAuthStatus('anonymous');
       return null;
     }
     localStorage.setItem('mh_token', 'session');
@@ -351,16 +439,27 @@ export default function App() {
     setToken('session');
     setUsername(data.username);
     setAuthUser(data);
+    setAuthStatus('authenticated');
     return data;
   }, []);
 
   useEffect(() => {
-    if (!token) return;
     const timer = window.setTimeout(() => {
       void refreshAuthUser();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshAuthUser, token]);
+  }, [refreshAuthUser]);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setToken(null);
+      setUsername(null);
+      setAuthUser(null);
+      setAuthStatus('anonymous');
+    };
+    window.addEventListener('mh:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('mh:auth-expired', handleAuthExpired);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -458,6 +557,24 @@ export default function App() {
       triggerToast('已复制到剪贴板', 'success');
     }
   }, [triggerToast]);
+
+  const acceptCurrentPolicies = useCallback(async () => {
+    try {
+      const response = await apiFetch('/legal/consents/', {
+        method: 'POST',
+        body: JSON.stringify({ policy_types: ['terms', 'privacy'], source: 'app_policy_banner' }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        triggerToast(data.error || '条款同意记录失败', 'error');
+        return;
+      }
+      await refreshAuthUser();
+      triggerToast('已记录当前服务条款和隐私政策同意', 'success');
+    } catch {
+      triggerToast('条款同意记录失败', 'error');
+    }
+  }, [refreshAuthUser, triggerToast]);
 
   const completeOnboarding = useCallback(async () => {
     if (onboardingSubmitting) return;
@@ -594,6 +711,7 @@ export default function App() {
         const sessionMarker = data.auth_type === 'session' ? 'session' : (data.token || 'session');
         localStorage.setItem('mh_token', sessionMarker);
         setToken(sessionMarker);
+        setAuthStatus('checking');
         const me = await refreshAuthUser();
         const nextUsername = me?.username || data.username;
         localStorage.setItem('mh_username', nextUsername);
@@ -630,6 +748,7 @@ export default function App() {
       localStorage.setItem('mh_username', data.username);
       setToken('session');
       setUsername(data.username);
+      setAuthStatus('checking');
       const me = await refreshAuthUser();
       setAuthUser(me);
       navigate('/admin-console', { replace: true });
@@ -648,6 +767,7 @@ export default function App() {
     setToken(null);
     setUsername(null);
     setAuthUser(null);
+    setAuthStatus('anonymous');
     triggerToast('已成功退出登录', 'info');
   };
 
@@ -736,13 +856,21 @@ export default function App() {
           content,
           image_url: imageUrl,
           audio_url: audioUrl,
+          visibility: 'public',
+          responsibility_confirmed: true,
+          ai_generated: true,
         }),
       });
       if (res.ok) {
         triggerToast('已成功分享到手绘工坊社区！', 'success');
         await fetchDashboard();
       } else {
-        triggerToast('作品分享失败', 'error');
+        const data = await res.json().catch(() => ({}));
+        if (data.requires_consent) {
+          triggerToast('请先同意当前服务条款和隐私政策，再发布社区内容。', 'error');
+        } else {
+          triggerToast(data.error || '作品分享失败', 'error');
+        }
       }
     } catch {
       triggerToast('分享失败，无法连接服务器', 'error');
@@ -825,10 +953,8 @@ export default function App() {
     const timer = window.setTimeout(() => {
       fetchWorkspaceBootstrap();
       fetchDashboard();
-      apiFetch('/ai/config/')
-        .then((res) => {
-          if (res.ok) setApiLive(true);
-        })
+      ensureCsrfToken()
+        .then(() => setApiLive(true))
         .catch(() => setApiLive(false));
 
       apiFetch(`/billing/plans/?username=${username || DEMO_USERNAME}`)
@@ -870,8 +996,20 @@ export default function App() {
     };
   }, [notificationOpen]);
 
+  if (isLegalRoute) {
+    return <LegalPage slug={legalSlug} onBack={() => navigate(-1)} />;
+  }
+
   // Auth Guard Portal
-  if (!token) {
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[var(--surface-canvas)] font-mono text-xs font-black text-[var(--editorial-text-gray)]">
+        正在确认会话...
+      </div>
+    );
+  }
+
+  if (authStatus === 'anonymous' || !token) {
     if (isAdminLoginRoute) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-[var(--surface-canvas)] p-4 text-[var(--editorial-text)]">
@@ -976,6 +1114,17 @@ export default function App() {
           <span>{feedbackMsg.text}</span>
         </div>
       )}
+
+      {authUser.policy_consents?.requires_consent ? (
+        <div className="fixed left-1/2 top-4 z-[70] flex w-[min(720px,calc(100vw-24px))] -translate-x-1/2 items-center justify-between gap-3 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-4 py-3 shadow-[6px_6px_0_var(--editorial-stroke)] font-mono text-xs">
+          <span className="font-bold text-[var(--editorial-text)]">
+            当前服务条款或隐私政策已更新，继续生成、上传或发布前需要确认。
+          </span>
+          <button type="button" onClick={acceptCurrentPolicies} className="shrink-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-stroke)] px-3 py-1.5 font-black text-[var(--editorial-bg)]">
+            同意并继续
+          </button>
+        </div>
+      ) : null}
 
       {showOnboarding && (
         <OnboardingModal

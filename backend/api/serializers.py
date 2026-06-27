@@ -8,6 +8,7 @@ from api.models import (
     Asset,
     Campaign,
     CommunityCreation,
+    ContentReport,
     Folder,
     GenerationTask,
     IdempotencyKey,
@@ -324,11 +325,11 @@ class AIConfigurationSerializer(serializers.ModelSerializer):
         )
 
     def get_api_key_masked(self, obj: AIConfiguration):
-        if not obj.api_key:
+        if not obj.has_api_key():
             return ''
-        if len(obj.api_key) <= 8:
+        if not obj.api_key_last4:
             return '****'
-        return f'{obj.api_key[:4]}...{obj.api_key[-4:]}'
+        return f'****...{obj.api_key_last4}'
 
     def get_organization_slug(self, obj: AIConfiguration):
         return obj.organization.slug if obj.organization_id else None
@@ -356,6 +357,16 @@ class CommunityCreationSerializer(serializers.ModelSerializer):
             'tags',
             'rag_indexed',
             'visibility',
+            'metadata',
+            'ai_generated',
+            'source_asset_id',
+            'source_task_id',
+            'review_status',
+            'reported_count',
+            'moderation_status',
+            'takedown_reason',
+            'takedown_at',
+            'published_at',
             'created_at',
             'organization',
             'project',
@@ -370,6 +381,28 @@ class CommunityCreationSerializer(serializers.ModelSerializer):
 
     def get_project(self, obj: CommunityCreation):
         return obj.project.slug if obj.project_id else None
+
+
+class ContentReportSerializer(serializers.ModelSerializer):
+    reporter_username = serializers.CharField(source='reporter.username', read_only=True)
+    handled_by_username = serializers.CharField(source='handled_by.username', read_only=True)
+
+    class Meta:
+        model = ContentReport
+        fields = (
+            'id',
+            'organization_id',
+            'target_type',
+            'target_id',
+            'reporter_username',
+            'reason',
+            'description',
+            'status',
+            'handled_by_username',
+            'handled_at',
+            'resolution_note',
+            'created_at',
+        )
 
 
 class UsageEventSerializer(serializers.ModelSerializer):
@@ -391,6 +424,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
             'organization_slug',
             'target_type',
             'target_id',
+            'request_id',
             'ip_address',
             'user_agent',
             'metadata',

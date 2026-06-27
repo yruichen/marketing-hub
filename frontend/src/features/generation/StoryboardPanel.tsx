@@ -169,6 +169,10 @@ export function StoryboardPanel({
             </button>
           </div>
 
+          <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
+            AI 生成初稿，发布前需人工审核
+          </div>
+
           <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
             {isRunning ? (
               <div className="w-full h-32 editorial-loader-bar flex flex-col items-center justify-center">

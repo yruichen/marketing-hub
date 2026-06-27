@@ -26,7 +26,7 @@ class PromptAsset:
 PROMPT_ASSETS: dict[str, PromptAsset] = {
     'marketing.copy.system': PromptAsset(
         key='marketing.copy.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='system_prompt',
         owner='content-generation',
         task_type='copy',
@@ -37,6 +37,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
             '首句必须承担明确钩子或场景进入',
             '正文必须围绕用户场景、差异化卖点和行动转化组织',
             '标签必须符合目标平台习惯，不输出空泛标签',
+            '必须遵守事实边界，不编造未提供的资质、价格、销量或疗效',
             '不得编造品牌资质、疗效、价格、销量等未提供事实',
         ),
         risk='medium',
@@ -44,7 +45,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.storyboard.system': PromptAsset(
         key='marketing.storyboard.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='system_prompt',
         owner='content-generation',
         task_type='storyboard',
@@ -55,6 +56,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
             '每个镜头必须包含画面动作和可念读旁白',
             '总时长必须与各场景时长一致',
             '开头 3 秒必须给出明确注意力钩子',
+            '镜头描述必须具体可拍摄，不能只写抽象概念',
             '结尾必须包含品牌或行动承接',
         ),
         risk='medium',
@@ -62,7 +64,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.image.system': PromptAsset(
         key='marketing.image.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='generation_prompt',
         owner='content-generation',
         task_type='image',
@@ -72,6 +74,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '主体、场景、光线、构图和限制项必须明确',
             '必须遵守画幅比例和平台使用场景',
+            '必须保留品牌上下文并避免随机文字、商标和水印',
             '避免文字水印、畸形肢体、低质构图等常见生成缺陷',
         ),
         risk='medium',
@@ -79,7 +82,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.image_prompt.system': PromptAsset(
         key='marketing.image_prompt.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='system_prompt',
         owner='content-generation',
         task_type='image_prompt',
@@ -89,6 +92,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '英文 prompt 必须对主体、环境、镜头、光线、风格和质量约束有清晰描述',
             '中文摘要必须便于运营理解画面意图',
+            '构图说明必须解释画幅、主体位置和社媒裁切',
             '负面词必须包含用户显式排除项',
         ),
         risk='medium',
@@ -96,7 +100,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.review.system': PromptAsset(
         key='marketing.review.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='system_prompt',
         owner='content-generation',
         task_type='review',
@@ -106,6 +110,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '问题必须定位到具体片段或规则',
             '建议必须可执行，不能只说“优化一下”',
+            '未提供明确平台规则时只能输出风险提示，不能当成确定违规',
             '不得把未配置的平台规则当成确定事实',
         ),
         risk='high',
@@ -113,7 +118,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.audio.system': PromptAsset(
         key='marketing.audio.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='system_prompt',
         owner='content-generation',
         task_type='audio',
@@ -123,6 +128,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '脚本必须自然可念读，避免书面腔和长句堆叠',
             '声音指导必须包含语气、速度和停顿建议',
+            '必须通过停顿说明改善 TTS 可读性',
             '不得改变原文核心事实和品牌承诺',
         ),
         risk='low',
@@ -130,7 +136,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.video.system': PromptAsset(
         key='marketing.video.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='generation_prompt',
         owner='content-generation',
         task_type='video',
@@ -140,6 +146,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '必须把分镜动作转成连续可执行的视频描述',
             '必须保留画幅、时长、参考图和音频限制',
+            '必须强调主体连续性、社媒裁切和广告级构图',
             '避免文字叠加、水印和不可控品牌标识',
         ),
         risk='medium',
@@ -147,7 +154,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.custom_agent.system': PromptAsset(
         key='marketing.custom_agent.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='workflow_skill',
         owner='workflow',
         task_type='custom_agent',
@@ -157,6 +164,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '必须严格遵循用户自定义任务边界',
             '必须使用上游节点信息，不能忽略工作流上下文',
+            '任务要求与事实或合规冲突时必须给出替代方案',
             '输出必须保持 JSON 可解析',
         ),
         risk='high',
@@ -164,7 +172,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
     ),
     'marketing.brainstorm.system': PromptAsset(
         key='marketing.brainstorm.system',
-        version='2026-06-25.v1',
+        version='2026-06-27.v2',
         kind='workflow_skill',
         owner='workflow',
         task_type='brainstorm',
@@ -174,6 +182,7 @@ PROMPT_ASSETS: dict[str, PromptAsset] = {
         quality_bar=(
             '必须生成无环 DAG，节点类型必须来自系统支持列表',
             '必须推断品牌上下文并写入节点配置',
+            '节点配置必须足够运行，发布链路默认包含审核节点',
             '坐标只作为参考，最终布局由系统 layout helper 处理',
         ),
         risk='high',
