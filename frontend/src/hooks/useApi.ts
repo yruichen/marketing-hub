@@ -61,7 +61,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   });
   captureCsrfToken(response);
   const authProbePaths = ['/auth/login/', '/admin-auth/login/', '/auth/register/', '/auth/csrf/', '/auth/me/'];
-  if ([401, 403].includes(response.status) && !authProbePaths.some((authPath) => path.startsWith(authPath))) {
+  if (response.status === 401 && !authProbePaths.some((authPath) => path.startsWith(authPath))) {
     localStorage.removeItem('mh_token');
     localStorage.removeItem('mh_username');
     window.dispatchEvent(new CustomEvent('mh:auth-expired'));

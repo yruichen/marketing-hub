@@ -52,6 +52,26 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
     }
   }, [triggerToast, onLikeUpdate]);
 
+  const handleReport = useCallback(async (id: number) => {
+    try {
+      const res = await apiFetch(`/community/creations/${id}/report/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'other', description: 'User submitted report from community card.' }),
+      });
+      if (res.ok) {
+        setCommunityItems((prev) => prev.map((item) => (
+          item.id === id ? { ...item, reported_count: (item.reported_count || 0) + 1 } : item
+        )));
+        triggerToast('举报已提交，运营会复核处理', 'success');
+      } else {
+        triggerToast('举报提交失败', 'error');
+      }
+    } catch {
+      triggerToast('举报提交失败', 'error');
+    }
+  }, [triggerToast]);
+
   const handleRAGSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) {
@@ -98,6 +118,9 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
           content,
           image_url: imageUrl,
           audio_url: audioUrl,
+          visibility: 'public',
+          responsibility_confirmed: true,
+          ai_generated: true,
         }),
       });
       if (res.ok) {
@@ -129,6 +152,7 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
     setLoading,
     fetchCommunity,
     handleLike,
+    handleReport,
     handleRAGSearch,
     shareToCommunity,
     resetSearch,

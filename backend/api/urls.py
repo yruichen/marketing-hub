@@ -15,9 +15,12 @@ from api.admin_console import (
     AdminUserDetailView,
     AdminUserListView,
 )
+from api.legal import PolicyDocumentListView, UserConsentView
 
 urlpatterns = [
     path('schema/', get_schema_view(title='Marketing Hub API', version='1.0.0'), name='openapi_schema'),
+    path('legal/policies/', PolicyDocumentListView.as_view(), name='legal_policies'),
+    path('legal/consents/', UserConsentView.as_view(), name='legal_consents'),
     path('admin-console/summary/', AdminSummaryView.as_view(), name='admin_console_summary'),
     path('admin-console/users/', AdminUserListView.as_view(), name='admin_console_users'),
     path('admin-console/users/<int:pk>/', AdminUserDetailView.as_view(), name='admin_console_user_detail'),

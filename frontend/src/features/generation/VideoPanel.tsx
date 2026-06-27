@@ -203,6 +203,10 @@ export function VideoPanel({
             )}
           </div>
 
+          <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
+            AI 生成初稿，发布前需人工审核
+          </div>
+
           {videoOutput.is_demo_fallback && (
             <div className="border border-amber-500/60 bg-amber-50/80 text-amber-900 p-3 text-[10px] font-mono leading-relaxed">
               当前为演示视频（Agnes API 未成功返回）。请检查 AI 设置后重试。

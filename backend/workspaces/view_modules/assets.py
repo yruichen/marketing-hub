@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from api.access import get_asset_for_member, require_role
 from api.audit import record_audit_log
 from api.contracts import PLAN_LIMITS
+from api.legal import require_current_policy_consent
 from api.models import (
     Asset,
     Campaign,
@@ -132,6 +133,9 @@ class WorkspaceAssetsView(APIView):
     def post(self, request):
         user, org, _, _ = get_scope(request)
         require_role(user, org, 'creator')
+        policy_block = require_current_policy_consent(user)
+        if policy_block:
+            return policy_block
         data = request.data or {}
 
         title = (data.get('title') or '').strip()
@@ -153,9 +157,17 @@ class WorkspaceAssetsView(APIView):
         metadata = data.get('metadata') or {}
         if not isinstance(metadata, dict):
             metadata = {}
+        rights_confirmed = bool(data.get('rights_confirmed') or metadata.get('rights_confirmed_at'))
+        if not rights_confirmed:
+            return Response({'detail': '创建或上传素材前必须确认拥有权利或已获得授权。'}, status=status.HTTP_400_BAD_REQUEST)
 
         # 手动创建时在 metadata 留个标记，方便前端区分"工作流产出 vs 手动"
         metadata.setdefault('source', 'manual')
+        metadata.setdefault('license_status', 'user_confirmed')
+        metadata.setdefault('source_type', 'manual_upload' if source_url else 'manual_record')
+        metadata.setdefault('rights_confirmed_at', timezone.now().isoformat())
+        metadata.setdefault('rights_confirmed_by', user.id)
+        metadata.setdefault('ai_generated', False)
 
         project_id = data.get('project_id') or None
         campaign_id = data.get('campaign_id') or None

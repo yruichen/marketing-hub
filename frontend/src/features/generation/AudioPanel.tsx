@@ -169,6 +169,10 @@ export function AudioPanel({
             </button>
           </div>
 
+          <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
+            AI 生成初稿，发布前需人工审核
+          </div>
+
           <div className="bg-[var(--editorial-bg)]/20 border border-[var(--editorial-stroke)]/40 p-5 relative overflow-hidden flex flex-col gap-4 font-mono shadow-inner">
             <div className="flex justify-between items-center border-b border-[var(--editorial-stroke)]/40 pb-2 text-[9px] text-[var(--editorial-text-gray)]">
               <span>AUDIO_SYNTH_DECK: [READY]</span>

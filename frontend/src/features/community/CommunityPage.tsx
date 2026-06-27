@@ -30,6 +30,7 @@ export function CommunityPage({
     loading,
     fetchCommunity,
     handleLike,
+    handleReport,
     handleRAGSearch,
     resetSearch,
   } = useCommunity({ workspaceScope, username, triggerToast, onLikeUpdate });
@@ -98,7 +99,7 @@ export function CommunityPage({
         </section>
       ) : (
         <>
-          {featured && <FeaturedTemplate item={featured} onLike={handleLike} onOpenProfile={onOpenProfile} />}
+          {featured && <FeaturedTemplate item={featured} onLike={handleLike} onReport={handleReport} onOpenProfile={onOpenProfile} />}
 
           <section className="template-market__section-head">
             <div>
@@ -110,7 +111,7 @@ export function CommunityPage({
 
           <section className="template-market__grid">
             {rest.map((item) => (
-              <TemplateCard key={item.id} item={item} onLike={handleLike} onOpenProfile={onOpenProfile} />
+              <TemplateCard key={item.id} item={item} onLike={handleLike} onReport={handleReport} onOpenProfile={onOpenProfile} />
             ))}
           </section>
         </>
@@ -119,7 +120,7 @@ export function CommunityPage({
   );
 }
 
-function FeaturedTemplate({ item, onLike, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onOpenProfile?: (username: string) => void }) {
+function FeaturedTemplate({ item, onLike, onReport, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onReport: (id: number) => void; onOpenProfile?: (username: string) => void }) {
   return (
     <section className="template-market__featured">
       <div className="template-market__featured-visual">
@@ -133,10 +134,14 @@ function FeaturedTemplate({ item, onLike, onOpenProfile }: { item: CommunityItem
           <button type="button" onClick={() => onLike(item.id)}>
             <Heart className="h-4 w-4" /> {item.likes}
           </button>
+          <button type="button" onClick={() => onReport(item.id)}>
+            举报
+          </button>
           <button type="button" className="template-author-link" onClick={() => onOpenProfile?.(item.username)}>
             {item.username}
           </button>
           <span>{item.created_at}</span>
+          {item.ai_generated ? <span>AI 生成初稿</span> : null}
           {item.similarity_score !== undefined && <span>匹配 {Math.round(item.similarity_score * 100)}%</span>}
         </div>
       </div>
@@ -144,13 +149,14 @@ function FeaturedTemplate({ item, onLike, onOpenProfile }: { item: CommunityItem
   );
 }
 
-function TemplateCard({ item, onLike, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onOpenProfile?: (username: string) => void }) {
+function TemplateCard({ item, onLike, onReport, onOpenProfile }: { item: CommunityItem; onLike: (id: number) => void; onReport: (id: number) => void; onOpenProfile?: (username: string) => void }) {
   return (
     <article className="template-card">
       <TemplateVisual item={item} />
       <div className="template-card__body">
         <div className="template-card__meta">
           <span>{item.creation_type_display}</span>
+          {item.ai_generated ? <span>AI</span> : null}
           {item.similarity_score !== undefined && <span>{Math.round(item.similarity_score * 100)}%</span>}
         </div>
         <h4>{item.title}</h4>
@@ -162,6 +168,9 @@ function TemplateCard({ item, onLike, onOpenProfile }: { item: CommunityItem; on
         </button>
         <button type="button" onClick={() => onLike(item.id)}>
           <Heart className="h-3.5 w-3.5" /> {item.likes}
+        </button>
+        <button type="button" onClick={() => onReport(item.id)}>
+          举报{item.reported_count ? ` ${item.reported_count}` : ''}
         </button>
       </footer>
     </article>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.core.checks import Error, Tags, register
+from django.db import OperationalError, ProgrammingError
 
 
 @register(Tags.security, deploy=True)
@@ -26,5 +27,17 @@ def production_security_settings_check(app_configs, **kwargs):
         errors.append(Error('CSRF_COOKIE_SECURE must be true when DEBUG=False.', id='api.E011'))
     if not getattr(settings, 'FIELD_ENCRYPTION_KEY', ''):
         errors.append(Error('FIELD_ENCRYPTION_KEY must be set when DEBUG=False.', id='api.E012'))
+
+    try:
+        from api.models import PolicyDocument
+
+        active_types = set(
+            PolicyDocument.objects.filter(is_active=True, policy_type__in=['terms', 'privacy']).values_list('policy_type', flat=True)
+        )
+        missing_types = {'terms', 'privacy'} - active_types
+        if missing_types:
+            errors.append(Error(f'Active legal policy documents are required when DEBUG=False: {", ".join(sorted(missing_types))}.', id='api.E020'))
+    except (OperationalError, ProgrammingError):
+        errors.append(Error('PolicyDocument table is unavailable; run migrations before production deploy.', id='api.E021'))
 
     return errors

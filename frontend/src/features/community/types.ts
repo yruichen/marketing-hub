@@ -12,4 +12,8 @@ export interface CommunityItem {
   likes: number;
   created_at: string;
   similarity_score?: number;
+  ai_generated?: boolean;
+  reported_count?: number;
+  moderation_status?: string;
+  review_status?: string;
 }

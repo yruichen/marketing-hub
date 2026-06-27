@@ -1,9 +1,11 @@
 import json
+import hashlib
 from decimal import Decimal
 from typing import Any
 
 from django.contrib.auth.models import User
 from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
@@ -90,6 +92,31 @@ def persist_credit_debit(event: UsageEvent) -> CreditLedgerEntry:
     )
 
 
+def source_inputs_digest(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def generation_metadata(task: GenerationTask, result: dict[str, Any], *, provider: str = '', model_name: str = '', prompt_key: str = '') -> dict[str, Any]:
+    return {
+        'ai_generated': True,
+        'generation_task_id': task.id,
+        'task_type': task.task_type,
+        'provider': provider,
+        'model_name': model_name,
+        'prompt_key': prompt_key,
+        'prompt_version': 'v1',
+        'harness_version': 'generation-service-v1',
+        'generated_at': timezone.now().isoformat(),
+        'user_id': task.requested_by_id,
+        'organization_id': task.organization_id,
+        'project_id': task.project_id,
+        'source_inputs_digest': source_inputs_digest(task.payload),
+        'ai_disclaimer': 'AI generated draft. Human review is required before publishing.',
+        'result': result,
+    }
+
+
 def run_generation_task(task: GenerationTask) -> GenerationTask:
     task.status = 'running'
     task.save(update_fields=['status', 'updated_at'])
@@ -166,7 +193,9 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             query = payload.get('query', '').strip()
             results = []
             if query:
-                creations = CommunityCreation.objects.all()
+                creations = CommunityCreation.objects.filter(moderation_status='visible').filter(
+                    Q(visibility='public') | Q(visibility='organization', organization=task.organization)
+                )
                 for item in creations:
                     score = 0
                     haystack = f"{item.title} {item.content} {' '.join(item.tags)}"
@@ -228,7 +257,17 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
             logs = [*logs, 'gateway:warning=使用了演示数据，非真实 API 生成结果']
             if isinstance(result, dict):
                 result = {**result, 'is_demo_fallback': True}
-        asset = create_asset_from_task_result(task, result)
+        if isinstance(result, dict):
+            result = {
+                **result,
+                'ai_generated': True,
+                'provider': provider,
+                'model_name': model_name,
+                'prompt_version': 'v1',
+                'harness_version': 'generation-service-v1',
+                'source_inputs_digest': source_inputs_digest(task.payload),
+            }
+        asset = create_asset_from_task_result(task, result, provider=provider, model_name=model_name)
         if isinstance(result, dict) and asset is not None:
             result = {**result, 'asset_id': asset.id}
         task.result = {'data': result, 'logs': logs}
@@ -312,7 +351,7 @@ def create_generation_task(
     return task
 
 
-def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) -> Asset:
+def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any], *, provider: str = '', model_name: str = '') -> Asset:
     asset_type = 'document'
     source_url = ''
     title = f'{task.get_task_type_display()} #{task.id}'
@@ -351,9 +390,13 @@ def create_asset_from_task_result(task: GenerationTask, result: dict[str, Any]) 
         tags=tags,
         metadata={
             'source': 'generation',
-            'generation_task_id': task.id,
-            'task_type': task.task_type,
-            'result': result,
+            **generation_metadata(
+                task,
+                result,
+                provider=provider or str(result.get('provider') or ''),
+                model_name=model_name or str(result.get('model_name') or ''),
+                prompt_key=f'marketing.{task.task_type}.system',
+            ),
         },
     )
 

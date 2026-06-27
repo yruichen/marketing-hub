@@ -26,6 +26,7 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
   const [sourceUrl, setSourceUrl] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [format, setFormat] = useState('');
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
     setSourceUrl(initial?.source_url || '');
     setTagsText((initial?.tags || []).join(', '));
     setFormat(typeof initial?.metadata?.format === 'string' ? initial.metadata.format : '');
+    setRightsConfirmed(Boolean(initial?.metadata?.rights_confirmed_at));
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, initial]);
 
@@ -47,10 +49,13 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
     if (!title.trim()) return;
     setSubmitting(true);
     const tags = tagsText.split(',').map((s) => s.trim()).filter(Boolean);
-    const metadata: Record<string, unknown> = {};
+    const metadata: Record<string, unknown> = { ...(initial?.metadata || {}) };
     if (format.trim()) metadata.format = format.trim();
-    if (initial?.metadata?.task_type) metadata.task_type = initial.metadata.task_type;
-    if (initial?.metadata?.source) metadata.source = initial.metadata.source;
+    if (!format.trim()) delete metadata.format;
+    if (!initial && rightsConfirmed) {
+      metadata.license_status = 'user_confirmed';
+      metadata.rights_confirmed_at = new Date().toISOString();
+    }
 
     if (initial) {
       await onSave({
@@ -67,6 +72,7 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
         source_url: sourceUrl.trim(),
         tags,
         metadata,
+        rights_confirmed: rightsConfirmed,
       });
     }
     setSubmitting(false);
@@ -148,13 +154,24 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
               placeholder="如：春季, 种草, 短视频"
             />
           </label>
+          {!initial ? (
+            <label className="flex items-start gap-2 text-[11px] font-bold leading-5 text-[var(--editorial-text-muted)]">
+              <input
+                type="checkbox"
+                checked={rightsConfirmed}
+                onChange={(e) => setRightsConfirmed(e.target.checked)}
+                className="mt-1"
+              />
+              <span>我确认对该素材拥有权利或已取得上传、编辑和在工作区内使用的授权。</span>
+            </label>
+          ) : null}
         </div>
 
         <footer className="assets-form__footer">
           <button type="button" onClick={onClose} className="assets-form__btn">取消</button>
           <button
             type="submit"
-            disabled={submitting || !title.trim()}
+            disabled={submitting || !title.trim() || (!initial && !rightsConfirmed)}
             className="assets-form__btn assets-form__btn--primary"
           >
             {submitting ? '保存中…' : initial ? '保存修改' : '创建'}

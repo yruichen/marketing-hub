@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from accounts.email import EmailDeliveryError, send_transactional_email
 from api.audit import record_audit_log
+from api.legal import active_policy_documents, consent_status, record_user_consent
 from api.models import Campaign, CommunityCreation, Membership, Organization, Project, SecurityEvent, UserProfile
 from api.permissions import CanManageOrganization
 from api.scope import get_scope
@@ -374,6 +375,7 @@ class LoginView(APIView):
                 'organization': workspace['organization'].slug,
                 'project': workspace['project'].slug,
                 'campaign': workspace['campaign'].id,
+                'policy_consents': consent_status(user),
             }, status=status.HTTP_200_OK)
             response['X-CSRFToken'] = get_token(request)
             return response
@@ -430,6 +432,7 @@ class AdminLoginView(APIView):
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
             'admin_mode': True,
+            'policy_consents': consent_status(user),
         }, status=status.HTTP_200_OK)
         response['X-CSRFToken'] = get_token(request)
         return response
@@ -467,6 +470,7 @@ class AuthMeView(APIView):
                 'is_staff': user.is_staff,
                 'is_superuser': user.is_superuser,
                 'admin_mode': True,
+                'policy_consents': consent_status(user),
             }, status=status.HTTP_200_OK)
             response['X-CSRFToken'] = get_token(request)
             return response
@@ -487,6 +491,7 @@ class AuthMeView(APIView):
             'project': workspace['project'].slug,
             'campaign': workspace['campaign'].id,
             'role': membership.role if membership else '',
+            'policy_consents': consent_status(user),
         }, status=status.HTTP_200_OK)
         response['X-CSRFToken'] = get_token(request)
         return response
@@ -531,9 +536,18 @@ class RegisterView(APIView):
         username = (request.data.get('username') or '').strip()
         password = request.data.get('password') or ''
         organization_name = (request.data.get('organization_name') or '').strip()
+        accepted_terms = bool(request.data.get('accepted_terms'))
+        accepted_privacy = bool(request.data.get('accepted_privacy'))
 
         if not email or '@' not in email:
             return Response({'error': '请输入有效邮箱。'}, status=status.HTTP_400_BAD_REQUEST)
+        if not accepted_terms or not accepted_privacy:
+            return Response({'error': '注册前必须主动同意服务条款和隐私政策。'}, status=status.HTTP_400_BAD_REQUEST)
+        active_docs = active_policy_documents(('terms', 'privacy'))
+        active_doc_types = {doc.policy_type for doc in active_docs}
+        missing_doc_types = [policy_type for policy_type in ('terms', 'privacy') if policy_type not in active_doc_types]
+        if missing_doc_types:
+            return Response({'error': '法律文本尚未配置，禁止开放注册。', 'missing_policy_types': missing_doc_types}, status=status.HTTP_409_CONFLICT)
         if not username:
             username = email.split('@')[0]
         if not organization_name:
@@ -561,6 +575,8 @@ class RegisterView(APIView):
             signup_ip=_client_ip(request),
         )
         org, project, campaign = _create_default_workspace_for_user(user, organization_name)
+        for doc in active_docs:
+            record_user_consent(request, user, doc, 'registration')
         try:
             _send_verification_email(user)
         except EmailDeliveryError as exc:

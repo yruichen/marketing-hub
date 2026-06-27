@@ -91,6 +91,58 @@ class SecurityEvent(models.Model):
         return f'{self.event_type}:{self.email or self.user_id or self.ip_address}'
 
 
+class PolicyDocument(models.Model):
+    POLICY_TYPES = [
+        ('terms', 'Terms of Service'),
+        ('privacy', 'Privacy Policy'),
+        ('cookie', 'Cookie and SDK Notice'),
+        ('ai_usage', 'AI Generated Content Rules'),
+        ('community', 'Community Rules'),
+        ('asset_rights', 'Asset Upload Rights'),
+        ('billing', 'Billing and Refund Rules'),
+        ('byok', 'BYOK Data Processing'),
+    ]
+
+    policy_type = models.CharField(max_length=32, choices=POLICY_TYPES)
+    version = models.CharField(max_length=40)
+    title = models.CharField(max_length=160)
+    content_url = models.CharField(max_length=600)
+    effective_at = models.DateTimeField(default=timezone.now)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('policy_type', 'version')]
+        ordering = ['policy_type', '-effective_at']
+        indexes = [
+            models.Index(fields=['policy_type', 'is_active', '-effective_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.policy_type}:{self.version}'
+
+
+class UserConsent(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='policy_consents')
+    policy_type = models.CharField(max_length=32)
+    policy_version = models.CharField(max_length=40)
+    consented_at = models.DateTimeField(default=timezone.now)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True, default='')
+    source = models.CharField(max_length=80, blank=True, default='')
+
+    class Meta:
+        unique_together = [('user', 'policy_type', 'policy_version')]
+        ordering = ['-consented_at']
+        indexes = [
+            models.Index(fields=['user', 'policy_type', '-consented_at']),
+            models.Index(fields=['policy_type', 'policy_version']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.user_id}:{self.policy_type}:{self.policy_version}'
+
+
 class Organization(models.Model):
     PLAN_CHOICES = [
         ('free', 'Free'),
@@ -620,6 +672,9 @@ class AuditLog(models.Model):
         ('asset_delete', 'Asset Delete'),
         ('community_publish', 'Community Publish'),
         ('community_unpublish', 'Community Unpublish'),
+        ('content_report', 'Content Report'),
+        ('content_moderation', 'Content Moderation'),
+        ('policy_consent', 'Policy Consent'),
         ('billing_change', 'Billing Change'),
         ('credit_grant', 'Credit Grant'),
         ('generation_create', 'Generation Create'),
@@ -661,6 +716,19 @@ class CommunityCreation(models.Model):
         ('organization', 'Organization'),
         ('public', 'Public'),
     ]
+    REVIEW_STATUS_CHOICES = [
+        ('not_reviewed', 'Not Reviewed'),
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('flagged', 'Flagged'),
+        ('rejected', 'Rejected'),
+    ]
+    MODERATION_STATUS_CHOICES = [
+        ('visible', 'Visible'),
+        ('hidden', 'Hidden'),
+        ('removed', 'Removed'),
+        ('appealed', 'Appealed'),
+    ]
 
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='community_creations', null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
@@ -678,6 +746,15 @@ class CommunityCreation(models.Model):
     visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private')
     published_at = models.DateTimeField(null=True, blank=True)
     published_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='published_creations')
+    metadata = models.JSONField(default=dict, blank=True)
+    ai_generated = models.BooleanField(default=False)
+    source_asset = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name='community_posts')
+    source_task = models.ForeignKey(GenerationTask, null=True, blank=True, on_delete=models.SET_NULL, related_name='community_posts')
+    review_status = models.CharField(max_length=24, choices=REVIEW_STATUS_CHOICES, default='not_reviewed')
+    reported_count = models.IntegerField(default=0)
+    moderation_status = models.CharField(max_length=24, choices=MODERATION_STATUS_CHOICES, default='visible')
+    takedown_reason = models.TextField(blank=True, default='')
+    takedown_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -690,6 +767,49 @@ class CommunityCreation(models.Model):
             return json.loads(self.content)
         except Exception:
             return {}
+
+
+class ContentReport(models.Model):
+    TARGET_TYPES = [
+        ('community_creation', 'Community Creation'),
+        ('asset', 'Asset'),
+    ]
+    STATUS_CHOICES = [
+        ('open', 'Open'),
+        ('reviewing', 'Reviewing'),
+        ('resolved', 'Resolved'),
+        ('rejected', 'Rejected'),
+    ]
+    REASON_CHOICES = [
+        ('illegal', 'Illegal Content'),
+        ('infringement', 'IP Infringement'),
+        ('false_advertising', 'False Advertising'),
+        ('privacy', 'Privacy Disclosure'),
+        ('unsafe_ai', 'Unsafe AI Output'),
+        ('other', 'Other'),
+    ]
+
+    organization = models.ForeignKey(Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name='content_reports')
+    target_type = models.CharField(max_length=40, choices=TARGET_TYPES)
+    target_id = models.CharField(max_length=80)
+    reporter = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='content_reports')
+    reason = models.CharField(max_length=40, choices=REASON_CHOICES)
+    description = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default='open')
+    handled_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='handled_content_reports')
+    handled_at = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['target_type', 'target_id', 'status']),
+            models.Index(fields=['organization', 'status', '-created_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.target_type}:{self.target_id}:{self.reason}'
 
 
 # ================================================================
