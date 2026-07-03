@@ -9,11 +9,13 @@ from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_s
 from api.models import GenerationTask, WorkflowRun
 from api.permissions import organization_for_user
 from api.access import get_task_for_member, require_role
+from api.entitlements import can_use_feature, feature_denied_payload
 from api.legal import require_current_policy_consent
 from api.throttles import GenerationBurstThrottle, OrgRateThrottle
 from api.scope import as_bool, get_scope
 from ai_gateway.content_package import generate_content_package
 from api.services import (
+    ai_edit_workflow,
     brainstorm_workflow,
     create_workflow_run,
     create_generation_task,
@@ -43,6 +45,82 @@ def _image_generation_payload(data) -> dict:
         'aspect_ratio': data.get('aspect_ratio', '1:1'),
         'negative_prompt': data.get('negative_prompt', ''),
         'platform': data.get('platform', ''),
+    }
+
+
+def _as_string_list(value, *, max_items: int = 12) -> list[str]:
+    if isinstance(value, str):
+        return [line.strip() for line in value.splitlines() if line.strip()][:max_items]
+    if not isinstance(value, list):
+        return []
+    items = []
+    for item in value:
+        text = str(item or '').strip()
+        if text:
+            items.append(text)
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _video_scenes_payload(value) -> list[dict]:
+    if not isinstance(value, list):
+        return []
+    scenes = []
+    for index, item in enumerate(value[:12], start=1):
+        if not isinstance(item, dict):
+            continue
+        visual = str(item.get('visual_description') or item.get('visual') or item.get('description') or '').strip()
+        narration = str(item.get('audio_narration') or item.get('voiceover') or item.get('narration') or '').strip()
+        camera = str(item.get('camera_motion') or item.get('camera') or '').strip()
+        reference = str(item.get('reference_image_url') or item.get('image_url') or '').strip()
+        if not (visual or narration or camera or reference):
+            continue
+        scene = {
+            'scene_number': len(scenes) + 1,
+            'visual_description': visual,
+            'audio_narration': narration,
+        }
+        if camera:
+            scene['camera_motion'] = camera
+        try:
+            scene['duration_seconds'] = max(1, int(item.get('duration_seconds') or item.get('duration') or 0))
+        except (TypeError, ValueError):
+            pass
+        if reference:
+            scene['reference_image_url'] = reference
+        scenes.append(scene)
+    return scenes
+
+
+def _video_generation_payload(data) -> dict:
+    try:
+        duration = int(data.get('duration') or data.get('duration_seconds') or 30)
+    except (TypeError, ValueError):
+        duration = 30
+    reference_images = _as_string_list(data.get('reference_images'), max_items=8)
+    image_url = str(data.get('image_url') or data.get('image') or data.get('reference_image') or '').strip()
+    if image_url and image_url not in reference_images:
+        reference_images.insert(0, image_url)
+    return {
+        'video_topic': data.get('video_topic') or data.get('topic') or 'Product launch video',
+        'prompt': data.get('prompt', ''),
+        'script': data.get('script', ''),
+        'creative_mode': data.get('creative_mode', 'single_shot'),
+        'target_audience': data.get('target_audience', ''),
+        'platform': data.get('platform', ''),
+        'visual_style': data.get('visual_style', ''),
+        'camera_style': data.get('camera_style', ''),
+        'negative_prompt': data.get('negative_prompt', ''),
+        'characters': _as_string_list(data.get('characters'), max_items=8),
+        'keyframes': _as_string_list(data.get('keyframes'), max_items=8),
+        'reference_images': reference_images,
+        'image_url': image_url,
+        'scenes': _video_scenes_payload(data.get('scenes')),
+        'audio_url': data.get('audio_url', ''),
+        'aspect_ratio': data.get('aspect_ratio', '9:16'),
+        'duration': duration,
+        'model': data.get('model', ''),
     }
 
 
@@ -282,6 +360,11 @@ class VideoGenerateView(APIView):
     def post(self, request):
         user, org, project, campaign = get_scope(request)
         require_role(user, org, 'creator')
+        if not can_use_feature(user, org, 'video_render'):
+            return Response(
+                feature_denied_payload('video_render', '做视频 Render 需要 Pro。请在计费页兑换 Pro 邀请码。'),
+                status=status.HTTP_403_FORBIDDEN,
+            )
         policy_block = require_current_policy_consent(user)
         if policy_block:
             return policy_block
@@ -289,14 +372,7 @@ class VideoGenerateView(APIView):
         if replay:
             return replay
         request_username = user.username
-        payload = {
-            'video_topic': request.data.get('video_topic', 'Product launch video'),
-            'scenes': request.data.get('scenes') or [],
-            'audio_url': request.data.get('audio_url', ''),
-            'aspect_ratio': request.data.get('aspect_ratio', '9:16'),
-            'duration': int(request.data.get('duration', 30)),
-            'model': request.data.get('model', ''),
-        }
+        payload = _video_generation_payload(request.data)
         if as_bool(request.data.get('async', False), default=False):
             task = create_generation_task(
                 task_type='video',
@@ -342,6 +418,17 @@ class TaskQueueView(APIView):
         task_type = request.data.get('task_type')
         if task_type not in dict(GenerationTask.TASK_TYPES):
             return Response({'error': 'Unsupported task type'}, status=status.HTTP_400_BAD_REQUEST)
+        advanced_task_feature = {
+            'video': 'video_render',
+            'custom_agent': 'custom_agent',
+            'rag_search': 'advanced_nodes',
+            'review': 'advanced_nodes',
+        }.get(task_type)
+        if advanced_task_feature and not can_use_feature(user, org, advanced_task_feature):
+            return Response(
+                feature_denied_payload(advanced_task_feature, '该高级生成能力需要 Pro。请在计费页兑换 Pro 邀请码。'),
+                status=status.HTTP_403_FORBIDDEN,
+            )
         run_now = as_bool(request.data.get('run_now', True))
         task = create_generation_task(
             task_type=task_type,
@@ -392,6 +479,11 @@ class WorkflowRunView(APIView):
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         require_role(request.user, draft.organization, 'creator')
+        if not can_use_feature(request.user, draft.organization, 'workflow_run'):
+            return Response(
+                feature_denied_payload('workflow_run', '运行工作流需要 Pro。免费用户可以编辑和保存工作流草稿。'),
+                status=status.HTTP_403_FORBIDDEN,
+            )
         policy_block = require_current_policy_consent(request.user)
         if policy_block:
             return policy_block
@@ -462,6 +554,11 @@ class WorkflowNodeRetryView(APIView):
         if not organization_for_user(request.user, draft.organization):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
         require_role(request.user, draft.organization, 'creator')
+        if not can_use_feature(request.user, draft.organization, 'workflow_run'):
+            return Response(
+                feature_denied_payload('workflow_run', '重试工作流节点需要 Pro。'),
+                status=status.HTTP_403_FORBIDDEN,
+            )
         policy_block = require_current_policy_consent(request.user)
         if policy_block:
             return policy_block
@@ -480,6 +577,51 @@ class WorkflowNodeRetryView(APIView):
             'task': serialize_task(task) if task else None,
             'workflow_run': serialize_workflow_run(workflow_run),
         }), 'workspace_draft', draft.id)
+
+
+class WorkflowAiEditView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [GenerationBurstThrottle, GenerationRateThrottle, OrgRateThrottle]
+
+    def post(self, request, pk: int):
+        from api.models import WorkspaceDraft
+
+        draft = WorkspaceDraft.objects.select_related('organization', 'project', 'campaign').filter(pk=pk).first()
+        if not draft:
+            return Response({'error': 'Draft not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not organization_for_user(request.user, draft.organization):
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+        require_role(request.user, draft.organization, 'creator')
+        if not can_use_feature(request.user, draft.organization, 'advanced_nodes'):
+            return Response(
+                feature_denied_payload('advanced_nodes', '工作流 AI 微调需要 Pro。免费用户可以编辑和保存工作流草稿。'),
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        policy_block = require_current_policy_consent(request.user)
+        if policy_block:
+            return policy_block
+
+        instruction = str(request.data.get('instruction') or '').strip()
+        if not instruction:
+            return Response({'error': 'instruction is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(instruction) > 2000:
+            return Response({'error': 'instruction must be 2000 characters or fewer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        replay, idempotency = idempotency_response(request, draft.organization)
+        if replay:
+            return replay
+
+        result = ai_edit_workflow(
+            draft,
+            mode=str(request.data.get('mode') or 'node'),
+            instruction=instruction,
+            node_id=str(request.data.get('node_id') or ''),
+            nodes=request.data.get('nodes') if isinstance(request.data.get('nodes'), list) else None,
+            edges=request.data.get('edges') if isinstance(request.data.get('edges'), list) else None,
+            brand_context=request.data.get('brand_context') if isinstance(request.data.get('brand_context'), dict) else None,
+            username=request.user.username,
+        )
+        return finalize_idempotency(idempotency, Response(result), 'workspace_draft', draft.id)
 
 
 class BrainstormView(APIView):

@@ -1,9 +1,9 @@
 import type { WorkflowEdge, WorkflowNode } from '../../types/workspace';
 
-const NODE_WIDTH = 260;
-const NODE_HEIGHT = 200;
-const X_GAP = 340;
-const Y_GAP = 260;
+const NODE_WIDTH = 320;
+const NODE_HEIGHT = 360;
+const X_GAP = 400;
+const Y_GAP = 430;
 const X_START = 72;
 const Y_START = 96;
 const MIN_GAP = 48;

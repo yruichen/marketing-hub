@@ -5,6 +5,7 @@ payload shaping, execution, and brainstorm generation.
 """
 
 from api.service_modules.workflow_parts.brainstorm import brainstorm_workflow
+from api.service_modules.workflow_parts.ai_edit import ai_edit_workflow
 from api.service_modules.workflow_parts.contracts import (
     get_or_create_default_draft,
     node_io_schema,
@@ -26,6 +27,7 @@ from api.service_modules.workflow_parts.runner import (
 
 __all__ = [
     'brainstorm_workflow',
+    'ai_edit_workflow',
     'build_payload_for_node',
     'create_workflow_run',
     'extract_upstream_text',

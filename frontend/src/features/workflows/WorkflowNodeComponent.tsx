@@ -1,7 +1,14 @@
-import { GitBranch, Settings2 } from 'lucide-react';
+import { Bot, ExternalLink, GitBranch, Image as ImageIcon, Settings2, Sparkles } from 'lucide-react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { nodeTypeDescriptions, nodeTypeLabels, nodeTypeOutputs, presets, statusLabels, type NodeType } from './constants';
-import { nodeStatusClass, nodeStatusDotClass, resolveNodeOutputDisplay } from './utils';
+import { nodeTypeLabels, presets, statusLabels, type NodeType } from './constants';
+import {
+  buildWorkflowPreviewItems,
+  nodeStatusDotClass,
+  resolveNodeOutputDisplay,
+  schemaText,
+  workflowNodeRunStepLabel,
+  type WorkflowPreviewItem,
+} from './utils';
 
 export interface FlowNodeData {
   [key: string]: unknown;
@@ -20,82 +27,105 @@ export interface FlowNodeData {
   readOnly?: boolean;
   onStartConnect?: (id: string) => void;
   onOpenContextMenu?: (id: string, x: number, y: number) => void;
+  onOpenDetails?: (id: string, mode?: 'edit' | 'ai') => void;
 }
 
 export type FlowNode = Node<FlowNodeData>;
 
-function NodeResultBox({ output, status, errorMessage }: { output: Record<string, unknown>; status: string; errorMessage?: string }) {
-  const isFailed = status === 'failed' && !!errorMessage;
-  const display = isFailed
-    ? { kind: 'text' as const, text: errorMessage! }
-    : resolveNodeOutputDisplay(output, status);
-  const isPending = display.kind === 'empty';
-
+function PreviewTile({ item }: { item: WorkflowPreviewItem }) {
+  if (item.kind === 'image' && item.url) {
+    return (
+      <img
+        src={item.url}
+        alt={item.label}
+        className="h-full w-full rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-muted)] object-cover"
+      />
+    );
+  }
+  if (item.kind === 'video' && item.url) {
+    return (
+      <video
+        src={item.url}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full rounded-[7px] border border-[var(--border-subtle)] bg-black object-cover"
+      />
+    );
+  }
+  if (item.kind === 'audio') {
+    return (
+      <div className="flex h-full flex-col justify-end rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-hover)] p-2">
+        <div className="flex h-10 items-end gap-1">
+          {Array.from({ length: 12 }).map((_, index) => (
+            <span key={index} className="flex-1 bg-[var(--editorial-accent-blue)]/75" style={{ height: `${18 + ((index * 11) % 28)}%` }} />
+          ))}
+        </div>
+        <span className="mt-1 truncate text-[8px] font-black text-[var(--editorial-text-gray)]">{item.label}</span>
+      </div>
+    );
+  }
   return (
-    <div
-      className={`mt-2 flex-1 min-h-[112px] rounded border px-2.5 py-2 overflow-hidden flex flex-col ${
-        isPending
-          ? 'border-dashed border-[var(--editorial-stroke)]/50 bg-[var(--editorial-bg)]/30'
-          : 'border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/60'
-      }`}
-    >
-      <span className="text-[8px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]/70 shrink-0">
-        生成结果
-      </span>
-      {display.kind === 'video' ? (
-        <div className="mt-1.5 flex-1 min-h-0 flex items-center gap-2">
-          <video
-            src={display.videoUrl}
-            poster={display.thumbnailUrl}
-            muted
-            playsInline
-            preload="metadata"
-            className="h-14 w-20 shrink-0 rounded border border-[var(--editorial-stroke)]/40 object-cover bg-black"
-          />
-          <span className="text-[11px] leading-snug text-[var(--editorial-text)] line-clamp-3">{display.text}</span>
+    <div className="flex h-full flex-col justify-between rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-hover)] p-2">
+      <span className="text-[8px] font-black uppercase text-[var(--editorial-text-gray)]">{item.label}</span>
+      <p className="line-clamp-4 text-[10px] font-semibold leading-snug text-[var(--editorial-text-muted)]">
+        {item.text || '已绑定资产'}
+      </p>
+    </div>
+  );
+}
+
+function NodePreview({
+  output,
+  config,
+  status,
+  errorMessage,
+}: {
+  output: Record<string, unknown>;
+  config: Record<string, unknown>;
+  status: string;
+  errorMessage?: string;
+}) {
+  const items = buildWorkflowPreviewItems(output, config);
+  const display = status === 'failed' && errorMessage
+    ? { kind: 'text' as const, text: errorMessage }
+    : resolveNodeOutputDisplay(output, status);
+
+  if (items.length > 0) {
+    const [primary, ...rest] = items;
+    return (
+      <div className="mt-3 min-h-0 flex-1">
+        <div className="h-[124px] overflow-hidden rounded-[8px] bg-[var(--surface-muted)]">
+          <PreviewTile item={primary} />
         </div>
-      ) : display.kind === 'image' ? (
-        <div className="mt-1.5 flex-1 min-h-0 grid grid-cols-[92px_minmax(0,1fr)] gap-2">
-          <img
-            src={display.imageUrl}
-            alt="节点生成图片"
-            className="h-[86px] w-[92px] rounded border border-[var(--editorial-stroke)]/40 object-cover bg-[var(--editorial-paper)]"
-          />
-          <span className="min-w-0 text-[11px] leading-snug text-[var(--editorial-text)] line-clamp-5">{display.text}</span>
-        </div>
-      ) : display.kind === 'copy' ? (
-        <div className="mt-1.5 flex-1 min-h-0 space-y-1.5">
-          {display.title ? <h5 className="line-clamp-2 text-[12px] font-black leading-snug text-[var(--editorial-text)]">{display.title}</h5> : null}
-          <p className="line-clamp-4 text-[11px] font-semibold leading-snug text-[var(--editorial-text-muted)]">{display.body}</p>
-          {display.tags?.length ? (
-            <div className="flex flex-wrap gap-1 text-[8px] font-black text-[var(--editorial-accent-blue)]">
-              {display.tags.map((tag) => <span key={tag}>#{tag}</span>)}
-            </div>
-          ) : null}
-        </div>
-      ) : display.kind === 'audio' ? (
-        <div className="mt-1.5 flex-1 min-h-0 space-y-2">
-          <div className="flex h-8 items-end gap-1 border-b border-[var(--editorial-stroke)]/30 pb-1">
-            {Array.from({ length: 18 }).map((_, index) => (
-              <span key={index} className={`flex-1 bg-[var(--editorial-stroke)]/70 ${index % 3 === 0 ? 'h-6' : index % 2 === 0 ? 'h-4' : 'h-2'}`} />
+        {rest.length > 0 ? (
+          <div className="mt-2 flex h-12 gap-1.5 overflow-hidden">
+            {rest.slice(0, 5).map((item) => (
+              <div key={item.id} className="h-12 w-12 shrink-0 overflow-hidden rounded-[7px]">
+                <PreviewTile item={item} />
+              </div>
             ))}
           </div>
-          <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-[var(--editorial-text)]">{display.text}</p>
-        </div>
-      ) : display.kind === 'review' ? (
-        <div className="mt-1.5 flex-1 min-h-0 rounded border border-[var(--editorial-stroke)]/40 bg-[var(--editorial-paper)] px-2 py-2">
-          <p className={`text-[12px] font-black ${display.issueCount > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{display.text}</p>
-          {display.score ? <p className="mt-1 text-[10px] font-semibold text-[var(--editorial-text-gray)]">品牌一致性：{display.score}</p> : null}
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex min-h-[146px] flex-1 flex-col rounded-[8px] border border-dashed border-[var(--border-default)] bg-[var(--surface-hover)] p-3">
+      <span className="text-[8px] font-black uppercase tracking-wide text-[var(--editorial-text-gray)]">节点产物</span>
+      {display.kind === 'copy' ? (
+        <div className="mt-2 min-h-0 flex-1">
+          {display.title ? <h5 className="line-clamp-2 text-[13px] font-black leading-snug text-[var(--editorial-text)]">{display.title}</h5> : null}
+          <p className="mt-1 line-clamp-5 text-[11px] font-semibold leading-snug text-[var(--editorial-text-muted)]">{display.body}</p>
         </div>
       ) : (
-        <p
-          className={`mt-1.5 flex-1 text-[12px] leading-snug line-clamp-4 ${
-            isFailed ? 'text-rose-600' : isPending ? 'text-[var(--editorial-text-gray)]/60 italic' : 'text-[var(--editorial-text)]'
-          }`}
-          title={display.text}
-        >
-          {display.text}
-        </p>
+        <div className="mt-2 flex min-h-0 flex-1 items-center gap-2">
+          <ImageIcon className="h-5 w-5 shrink-0 text-[var(--editorial-text-gray)]" />
+          <p className={`line-clamp-5 text-[11px] font-semibold leading-snug ${status === 'failed' ? 'text-rose-600' : 'text-[var(--editorial-text-muted)]'}`}>
+            {display.text}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -107,99 +137,128 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
     nodeType,
     status,
     output,
+    config,
     errorMessage,
+    inputSchema,
+    outputSchema,
     isConnectionSource,
     isCompatibleTarget,
     connectionModeActive,
     onStartConnect,
     onOpenContextMenu,
+    onOpenDetails,
   } = data;
   const preset = presets.find((item) => item.type === nodeType);
   const Icon = preset?.icon || Settings2;
   const statusLabel = statusLabels[status] || status || '未运行';
   const typeLabel = nodeTypeLabels[nodeType] || preset?.label || nodeType;
-  const description = nodeTypeDescriptions[nodeType] || '';
-  const expectedOutput = nodeTypeOutputs[nodeType] || '';
   const isDimmedTarget = connectionModeActive && !isConnectionSource && !isCompatibleTarget;
+  const isActive = status === 'running' || status === 'queued';
+  const inputText = schemaText(inputSchema);
+  const outputText = schemaText(outputSchema);
 
   return (
     <div
-      className={`group w-full h-full min-h-[228px] border-1.5 bg-[var(--editorial-paper)] shadow-editorial-sm px-3 py-2.5 overflow-hidden flex flex-col transition-opacity duration-150 ${nodeStatusClass(status)} ${selected ? 'ring-2 ring-[var(--editorial-accent-blue)]' : ''} ${isConnectionSource ? 'ring-2 ring-blue-500 ring-offset-1 animate-pulse' : ''} ${isDimmedTarget ? 'opacity-40' : ''}`}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onOpenContextMenu?.(id, e.clientX, e.clientY);
+      data-workflow-node-id={id}
+      className={`workflow-node-card group h-full min-h-[300px] w-full overflow-hidden rounded-[8px] border bg-[var(--surface-elevated)] p-3 shadow-[var(--shadow-panel)] transition duration-150 ${selected ? 'workflow-node-card--selected' : ''} ${isConnectionSource ? 'workflow-node-card--source' : ''} ${isDimmedTarget ? 'opacity-40' : ''}`}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onOpenDetails?.(id, 'edit');
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenContextMenu?.(id, event.clientX, event.clientY);
       }}
     >
       <Handle
         id="input"
         type="target"
         position={Position.Left}
-        className="!w-4 !h-4 !border-2 !border-[var(--editorial-paper)] !bg-[var(--editorial-accent-blue)] !transition-all !duration-150 group-hover:!w-5 group-hover:!h-5"
+        className="!h-5 !w-5 !border-2 !border-[var(--surface-elevated)] !bg-[var(--editorial-accent-blue)] !shadow-md !transition-all group-hover:!scale-110"
         title="输入端口"
       />
       <Handle
         id="output"
         type="source"
         position={Position.Right}
-        className="!w-4 !h-4 !border-2 !border-[var(--editorial-paper)] !bg-emerald-600 !transition-all !duration-150 group-hover:!w-5 group-hover:!h-5"
+        className="!h-5 !w-5 !border-2 !border-[var(--surface-elevated)] !bg-[var(--brand-accent-strong)] !shadow-md !transition-all group-hover:!scale-110"
         title="输出端口"
       />
-      <div className="flex items-start justify-between gap-2 shrink-0">
-        <div className="min-w-0 flex-1">
-          <span className="ml-6 mb-1 inline-flex border border-[var(--editorial-stroke)]/40 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-[var(--editorial-text-gray)]">
-            {typeLabel}
-          </span>
-          <div className="flex items-start gap-2">
-            <Icon className="h-4 w-4 shrink-0 mt-1 text-[var(--editorial-text-gray)]" aria-label={preset?.label} />
-            <h4
-              className="text-[20px] leading-[1.15] font-black text-[var(--editorial-text)] line-clamp-2 tracking-tight"
-              title={label}
-            >
+
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-2 py-1 text-[8px] font-black text-[var(--editorial-text-gray)]">
+                <Icon className="h-3 w-3" /> {typeLabel}
+              </span>
+              <span className={`inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-2 py-1 text-[8px] font-black ${isActive ? 'text-blue-600' : 'text-[var(--editorial-text-gray)]'}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${nodeStatusDotClass(status)} ${status === 'running' ? 'animate-pulse' : ''}`} />
+                {statusLabel}
+              </span>
+            </div>
+            <h4 className="mt-2 line-clamp-2 text-[17px] font-black leading-tight text-[var(--editorial-text)]" title={label}>
               {label}
             </h4>
           </div>
-          <span className="mt-1 ml-6 flex items-center gap-1 text-[9px] text-[var(--editorial-text-gray)]/80">
-            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${nodeStatusDotClass(status)}`} />
-            <span>{statusLabel}</span>
-          </span>
-          {description ? (
-            <p className="mt-1 ml-6 line-clamp-2 text-[10px] font-semibold leading-snug text-[var(--editorial-text-gray)]">
-              {description}
-            </p>
-          ) : null}
-          {expectedOutput ? (
-            <p className="mt-1 ml-6 truncate text-[8px] font-black uppercase tracking-wide text-[var(--editorial-text-gray)]/70" title={expectedOutput}>
-              预计产物：{expectedOutput}
-            </p>
-          ) : null}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onStartConnect?.(id);
+            }}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-[var(--border-default)] bg-[var(--surface-panel)] hover:bg-[var(--surface-hover)]"
+            title="从此节点开始连线"
+            aria-label={`从 ${label} 开始连线`}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+          </button>
+        </header>
+
+        <NodePreview output={output as Record<string, unknown>} config={config as Record<string, unknown>} status={status} errorMessage={errorMessage} />
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[9px]">
+          <div className="min-w-0 rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-2 py-1.5">
+            <span className="block font-black text-[var(--editorial-text-gray)]">输入</span>
+            <span className="block truncate font-semibold text-[var(--editorial-text-muted)]" title={inputText}>{inputText}</span>
+          </div>
+          <div className="min-w-0 rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-2 py-1.5">
+            <span className="block font-black text-[var(--editorial-text-gray)]">输出</span>
+            <span className="block truncate font-semibold text-[var(--editorial-text-muted)]" title={outputText}>{outputText}</span>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStartConnect?.(id);
-          }}
-          className="border border-[var(--editorial-stroke)] p-1.5 hover:bg-[var(--editorial-unselected)] shrink-0"
-          title="连线"
-          aria-label={`从 ${label} 开始连线`}
-        >
-          <GitBranch className="h-3.5 w-3.5" />
-        </button>
+
+        <footer className="mt-3 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-2">
+          <span className="min-w-0 truncate text-[9px] font-black text-[var(--editorial-text-gray)]">{workflowNodeRunStepLabel(status)}</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenDetails?.(id, 'ai');
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-panel)] hover:bg-[var(--surface-hover)]"
+              title="AI 编辑"
+              aria-label={`AI 编辑 ${label}`}
+            >
+              <Bot className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenDetails?.(id, 'edit');
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[7px] border border-[var(--border-default)] bg-[var(--surface-panel)] px-2 text-[9px] font-black hover:bg-[var(--surface-hover)]"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              打开
+              <ExternalLink className="h-3 w-3" />
+            </button>
+          </div>
+        </footer>
       </div>
-      <NodeResultBox output={output as Record<string, unknown>} status={status} errorMessage={errorMessage} />
-      {status === 'failed' && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenContextMenu?.(id, e.clientX, e.clientY);
-          }}
-          className="mt-2 border border-rose-400 px-2 py-1 text-[9px] font-black text-rose-700 hover:bg-rose-50"
-        >
-          查看原因 / 重试
-        </button>
-      )}
     </div>
   );
 }

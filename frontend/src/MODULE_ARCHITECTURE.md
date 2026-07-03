@@ -88,7 +88,7 @@ src/
 │   │
 │   ├── ai-config/                # [本次新增] AI 接口配置（含计费 tab）
 │   │   ├── AiConfigPage.tsx
-│   │   ├── useAiConfig.ts        # fetchConfigs / fetchBillingPlans / handleSaveConfig / handleSelectPlan
+│   │   ├── useAiConfig.ts        # fetchConfigs / fetchBillingPlans / handleSaveConfig
 │   │   ├── types.ts              # AiConfig / providerDefaultScope / configScopeLabels
 │   │   └── index.ts
 │   │
@@ -167,7 +167,8 @@ handleLogin / handleLogout       // 认证
 fetchWorkspaceBootstrap()        // 初始化工作区 scope
 selectProjectScope(project, campaign) // 切换项目 scope
 fetchDashboard()                 // 刷新仪表盘快照
-handleSelectPlan(plan)           // 切换计费方案（App.tsx 也保留，因为 Billing tab 需要）
+handleRedeemProInvite(code)      // Pro 邀请码兑换，计费页使用
+handleSubmitEnterpriseRequest()  // 企业定制需求提交，计费页使用
 handleShareToCommunity(...)      // 跨 AIGC 四面板的分享回调
 completeOnboarding()             // 完成 Onboarding 后初始化内容包
 ```
@@ -309,7 +310,7 @@ interface FeaturePageProps {
 
 1. 评估是否可以变成 hook（推荐）。
 2. 如果是纯函数（如 `buildContentPackage`），放在对应 feature 的 `hooks.ts` 中。
-3. 如果是跨 feature 的协调函数（如 `handleSelectPlan`），留在 `App.tsx` 并通过 props 下传。
+3. 如果是跨 feature 的协调函数（如 Pro 邀请码兑换、企业定制需求提交），留在 `App.tsx` 并通过 props 下传。
 4. 永远不要在 feature 间循环 import。
 
 ### 7.4 修改 Dashboard 布局

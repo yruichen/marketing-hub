@@ -127,6 +127,11 @@ export interface WorkflowNodeConfig {
   duration_cap?: number;
   // RAG 检索节点: 检索关键词（与 prompt 不同，是用户输入的搜索 query）
   query?: string;
+  // Workflow canvas UX: optional asset/reference grouping and AI edit notes.
+  asset_ids?: number[];
+  reference_urls?: string[];
+  detail_mode?: string;
+  ai_edit_instruction?: string;
 }
 
 export interface WorkflowNode {
@@ -168,6 +173,13 @@ export interface WorkspaceDraftRecord {
   last_run_summary: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkflowAiEditResponse {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  summary: string;
+  changed_node_ids: string[];
 }
 
 export interface WorkflowRunEventRecord {
@@ -255,9 +267,26 @@ export interface BillingPlanRecord {
   byok_discount: string;
 }
 
+export type FeatureEntitlements = Record<
+  'advanced_nodes' | 'ai_config_write' | 'byok_config' | 'custom_agent' | 'video_render' | 'workflow_run',
+  boolean
+>;
+
 export interface BillingPlanResponse {
   current_plan: 'free' | 'pro' | 'enterprise';
   current_limits: BillingPlanRecord;
+  personal_plan?: 'free' | 'pro';
+  personal_subscription?: {
+    plan: 'free' | 'pro';
+    source: string;
+    expires_at: string | null;
+  };
+  organization_plan?: 'free' | 'pro' | 'enterprise';
+  effective_plan?: 'free' | 'pro' | 'enterprise';
+  effective_limits?: BillingPlanRecord;
+  feature_entitlements?: FeatureEntitlements;
+  can_redeem_pro_invite?: boolean;
+  enterprise_request_status?: string;
   project_count: number;
   plans: Record<'free' | 'pro' | 'enterprise', BillingPlanRecord>;
   usage_summary?: {

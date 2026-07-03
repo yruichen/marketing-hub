@@ -8,7 +8,7 @@ from rest_framework.test import APITestCase, force_authenticate
 from ai_gateway.content_package import assemble_content_package
 from ai_gateway.prompt_catalog import PROMPT_ASSETS, get_prompt_asset, prompt_registry_snapshot
 from ai_gateway.services import AIModelGateway, ModelPolicy, NonRetryableGatewayError
-from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project
+from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project, UserProfile
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
     aspect_ratio_to_video_dimensions,
@@ -24,8 +24,10 @@ from ai_gateway.prompts import (
     normalize_image_result,
     normalize_review_result,
     normalize_storyboard_result,
+    normalize_video_result,
     snap_agnes_num_frames,
 )
+from generation.views import _video_generation_payload
 
 
 class CopyPromptTests(SimpleTestCase):
@@ -291,6 +293,76 @@ class VideoPromptTests(SimpleTestCase):
         self.assertIn('Aspect ratio', prompt)
         self.assertIn('subject continuity', prompt)
 
+    def test_build_video_generation_prompt_includes_movie_studio_context(self):
+        prompt = build_video_generation_prompt({
+            'video_topic': '短片预告',
+            'creative_mode': 'movie_studio',
+            'script': '主角进入雨夜街道，发现品牌线索。',
+            'characters': ['主角：黑色风衣，冷静'],
+            'keyframes': ['雨夜街道首帧'],
+            'visual_style': 'live action cinematic',
+            'camera_style': 'slow push in',
+            'negative_prompt': 'watermark',
+            'scenes': [
+                {
+                    'visual_description': '雨夜街道全景',
+                    'audio_narration': '故事从这里开始',
+                    'camera_motion': 'dolly in',
+                    'duration_seconds': 8,
+                },
+            ],
+        })
+        self.assertIn('Production mode: movie_studio', prompt)
+        self.assertIn('Source script/story', prompt)
+        self.assertIn('Character continuity', prompt)
+        self.assertIn('Reference/keyframe intent', prompt)
+        self.assertIn('Avoid: watermark', prompt)
+
+    def test_video_generation_payload_preserves_studio_fields(self):
+        payload = _video_generation_payload({
+            'video_topic': '电影工作室迁移',
+            'prompt': '核心提示',
+            'script': '长文本章节',
+            'creative_mode': 'movie_studio',
+            'target_audience': '创作者',
+            'platform': 'Bilibili',
+            'visual_style': '电影感',
+            'camera_style': '稳定推近',
+            'negative_prompt': '水印',
+            'characters': ['角色 A'],
+            'keyframes': ['首帧描述'],
+            'image_url': 'https://example.com/ref.png',
+            'reference_images': ['https://example.com/extra.png'],
+            'duration': '18',
+            'scenes': [
+                {
+                    'visual': '开场画面',
+                    'narration': '开场旁白',
+                    'camera': '横移',
+                    'duration': '6',
+                    'reference_image_url': 'https://example.com/shot.png',
+                },
+            ],
+        })
+        self.assertEqual(payload['creative_mode'], 'movie_studio')
+        self.assertEqual(payload['duration'], 18)
+        self.assertEqual(payload['characters'], ['角色 A'])
+        self.assertIn('https://example.com/ref.png', payload['reference_images'])
+        self.assertEqual(payload['scenes'][0]['camera_motion'], '横移')
+
+    def test_normalize_video_result_returns_scenes_and_mode(self):
+        normalized = normalize_video_result(
+            {'video_url': 'https://example.com/video.mp4'},
+            {
+                'video_topic': '电影工作室迁移',
+                'creative_mode': 'movie_studio',
+                'duration': 8,
+                'scenes': [{'visual_description': '开场画面'}],
+            },
+        )
+        self.assertEqual(normalized['creative_mode'], 'movie_studio')
+        self.assertEqual(normalized['scenes'][0]['visual_description'], '开场画面')
+
     def test_extract_agnes_video_url_supports_remixed_field(self):
         url = extract_agnes_video_url({'status': 'completed', 'remixed_from_video_id': 'https://cdn.example.com/a.mp4'})
         self.assertEqual(url, 'https://cdn.example.com/a.mp4')
@@ -327,6 +399,10 @@ class AIConfigPermissionTests(APITestCase):
         self.organization = Organization.objects.create(name='AI Org', slug='ai-org')
         Membership.objects.create(user=self.admin, organization=self.organization, role='admin')
         Membership.objects.create(user=self.creator, organization=self.organization, role='creator')
+        UserProfile.objects.update_or_create(
+            user=self.admin,
+            defaults={'subscription_plan': 'pro', 'subscription_source': 'admin'},
+        )
 
     def test_ai_config_get_requires_login(self):
         response = self.client.get('/api/ai/config/')

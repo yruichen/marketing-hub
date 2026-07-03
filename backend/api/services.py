@@ -17,6 +17,7 @@ from api.service_modules.generation import (
     schedule_generation_task,
 )
 from api.service_modules.workflow import (
+    ai_edit_workflow,
     brainstorm_workflow,
     build_payload_for_node,
     create_workflow_run,
@@ -47,6 +48,7 @@ from api.service_modules.workspace import (
 
 __all__ = [
     'brainstorm_workflow',
+    'ai_edit_workflow',
     'build_payload_for_node',
     'create_workflow_run',
     'create_asset_from_payload',

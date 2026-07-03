@@ -10,26 +10,20 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from '@xyflow/react';
-import type { WorkflowNode } from '../../types/workspace';
-import { NodeConfigPopover } from './NodeConfigPopover';
 import { WorkflowNodeComponent, type FlowNode } from './WorkflowNodeComponent';
-import type { WorkflowLoadingState } from './WorkflowBuilderToolbar';
 
 const nodeTypes = { workflowNode: WorkflowNodeComponent };
 
 const defaultEdgeOpts = {
   type: 'smoothstep' as const,
-  markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
-  style: { stroke: '#64748b', strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: 'var(--workflow-edge-color)' },
+  style: { stroke: 'var(--workflow-edge-color)', strokeWidth: 2.2 },
 };
 
 interface WorkflowBuilderCanvasProps {
   nodes: FlowNode[];
   edges: Edge[];
   readOnly: boolean;
-  selectedNode: WorkflowNode | null;
-  feedback: string;
-  loadingState: WorkflowLoadingState;
   onNodesChange: OnNodesChange<FlowNode>;
   onEdgesChange: OnEdgesChange<Edge>;
   onConnect: (connection: Connection) => void;
@@ -40,21 +34,12 @@ interface WorkflowBuilderCanvasProps {
   onEdgeContextMenu: (edgeId: string, x: number, y: number) => void;
   onNodeDragStart: () => void;
   onNodeDragStop: () => void;
-  onUpdateNode: (id: string, patch: Partial<WorkflowNode>) => void;
-  onUpdateConfig: (key: string, value: string | number) => void;
-  onSetFeedback: (value: string) => void;
-  onRetryNode: () => Promise<void>;
-  onRemoveNode: () => void;
-  onCloseNode: () => void;
 }
 
 export function WorkflowBuilderCanvas({
   nodes,
   edges,
   readOnly,
-  selectedNode,
-  feedback,
-  loadingState,
   onNodesChange,
   onEdgesChange,
   onConnect,
@@ -65,12 +50,6 @@ export function WorkflowBuilderCanvas({
   onEdgeContextMenu,
   onNodeDragStart,
   onNodeDragStop,
-  onUpdateNode,
-  onUpdateConfig,
-  onSetFeedback,
-  onRetryNode,
-  onRemoveNode,
-  onCloseNode,
 }: WorkflowBuilderCanvasProps) {
   return (
     <ReactFlow
@@ -91,7 +70,7 @@ export function WorkflowBuilderCanvas({
       onNodeDragStart={onNodeDragStart}
       onNodeDragStop={onNodeDragStop}
       defaultEdgeOptions={defaultEdgeOpts}
-      connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
+      connectionLineStyle={{ stroke: 'var(--editorial-accent-blue)', strokeWidth: 2.4 }}
       fitView
       fitViewOptions={{ padding: 0.18 }}
       minZoom={0.2}
@@ -105,23 +84,11 @@ export function WorkflowBuilderCanvas({
       snapGrid={[16, 16]}
       deleteKeyCode={['Backspace', 'Delete']}
       multiSelectionKeyCode={['Meta', 'Shift']}
-      className="editorial-grid min-w-0"
+      className="workflow-canvas editorial-grid min-w-0"
     >
       <Background color="var(--editorial-dot-color)" gap={16} size={1.2} variant={BackgroundVariant.Dots} />
-      <MiniMap pannable zoomable nodeStrokeColor="var(--editorial-stroke)" nodeColor="var(--editorial-paper)" />
+      <MiniMap pannable zoomable nodeStrokeColor="var(--border-default)" nodeColor="var(--surface-elevated)" />
       <Controls showInteractive={false} />
-      <NodeConfigPopover
-        node={selectedNode}
-        readOnly={readOnly}
-        feedback={feedback}
-        loadingState={loadingState}
-        onUpdateNode={onUpdateNode}
-        onUpdateConfig={onUpdateConfig}
-        onSetFeedback={onSetFeedback}
-        onRetryNode={onRetryNode}
-        onRemoveNode={onRemoveNode}
-        onClose={onCloseNode}
-      />
     </ReactFlow>
   );
 }

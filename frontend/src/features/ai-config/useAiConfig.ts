@@ -10,10 +10,9 @@ interface UseAiConfigOptions {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
-  onWorkspaceRefresh?: () => Promise<void>;
 }
 
-export function useAiConfig({ workspaceScope, username, triggerToast, onWorkspaceRefresh }: UseAiConfigOptions) {
+export function useAiConfig({ workspaceScope, username, triggerToast }: UseAiConfigOptions) {
   const organizationSlug = workspaceScope?.organization.slug;
   const [aiConfigs, setAiConfigs] = useState<AiConfig[]>([]);
   const [activeConfigForm, setActiveConfigForm] = useState({
@@ -133,28 +132,6 @@ export function useAiConfig({ workspaceScope, username, triggerToast, onWorkspac
     }
   }, [activeConfigForm, username, organizationSlug, triggerToast]);
 
-  const handleSelectPlan = useCallback(async (plan: 'free' | 'pro' | 'enterprise') => {
-    setLoading(true);
-    try {
-      const res = await apiFetch('/billing/plans/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username || DEMO_USERNAME, plan }),
-      });
-      if (!res.ok) throw new Error('Plan update failed');
-      const data: BillingPlanResponse = await res.json();
-      setBillingPlans(data);
-      if (onWorkspaceRefresh) {
-        await onWorkspaceRefresh();
-      }
-      triggerToast('订阅方案已更新', 'success');
-    } catch {
-      triggerToast('订阅方案更新失败', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [username, triggerToast, onWorkspaceRefresh]);
-
   return {
     aiConfigs,
     activeConfigForm,
@@ -171,6 +148,5 @@ export function useAiConfig({ workspaceScope, username, triggerToast, onWorkspac
     fetchBillingPlans,
     handleFetchModels,
     handleSaveConfig,
-    handleSelectPlan,
   };
 }

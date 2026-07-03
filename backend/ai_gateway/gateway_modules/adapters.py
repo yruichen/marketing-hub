@@ -436,6 +436,13 @@ class AgnesVideoAdapter(ProviderAdapter):
             or payload.get('reference_image')
             or payload.get('input_image')
         )
+        reference_images = payload.get('reference_images') or payload.get('keyframes') or []
+        if not reference_image and isinstance(reference_images, list):
+            for item in reference_images:
+                candidate = str(item or '').strip()
+                if candidate.startswith('http'):
+                    reference_image = candidate
+                    break
         if isinstance(reference_image, str) and reference_image.strip().startswith('http'):
             request_payload['image'] = reference_image.strip()
 

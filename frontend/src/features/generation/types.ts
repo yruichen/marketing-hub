@@ -86,6 +86,14 @@ export interface VideoOutput {
   thumbnail_url: string;
   duration_seconds: number;
   prompt?: string;
+  creative_mode?: string;
+  scenes?: Array<StoryScene & {
+    camera_motion?: string;
+    reference_image_url?: string;
+  }>;
+  provider_task_id?: string;
+  num_frames?: number;
+  frame_rate?: number;
   asset_id?: number;
   is_demo_fallback?: boolean;
 }

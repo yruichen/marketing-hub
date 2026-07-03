@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AgentTerminal } from './AgentTerminal';
 import { BrandMemorySummary } from '../brand-memory';
 import { TaskStatusCard } from './TaskStatusCard';
@@ -18,6 +18,7 @@ interface StoryboardPanelProps {
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   fetchDashboard: () => Promise<void>;
   onShare: (type: 'storyboard', title: string, content: CreationContent) => Promise<void>;
+  onStoryboardChange?: (storyboard: StoryboardOutput) => void;
 }
 
 export function StoryboardPanel({
@@ -31,6 +32,7 @@ export function StoryboardPanel({
   triggerToast,
   fetchDashboard,
   onShare,
+  onStoryboardChange,
 }: StoryboardPanelProps) {
   void _loading;
   void _setLoading;
@@ -67,6 +69,10 @@ export function StoryboardPanel({
 
   const [isRunning, setIsRunning] = useState(false);
 
+  useEffect(() => {
+    onStoryboardChange?.(storyboardOutput);
+  }, [onStoryboardChange, storyboardOutput]);
+
   const { submitQueuedGeneration, taskUiState } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
@@ -85,7 +91,10 @@ export function StoryboardPanel({
         duration: storyboardInput.duration,
         target_audience: storyboardInput.audience,
       },
-      setStoryboardOutput,
+      (result) => {
+        setStoryboardOutput(result);
+        onStoryboardChange?.(result);
+      },
       '[0.00s] [INFO] Initializing queued Storyboard Editorial Director Workflow...',
       '分镜脚本异步任务执行完毕'
     );

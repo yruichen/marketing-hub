@@ -1,4 +1,4 @@
-import type { BrandContext, CampaignRecord, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
+import type { BrandContext, CampaignRecord, FeatureEntitlements, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
 import type { NodeType, LegacyNodeType } from './constants';
 import { ioSchema, defaultNodeConfig, nodeTypeLabels } from './constants';
 
@@ -11,8 +11,11 @@ export interface ProjectDetail extends ProjectRecord {
 export interface WorkflowBuilderProps {
   project: Pick<ProjectRecord, 'id' | 'name' | 'slug'> | null;
   campaign: Pick<CampaignRecord, 'id' | 'name'> | null;
+  organizationSlug?: string;
   username: string;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  featureEntitlements?: Partial<FeatureEntitlements>;
+  onOpenBilling?: () => void;
 }
 
 export type WorkflowSnapshot = {
@@ -41,8 +44,8 @@ export function normalizeWorkflowNode(node: WorkflowNode, brandContext: BrandCon
     ...node,
     type: normalizedType,
     label: node.label || nodeTypeLabels[normalizedType] || '节点',
-    width: node.width || 260,
-    height: node.height || 166,
+    width: node.width && node.width >= 300 ? node.width : 320,
+    height: node.height && node.height >= 320 ? node.height : 360,
     input_schema: node.input_schema || schema.input,
     output_schema: node.output_schema || schema.output,
     config: {

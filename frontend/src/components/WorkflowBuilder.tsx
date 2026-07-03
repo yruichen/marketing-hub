@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   useReactFlow, addEdge,
   useNodesState, useEdgesState,
@@ -9,6 +9,7 @@ import { apiFetch, apiGet, apiPatch, apiPost, useCopyClipboard } from '../hooks/
 import type {
   BrandContext, GenerationTaskRecord,
   WorkflowEdge, WorkflowNode, WorkflowRunRecord, WorkspaceDraftRecord,
+  WorkflowAiEditResponse,
 } from '../types/workspace';
 import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, type NodeType } from '../features/workflows/constants';
 import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps, type WorkflowSnapshot } from '../features/workflows/types';
@@ -33,6 +34,13 @@ import { WorkflowRunPreflightPanel } from '../features/workflows/WorkflowRunPref
 import { buildWorkflowReadiness, type WorkflowReadinessIssue } from '../features/workflows/workflowReadiness';
 import { classifyWorkflowFailure, formatNodeDiagnosticSnapshot } from '../features/workflows/workflowRecovery';
 import { mergeWorkflowRunIntoNodes, workflowRunIsActive } from '../features/workflows/workflowRunState';
+import { WorkflowFloatingRunBar } from '../features/workflows/WorkflowFloatingRunBar';
+import { WorkflowNodeDetailDialog } from '../features/workflows/WorkflowNodeDetailDialog';
+import {
+  WorkflowAssetPanel,
+  WORKFLOW_ASSET_DRAG_TYPE,
+  type WorkflowAssetDragPayload,
+} from '../features/workflows/WorkflowAssetPanel';
 
 import { wfToRF, rfToWF } from '../features/workflows/conversions';
 import type { FlowNode } from '../features/workflows/WorkflowNodeComponent';
@@ -41,8 +49,16 @@ type RFNode = FlowNode;
 
 // --- Main Component ---
 
-export function WorkflowBuilder({ project, campaign, username, triggerToast }: WorkflowBuilderProps) {
-  const { fitView, getViewport } = useReactFlow();
+export function WorkflowBuilder({
+  project,
+  campaign,
+  organizationSlug,
+  username,
+  triggerToast,
+  featureEntitlements,
+  onOpenBilling,
+}: WorkflowBuilderProps) {
+  const { fitView, getViewport, screenToFlowPosition } = useReactFlow();
 
   // ReactFlow native state — THE CORE FIX
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<RFNode>([]);
@@ -55,7 +71,6 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [connectionSource, setConnectionSource] = useState('');
-  const [feedback, setFeedback] = useState('');
   const [loadingState, setLoadingState] = useState<WorkflowLoadingState>('idle');
   const [lastTasks, setLastTasks] = useState<GenerationTaskRecord[]>([]);
   const [propertyPanelOpen, setPropertyPanelOpen] = useState(true);
@@ -68,18 +83,39 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const [highlightedEdgeId, setHighlightedEdgeId] = useState('');
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [currentWorkflowRun, setCurrentWorkflowRun] = useState<WorkflowRunRecord | null>(null);
+  const [detailNodeId, setDetailNodeId] = useState('');
+  const [detailMode, setDetailMode] = useState<'edit' | 'ai'>('edit');
+  const [workflowDockOpen, setWorkflowDockOpen] = useState(true);
+  const [workflowDockTab, setWorkflowDockTab] = useState<'assets' | 'ai' | 'nodes'>('assets');
+  const [globalAiInstruction, setGlobalAiInstruction] = useState('');
+  const [aiEditLoading, setAiEditLoading] = useState(false);
 
   // Derived: RF nodes → WorkflowNode for UI
   const nodes: WorkflowNode[] = useMemo(() => rfNodes.map(rfToWF), [rfNodes]);
   const edges: WorkflowEdge[] = useMemo(() => rfEdges.map((e) => ({ id: e.id, source: e.source, target: e.target })), [rfEdges]);
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId) || null, [nodes, selectedNodeId]);
+  const detailNode = useMemo(() => nodes.find((n) => n.id === detailNodeId) || null, [detailNodeId, nodes]);
   const runPreview = useMemo(() => ({
     stepCount: nodes.length, estimatedCost: `$${(nodes.length * 0.03).toFixed(2)}`,
     estimatedMinutes: Math.max(1, Math.round(nodes.length * 0.8)),
   }), [nodes.length]);
   const workflowReadiness = useMemo(() => buildWorkflowReadiness(nodes, edges, brandContext), [nodes, edges, brandContext]);
   const copyClipboard = useCopyClipboard(triggerToast);
+  const canRunWorkflow = featureEntitlements?.workflow_run ?? true;
+  const canCreateCustomAgent = featureEntitlements?.custom_agent ?? true;
+  const canUseAdvancedNodes = featureEntitlements?.advanced_nodes ?? true;
+  const canUseVideoNode = featureEntitlements?.video_render ?? true;
+  const openWorkflowProGate = useCallback(() => {
+    triggerToast('工作流运行、高级节点和自定义智能体需要 Pro。免费用户可以编辑和保存草稿。', 'info');
+    onOpenBilling?.();
+  }, [onOpenBilling, triggerToast]);
+  const isNodeLocked = useCallback((type: NodeType) => {
+    if (type === 'custom_agent') return !canCreateCustomAgent;
+    if (type === 'retrieval' || type === 'review') return !canUseAdvancedNodes;
+    if (type === 'video_generation') return !canUseVideoNode;
+    return false;
+  }, [canCreateCustomAgent, canUseAdvancedNodes, canUseVideoNode]);
 
   // Refs for snapshot closures
   const nodesRef = useRef(nodes);
@@ -292,6 +328,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const executeWorkflow = async () => {
     if (!project) { triggerToast('请先选择项目', 'error'); return; }
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
+    if (!canRunWorkflow) { openWorkflowProGate(); return; }
     if (!workflowReadiness.canRun) {
       setPreflightOpen(true);
       triggerToast('运行前仍有阻断项需要修复', 'error');
@@ -399,8 +436,9 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const runWorkflow = useCallback(() => {
     if (!project) { triggerToast('请先选择项目', 'error'); return; }
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
+    if (!canRunWorkflow) { openWorkflowProGate(); return; }
     setPreflightOpen(true);
-  }, [project, readOnly, triggerToast]);
+  }, [canRunWorkflow, openWorkflowProGate, project, readOnly, triggerToast]);
 
   const copyNodeDiagnostics = useCallback((nodeId: string) => {
     const node = nodes.find((item) => item.id === nodeId);
@@ -422,11 +460,11 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       return;
     }
     if (readOnly) { triggerToast('只读模式下无法重试', 'error'); return; }
+    if (!canRunWorkflow) { openWorkflowProGate(); return; }
     setLoadingState('retrying');
     try {
       const recovery = classifyWorkflowFailure(node.error_message || '');
       const feedbackText = recoveryFeedback?.trim()
-        || feedback.trim()
         || `${recovery.title}：${recovery.primaryAction}；从该节点向后恢复运行。`;
       markHistory(`节点恢复 ${node.id}`);
       const saved = await persistDraft(nodes, edges, true);
@@ -458,21 +496,84 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
           assetIds: Array.isArray(data.workflow_run?.summary?.asset_ids) ? data.workflow_run.summary.asset_ids : [],
         },
       }));
-      setFeedback('');
       triggerToast(node.status === 'failed' ? '失败节点已恢复并向后重跑' : '已从该节点向后重跑', 'success');
     } catch (err) { triggerToast(`节点恢复失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
     finally { setLoadingState('idle'); }
   };
 
-  const retryNode = async () => {
-    if (!selectedNode) return;
-    await recoverFromNode(selectedNode.id);
+  const applyAiEdit = async (mode: 'node' | 'workflow', nodeId: string, instruction: string, runAfter = false) => {
+    if (!project) { triggerToast('请先选择项目', 'error'); return; }
+    if (readOnly) { triggerToast('只读模式下无法使用 AI 修改', 'error'); return; }
+    if (!canUseAdvancedNodes) { openWorkflowProGate(); return; }
+    const trimmed = instruction.trim();
+    if (!trimmed) { triggerToast('请输入 AI 修改意见', 'error'); return; }
+    setAiEditLoading(true);
+    if (runAfter) setLoadingState('retrying');
+    try {
+      const baseDraft = draft || await persistDraft(nodes, edges, true);
+      const result = await apiPost<WorkflowAiEditResponse>(`/drafts/${baseDraft.id}/ai-edit/`, {
+        mode,
+        instruction: trimmed,
+        node_id: nodeId,
+        nodes,
+        edges,
+        brand_context: brandContext,
+      });
+      const nextNodes = result.nodes.map((node) => normalizeWorkflowNode(node, brandContext));
+      const nextEdges = result.edges;
+      markHistory(mode === 'node' ? 'AI 修改节点' : 'AI 微调工作流');
+      setRfNodes(nextNodes.map(wfToRF));
+      setRfEdges(nextEdges.map((edge) => ({ id: edge.id || `edge-${edge.source}-${edge.target}`, source: edge.source, target: edge.target })));
+      markDirty();
+      triggerToast(result.summary || 'AI 修改已应用', 'success');
+      if (mode === 'workflow') setGlobalAiInstruction('');
+      if (!runAfter || !nodeId) return;
+
+      const saved = await persistDraft(nextNodes, nextEdges, true);
+      const retryResponse = await apiFetch(`/drafts/${saved.id}/nodes/${nodeId}/retry/`, {
+        method: 'POST',
+        headers: { 'Idempotency-Key': `workflow-ai-edit-retry-${saved.id}-${nodeId}-${Date.now()}` },
+        body: JSON.stringify({ username, feedback: trimmed }),
+      });
+      if (!retryResponse.ok) {
+        const errBody = await retryResponse.text().catch(() => '');
+        throw new Error(errBody.slice(0, 200) || `HTTP ${retryResponse.status}`);
+      }
+      const data = await retryResponse.json() as {
+        draft: WorkspaceDraftRecord;
+        task: GenerationTaskRecord | null;
+        workflow_run?: WorkflowRunRecord;
+      };
+      setDraft(data.draft);
+      const sn = data.draft.nodes.map((node) => normalizeWorkflowNode(node, data.draft.brand_context || brandContext));
+      setRfNodes(sn.map(wfToRF));
+      setRfEdges(data.draft.edges.map((edge) => ({ id: edge.id || `edge-${edge.source}-${edge.target}`, source: edge.source, target: edge.target })));
+      setLastTasks(data.task ? [data.task] : []);
+      setCurrentWorkflowRun(data.workflow_run || null);
+      window.dispatchEvent(new CustomEvent('mh:assets-updated', {
+        detail: {
+          projectId: project.id,
+          workflowRunId: data.workflow_run?.id,
+          assetIds: Array.isArray(data.workflow_run?.summary?.asset_ids) ? data.workflow_run.summary.asset_ids : [],
+        },
+      }));
+      triggerToast('AI 修改已应用，并已从该节点向后重跑', 'success');
+    } catch (err) {
+      triggerToast(`AI 修改失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error');
+    } finally {
+      setAiEditLoading(false);
+      if (runAfter) setLoadingState('idle');
+    }
   };
 
   // --- UI Event Handlers ---
 
   const addNode = useCallback((type: NodeType, label: string, extraConfig?: Record<string, unknown>) => {
     if (readOnly) return;
+    if (isNodeLocked(type)) {
+      openWorkflowProGate();
+      return;
+    }
     markHistory('新增节点');
     markDirty();
     idCounterRef.current += 1;
@@ -483,10 +584,52 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     const cy = -vp.y / vp.zoom + 300 / vp.zoom;
     const ox = ((idCounterRef.current * 37) % 80) - 40;
     const oy = ((idCounterRef.current * 53) % 80) - 40;
-    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 260, height: preset?.height || 200, status: 'idle', config: { ...defaultNodeConfig(type, brandContext), ...(extraConfig || {}) }, output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
+    const wfNode: WorkflowNode = { id, type, label, x: cx + ox, y: cy + oy, width: preset?.width || 320, height: preset?.height || 360, status: 'idle', config: { ...defaultNodeConfig(type, brandContext), ...(extraConfig || {}) }, output: {}, input_schema: ioSchema[type].input, output_schema: ioSchema[type].output };
     setRfNodes((prev) => [...prev, wfToRF(wfNode)]);
     setSelectedNodeId(id); setSelectedNodeIds([id]);
-  }, [readOnly, brandContext, markHistory, markDirty, getViewport, setRfNodes]);
+  }, [readOnly, isNodeLocked, openWorkflowProGate, brandContext, markHistory, markDirty, getViewport, setRfNodes]);
+
+  const createAssetGroupNode = useCallback((payload?: WorkflowAssetDragPayload, position?: { x: number; y: number }) => {
+    if (readOnly) return;
+    if (isNodeLocked('retrieval')) {
+      openWorkflowProGate();
+      return;
+    }
+    markHistory('新增素材组');
+    markDirty();
+    idCounterRef.current += 1;
+    const id = `retrieval-asset-${idCounterRef.current}`;
+    const vp = getViewport();
+    const x = position?.x ?? (-vp.x / vp.zoom + window.innerWidth / 2 / vp.zoom);
+    const y = position?.y ?? (-vp.y / vp.zoom + 260 / vp.zoom);
+    const referenceUrls = payload?.source_url ? [payload.source_url] : [];
+    const assetIds = payload?.asset_id ? [payload.asset_id] : [];
+    const label = payload ? `素材组 · ${payload.title}` : '素材组';
+    const wfNode: WorkflowNode = {
+      id,
+      type: 'retrieval',
+      label,
+      x,
+      y,
+      width: 320,
+      height: 360,
+      status: 'idle',
+      config: {
+        ...defaultNodeConfig('retrieval', brandContext),
+        query: payload?.title || brandContext.campaign_goal || '',
+        asset_ids: assetIds,
+        reference_urls: referenceUrls,
+      },
+      output: {},
+      input_schema: ioSchema.retrieval.input,
+      output_schema: ioSchema.retrieval.output,
+    };
+    setRfNodes((prev) => [...prev, wfToRF(wfNode)]);
+    setSelectedNodeId(id);
+    setSelectedNodeIds([id]);
+    setDetailNodeId(id);
+    setDetailMode('edit');
+  }, [brandContext, getViewport, isNodeLocked, markDirty, markHistory, openWorkflowProGate, readOnly, setRfNodes]);
 
   const updateNode = useCallback((id: string, patch: Partial<WorkflowNode>) => {
     if (readOnly) return;
@@ -510,16 +653,39 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     }));
   }, [readOnly, debouncedMarkHistory, markDirty, setRfNodes]);
 
+  const appendAssetToNode = useCallback((nodeId: string, payload: WorkflowAssetDragPayload) => {
+    const node = nodes.find((item) => item.id === nodeId);
+    if (!node || readOnly) return;
+    const currentAssetIds = Array.isArray(node.config.asset_ids) ? node.config.asset_ids.filter((id): id is number => typeof id === 'number') : [];
+    const currentReferenceUrls = Array.isArray(node.config.reference_urls) ? node.config.reference_urls.filter((url): url is string => typeof url === 'string') : [];
+    const asset_ids = payload.asset_id && !currentAssetIds.includes(payload.asset_id)
+      ? [...currentAssetIds, payload.asset_id]
+      : currentAssetIds;
+    const reference_urls = payload.source_url && !currentReferenceUrls.includes(payload.source_url)
+      ? [...currentReferenceUrls, payload.source_url]
+      : currentReferenceUrls;
+    updateNode(nodeId, {
+      config: {
+        ...node.config,
+        asset_ids,
+        reference_urls,
+        query: node.config.query || payload.title,
+      },
+    });
+    triggerToast(`已把「${payload.title}」添加到 ${node.label}`, 'success');
+  }, [nodes, readOnly, triggerToast, updateNode]);
+
   const selectNode = useCallback((id: string) => {
     setSelectedNodeId(id);
     setSelectedNodeIds([id]);
     setRfNodes((prev) => prev.map((n) => ({ ...n, selected: n.id === id })));
   }, [setRfNodes]);
 
-  const updateSelectedConfig = useCallback((key: string, value: string | number) => {
-    if (!selectedNode || readOnly) return;
-    updateNode(selectedNode.id, { config: { ...selectedNode.config, [key]: value } });
-  }, [selectedNode, readOnly, updateNode]);
+  const openNodeDetail = useCallback((id: string, mode: 'edit' | 'ai' = 'edit') => {
+    selectNode(id);
+    setDetailNodeId(id);
+    setDetailMode(mode);
+  }, [selectNode]);
 
   const clearNodeSelection = useCallback(() => {
     setSelectedNodeId('');
@@ -534,7 +700,8 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     setRfNodes((prev) => prev.filter((n) => n.id !== selectedNode.id));
     setRfEdges((prev) => prev.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
     setSelectedNodeId(''); setSelectedNodeIds([]);
-  }, [selectedNode, readOnly, markHistory, markDirty, setRfNodes, setRfEdges]);
+    if (detailNodeId === selectedNode.id) setDetailNodeId('');
+  }, [selectedNode, readOnly, markHistory, markDirty, setRfNodes, setRfEdges, detailNodeId]);
 
   const connectToNode = useCallback((targetId: string) => {
     if (readOnly || !connectionSource || connectionSource === targetId) return;
@@ -616,6 +783,40 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
     triggerToast('已粘贴节点', 'success');
   }, [readOnly, markHistory, markDirty, getViewport, setRfNodes, setRfEdges, triggerToast]);
 
+  const parseAssetDrop = useCallback((event: DragEvent): WorkflowAssetDragPayload | null => {
+    const raw = event.dataTransfer.getData(WORKFLOW_ASSET_DRAG_TYPE);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as WorkflowAssetDragPayload;
+      if (!parsed.asset_id || !parsed.title) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const handleWorkflowDragOver = useCallback((event: DragEvent) => {
+    if (event.dataTransfer.types.includes(WORKFLOW_ASSET_DRAG_TYPE)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const handleWorkflowDrop = useCallback((event: DragEvent) => {
+    const payload = parseAssetDrop(event);
+    if (!payload || readOnly) return;
+    event.preventDefault();
+    const target = event.target instanceof HTMLElement ? event.target.closest('[data-workflow-node-id]') : null;
+    const targetNodeId = target?.getAttribute('data-workflow-node-id') || '';
+    if (targetNodeId) {
+      appendAssetToNode(targetNodeId, payload);
+      return;
+    }
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    createAssetGroupNode(payload, position);
+    triggerToast(`已创建素材组：${payload.title}`, 'success');
+  }, [appendAssetToNode, createAssetGroupNode, parseAssetDrop, readOnly, screenToFlowPosition, triggerToast]);
+
   const createReadOnlyShare = useCallback(async () => {
     const url = new URL(window.location.href);
     url.searchParams.set('share', 'readonly');
@@ -638,8 +839,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const handlePreflightAction = useCallback((issue: WorkflowReadinessIssue) => {
     if (issue.action === 'select_node' && issue.nodeId) {
       setPreflightOpen(false);
-      selectNode(issue.nodeId);
-      setPropertyPanelOpen(true);
+      openNodeDetail(issue.nodeId, 'edit');
       return;
     }
     if (issue.action === 'add_review') {
@@ -657,7 +857,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       window.dispatchEvent(new CustomEvent('mh:open-project-brand-memory', { detail: { projectId: project?.id } }));
       triggerToast('请到「我的项目」打开当前项目检查器，补齐品牌记忆后再运行。', 'info');
     }
-  }, [addNode, project?.id, selectNode, tidyLayout, triggerToast]);
+  }, [addNode, project?.id, openNodeDetail, tidyLayout, triggerToast]);
 
   const saveCustomAgent = useCallback((form: CustomAgentForm) => {
     const { name, ...rest } = form;
@@ -699,9 +899,11 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
   const setConnectionSourceRef = useRef(setConnectionSource);
   const setContextMenuRef = useRef(setContextMenu);
   const setSelectedNodeIdRef = useRef(setSelectedNodeId);
+  const openNodeDetailRef = useRef(openNodeDetail);
   useEffect(() => { setConnectionSourceRef.current = setConnectionSource; }, [setConnectionSource]);
   useEffect(() => { setContextMenuRef.current = setContextMenu; }, [setContextMenu]);
   useEffect(() => { setSelectedNodeIdRef.current = setSelectedNodeId; }, [setSelectedNodeId]);
+  useEffect(() => { openNodeDetailRef.current = openNodeDetail; }, [openNodeDetail]);
 
   const rfNodesWithMeta = useMemo(() => rfNodes.map((n) => ({
     ...n,
@@ -720,6 +922,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
         setSelectedNodeIdRef.current(id);
         setContextMenuRef.current({ nodeId: id, x, y });
       },
+      onOpenDetails: (id: string, mode?: 'edit' | 'ai') => openNodeDetailRef.current(id, mode || 'edit'),
     },
   })), [rfNodes, connectionSource, readOnly, nodes]);
 
@@ -735,23 +938,36 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
       return {
         ...edge,
         animated: true,
-        style: { ...(edge.style || {}), stroke: '#2563eb', strokeWidth: 3 },
+        style: { ...(edge.style || {}), stroke: 'var(--editorial-accent-blue)', strokeWidth: 3.2 },
       };
     }
     if (!isFlowing) return edge;
     return {
       ...edge,
       animated: true,
-      style: { ...(edge.style || {}), stroke: '#2563eb', strokeWidth: 2.5 },
+      style: { ...(edge.style || {}), stroke: 'var(--editorial-accent-blue)', strokeWidth: 2.8 },
     };
   }), [rfEdges, highlightedEdgeId, loadingState, nodes]);
 
   if (!project) return <div className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-8 shadow-editorial text-xs font-mono text-[var(--editorial-text-gray)]">请先在项目库选择当前项目。</div>;
-  const primaryPresets = presets.filter((item) => ['context', 'copy', 'image_prompt', 'review'].includes(item.type));
+  const primaryPresets = presets.filter((item) => ['retrieval', 'copy', 'image_prompt', 'image_generation'].includes(item.type));
   const secondaryPresets = presets.filter((item) => !primaryPresets.some((primary) => primary.type === item.type));
 
   return (
-    <div className="space-y-5 font-mono min-w-0">
+    <div className="font-mono min-w-0">
+      <div className="workflow-module-layout min-w-0">
+        <WorkflowAssetPanel
+          organizationSlug={organizationSlug}
+          open={workflowDockOpen}
+          activeTab={workflowDockTab}
+          globalAiInstruction={globalAiInstruction}
+          globalAiLoading={aiEditLoading}
+          onToggleOpen={() => setWorkflowDockOpen((value) => !value)}
+          onTabChange={setWorkflowDockTab}
+          onGlobalAiInstructionChange={setGlobalAiInstruction}
+          onApplyGlobalAi={() => { void applyAiEdit('workflow', '', globalAiInstruction, false); }}
+          onAddAssetGroup={() => createAssetGroupNode()}
+        />
       <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial overflow-hidden min-w-0">
         <WorkflowBuilderToolbar
           projectName={projectDetail?.name || project.name}
@@ -766,6 +982,10 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
           futureLength={future.length}
           primaryPresets={primaryPresets}
           secondaryPresets={secondaryPresets}
+          canRunWorkflow={canRunWorkflow}
+          canCreateCustomAgent={canCreateCustomAgent}
+          isNodeLocked={isNodeLocked}
+          onLockedFeature={openWorkflowProGate}
           onAddNode={addNode}
           onCreateCustomAgent={() => setShowCustomAgent(true)}
           onUndo={undo}
@@ -782,8 +1002,12 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
         />
 
         {/* Canvas + Sidebar */}
-        <div className={`grid grid-cols-1 ${propertyPanelOpen ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''} min-w-0`}>
-          <div className="relative h-[calc(100vh-260px)] min-h-[400px] min-w-0 bg-[var(--editorial-bg)]">
+        <div className={`workflow-workbench grid grid-cols-1 ${propertyPanelOpen ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''} min-w-0`}>
+          <div
+            className="relative h-[calc(100vh-260px)] min-h-[400px] min-w-0 bg-[var(--editorial-bg)]"
+            onDragOver={handleWorkflowDragOver}
+            onDrop={handleWorkflowDrop}
+          >
             {showHandoffBanner && (
               <WorkflowHandoffBanner
                 onRun={() => { setShowHandoffBanner(false); runWorkflow(); }}
@@ -807,25 +1031,28 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
               nodes={rfNodesWithMeta}
               edges={renderedEdges}
               readOnly={readOnly}
-              selectedNode={selectedNode}
-              feedback={feedback}
-              loadingState={loadingState}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}
               isValidConnection={isValidConnection}
               onSelectionChange={handleSelectionChange}
-              onNodeClick={(nodeId) => { setContextMenu(null); if (connectionSource && connectionSource !== nodeId) connectToNode(nodeId); else selectNode(nodeId); }}
+              onNodeClick={(nodeId) => { setContextMenu(null); if (connectionSource && connectionSource !== nodeId) connectToNode(nodeId); else openNodeDetail(nodeId, 'ai'); }}
               onPaneClick={() => { setContextMenu(null); setEdgeContextMenu(null); clearNodeSelection(); }}
               onEdgeContextMenu={(edgeId, x, y) => setEdgeContextMenu({ edgeId, x, y })}
               onNodeDragStart={() => { if (!readOnly) dragSnapshotRef.current = makeSnapshot('拖拽节点'); }}
               onNodeDragStop={() => { if (dragSnapshotRef.current) { pushSnapshot(dragSnapshotRef.current); dragSnapshotRef.current = null; } }}
-              onUpdateNode={updateNode}
-              onUpdateConfig={updateSelectedConfig}
-              onSetFeedback={setFeedback}
-              onRetryNode={retryNode}
-              onRemoveNode={removeSelectedNode}
-              onCloseNode={clearNodeSelection}
+            />
+            <WorkflowFloatingRunBar
+              nodes={nodes}
+              readOnly={readOnly}
+              saveStatus={saveStatus}
+              loadingState={loadingState}
+              canRunWorkflow={canRunWorkflow}
+              currentWorkflowRun={currentWorkflowRun}
+              onRunWorkflow={runWorkflow}
+              onLockedFeature={openWorkflowProGate}
+              onSave={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'))}
+              onTidyLayout={tidyLayout}
             />
           </div>
           {propertyPanelOpen && (
@@ -846,6 +1073,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
           )}
         </div>
       </section>
+      </div>
 
       <WorkflowBuilderContextMenus
         contextMenu={contextMenu}
@@ -864,8 +1092,9 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
             const nn: WorkflowNode = { ...src, id: newId, label: `${src.label} (副本)`, x: src.x + 40, y: src.y + 40, config: { ...src.config }, output: {}, status: 'idle' };
             setRfNodes((prev) => [...prev, wfToRF(nn)]);
             setSelectedNodeId(newId);
+            setDetailNodeId(newId);
         }}
-        onConfigureNode={(id) => { selectNode(id); setPropertyPanelOpen(true); }}
+        onConfigureNode={(id) => { openNodeDetail(id, 'edit'); }}
         onCopyNodeDiagnostics={copyNodeDiagnostics}
         onRecoverFromNode={(id) => { void recoverFromNode(id); }}
         onDeleteNode={(id) => {
@@ -874,6 +1103,7 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
             setRfNodes((prev) => prev.filter((n) => n.id !== id));
             setRfEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
             if (selectedNodeId === id) { setSelectedNodeId(''); setSelectedNodeIds([]); }
+            if (detailNodeId === id) setDetailNodeId('');
         }}
         onDeleteEdge={(edgeId) => {
           if (!readOnly) {
@@ -899,6 +1129,19 @@ export function WorkflowBuilder({ project, campaign, username, triggerToast }: W
           void executeWorkflow();
         }}
         onIssueAction={handlePreflightAction}
+      />
+
+      <WorkflowNodeDetailDialog
+        key={`${detailNodeId}-${detailMode}`}
+        node={detailNode}
+        mode={detailMode}
+        readOnly={readOnly}
+        loadingState={loadingState}
+        onClose={() => setDetailNodeId('')}
+        onUpdateNode={updateNode}
+        onCopyNodeDiagnostics={copyNodeDiagnostics}
+        onApplyAiEdit={(id, instruction, runAfter) => { void applyAiEdit('node', id, instruction, runAfter); }}
+        onRemoveNode={removeSelectedNode}
       />
 
       {showCustomAgent && (
