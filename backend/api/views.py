@@ -15,6 +15,7 @@ from generation.views import (
     StoryboardView,
     TaskDetailView,
     TaskQueueView,
+    WorkflowAiEditView,
     WorkflowNodeRetryView,
     WorkflowRunView,
 )
@@ -56,6 +57,7 @@ __all__ = [
     'StoryboardView',
     'TaskDetailView',
     'TaskQueueView',
+    'WorkflowAiEditView',
     'WorkflowNodeRetryView',
     'WorkflowRunView',
     'WorkflowTemplateCollectionView',

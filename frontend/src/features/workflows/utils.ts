@@ -25,6 +25,14 @@ export type NodeOutputDisplay =
   | { kind: 'audio'; text: string; audioUrl: string }
   | { kind: 'review'; text: string; issueCount: number; score?: string };
 
+export type WorkflowPreviewItem = {
+  id: string;
+  kind: 'image' | 'video' | 'audio' | 'text' | 'asset';
+  label: string;
+  url?: string;
+  text?: string;
+};
+
 function unwrapOutput(output?: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!output) return output;
   const data = output.data;
@@ -44,6 +52,34 @@ function findString(output: Record<string, unknown>, keys: string[]): string {
     }
   }
   return '';
+}
+
+function findStrings(output: Record<string, unknown> | undefined, keys: string[], limit = 8): string[] {
+  if (!output) return [];
+  const found: string[] = [];
+  const visit = (value: unknown) => {
+    if (found.length >= limit) return;
+    if (typeof value === 'string' && value.trim()) {
+      found.push(value.trim());
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const key of keys) {
+        if (record[key] != null) visit(record[key]);
+      }
+      for (const nested of Object.values(record)) {
+        if (found.length >= limit) break;
+        if (nested && typeof nested === 'object') visit(nested);
+      }
+    }
+  };
+  for (const key of keys) visit(output[key]);
+  return [...new Set(found)].slice(0, limit);
 }
 
 function pickOutputText(output: Record<string, unknown>): string | null {
@@ -140,6 +176,67 @@ export function resolveNodeOutputDisplay(
     if (compact.length > 2) return { kind: 'text', text: compact.slice(0, 240) };
   }
   return { kind: 'empty', text: '运行后在此显示结果' };
+}
+
+export function buildWorkflowPreviewItems(
+  output?: Record<string, unknown>,
+  config?: Record<string, unknown>,
+): WorkflowPreviewItem[] {
+  const resolved = unwrapOutput(output);
+  const items: WorkflowPreviewItem[] = [];
+  const add = (item: WorkflowPreviewItem) => {
+    if (items.some((existing) => existing.kind === item.kind && existing.url === item.url && existing.text === item.text)) return;
+    items.push(item);
+  };
+
+  findStrings(resolved, ['image_url', 'source_url', 'thumbnail_url', 'poster_url', 'url'], 6).forEach((url, index) => {
+    const lower = url.toLowerCase();
+    if (lower.match(/\.(mp4|mov|webm)(\?|$)/)) return;
+    if (lower.match(/\.(mp3|wav|m4a|ogg)(\?|$)/)) return;
+    add({ id: `image-${index}-${url}`, kind: 'image', label: `图片 ${index + 1}`, url });
+  });
+
+  findStrings(resolved, ['video_url'], 4).forEach((url, index) => {
+    add({ id: `video-${index}-${url}`, kind: 'video', label: `视频 ${index + 1}`, url });
+  });
+
+  findStrings(resolved, ['audio_url'], 4).forEach((url, index) => {
+    add({ id: `audio-${index}-${url}`, kind: 'audio', label: `音频 ${index + 1}`, url });
+  });
+
+  const referenceUrls = Array.isArray(config?.reference_urls)
+    ? config.reference_urls.filter((url): url is string => typeof url === 'string' && !!url.trim())
+    : [];
+  referenceUrls.slice(0, 8).forEach((url, index) => {
+    add({ id: `reference-${index}-${url}`, kind: 'image', label: `参考 ${index + 1}`, url: url.trim() });
+  });
+
+  const assetIds = Array.isArray(config?.asset_ids)
+    ? config.asset_ids.filter((id): id is number => typeof id === 'number')
+    : [];
+  assetIds.slice(0, 8).forEach((id) => {
+    add({ id: `asset-${id}`, kind: 'asset', label: `Asset #${id}` });
+  });
+
+  const display = resolveNodeOutputDisplay(output);
+  if (items.length === 0 && display.kind === 'copy') {
+    add({ id: 'copy-output', kind: 'text', label: display.title || '文案', text: display.body });
+  } else if (items.length === 0 && display.kind === 'text') {
+    add({ id: 'text-output', kind: 'text', label: '文本', text: display.text });
+  } else if (items.length === 0 && display.kind === 'review') {
+    add({ id: 'review-output', kind: 'text', label: '审阅', text: display.text });
+  }
+
+  return items.slice(0, 8);
+}
+
+export function workflowNodeRunStepLabel(status?: string) {
+  if (status === 'running') return '正在生成';
+  if (status === 'queued') return '等待上游';
+  if (status === 'succeeded') return '已完成';
+  if (status === 'failed') return '需要处理';
+  if (status === 'skipped') return '已跳过';
+  return '待配置';
 }
 
 export function summarizeOutput(output?: Record<string, unknown>) {

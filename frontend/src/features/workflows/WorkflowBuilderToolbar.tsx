@@ -62,6 +62,10 @@ interface WorkflowBuilderToolbarProps {
   futureLength: number;
   primaryPresets: WorkflowPreset[];
   secondaryPresets: WorkflowPreset[];
+  canRunWorkflow: boolean;
+  canCreateCustomAgent: boolean;
+  isNodeLocked: (type: NodeType) => boolean;
+  onLockedFeature: () => void;
   onAddNode: (type: NodeType, label: string) => void;
   onCreateCustomAgent: () => void;
   onUndo: () => void;
@@ -90,6 +94,10 @@ export function WorkflowBuilderToolbar({
   futureLength,
   primaryPresets,
   secondaryPresets,
+  canRunWorkflow,
+  canCreateCustomAgent,
+  isNodeLocked,
+  onLockedFeature,
   onAddNode,
   onCreateCustomAgent,
   onUndo,
@@ -118,9 +126,17 @@ export function WorkflowBuilderToolbar({
         <div className="flex flex-wrap items-center gap-2 max-w-full">
           {primaryPresets.map((item) => {
             const Icon = item.icon;
+            const locked = isNodeLocked(item.type);
             return (
-              <button key={item.type} type="button" disabled={readOnly} onClick={() => onAddNode(item.type, item.label)} className={toolbarButtonClass}>
-                <Icon className="h-3.5 w-3.5" />{item.label}
+              <button
+                key={item.type}
+                type="button"
+                disabled={readOnly}
+                onClick={() => locked ? onLockedFeature() : onAddNode(item.type, item.label)}
+                className={toolbarButtonClass}
+                title={locked ? 'Pro 节点' : undefined}
+              >
+                {locked ? <Lock className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}{item.label}
               </button>
             );
           })}
@@ -129,7 +145,10 @@ export function WorkflowBuilderToolbar({
             defaultValue=""
             onChange={(e) => {
               const item = secondaryPresets.find((preset) => preset.type === e.target.value);
-              if (item) onAddNode(item.type, item.label);
+              if (item) {
+                if (isNodeLocked(item.type)) onLockedFeature();
+                else onAddNode(item.type, item.label);
+              }
               e.currentTarget.value = '';
             }}
             className={`${toolbarButtonClass} appearance-none pr-7`}
@@ -137,11 +156,17 @@ export function WorkflowBuilderToolbar({
           >
             <option value="">+ 节点</option>
             {secondaryPresets.map((item) => (
-              <option key={item.type} value={item.type}>{item.label}</option>
+              <option key={item.type} value={item.type} disabled={isNodeLocked(item.type)}>{isNodeLocked(item.type) ? `${item.label} · Pro` : item.label}</option>
             ))}
           </select>
-          <button type="button" disabled={readOnly} onClick={onCreateCustomAgent} className={toolbarButtonClass}>
-            <Plus className="h-3.5 w-3.5" />新建智能体
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={canCreateCustomAgent ? onCreateCustomAgent : onLockedFeature}
+            className={toolbarButtonClass}
+            title={canCreateCustomAgent ? undefined : 'Pro 智能体'}
+          >
+            {canCreateCustomAgent ? <Plus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}新建智能体
           </button>
         </div>
       </div>
@@ -161,9 +186,9 @@ export function WorkflowBuilderToolbar({
           <button type="button" onClick={onTidyLayout} disabled={readOnly} className={toolbarButtonClass}>
             <LayoutDashboard className="h-3.5 w-3.5" />整理布局
           </button>
-          <button type="button" onClick={onRunWorkflow} disabled={loadingState !== 'idle' || readOnly} className={toolbarPrimaryClass}>
-            <Play className="h-4 w-4" />
-            {loadingState === 'running' ? '执行中...' : loadingState === 'retrying' ? '重试中...' : '运行工作流'}
+          <button type="button" onClick={canRunWorkflow ? onRunWorkflow : onLockedFeature} disabled={loadingState !== 'idle' || readOnly} className={toolbarPrimaryClass}>
+            {canRunWorkflow ? <Play className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            {canRunWorkflow ? (loadingState === 'running' ? '执行中...' : loadingState === 'retrying' ? '重试中...' : '运行工作流') : 'Pro 运行'}
           </button>
           <span className="h-9 inline-flex items-center gap-1.5 text-[9px] text-[var(--editorial-text-gray)] border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 leading-none">
             <span className={`h-1.5 w-1.5 rounded-full ${draftStatus === 'completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />

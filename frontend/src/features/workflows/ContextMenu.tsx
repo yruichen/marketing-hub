@@ -48,7 +48,7 @@ export function ContextMenu({
           className="w-full px-3 py-2 text-left text-[10px] font-bold hover:bg-[var(--editorial-unselected)] flex items-center gap-2"
           onClick={() => { onConfigure(nodeId); onClose(); }}
         >
-          <RotateCcw className="h-3.5 w-3.5" /> 重试节点
+        <RotateCcw className="h-3.5 w-3.5" /> 查看失败 / 重试
         </button>
       )}
       <button
@@ -71,7 +71,7 @@ export function ContextMenu({
         className="w-full px-3 py-2 text-left text-[10px] font-bold hover:bg-[var(--editorial-unselected)] flex items-center gap-2"
         onClick={() => { onConfigure(nodeId); onClose(); }}
       >
-        <Settings2 className="h-3.5 w-3.5" /> 配置节点
+        <Settings2 className="h-3.5 w-3.5" /> 打开详情
       </button>
       <div className="border-t border-[var(--editorial-stroke)] my-1" />
       <button

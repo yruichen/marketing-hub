@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { KeyRound, PlugZap, RefreshCw, Sparkles } from 'lucide-react';
+import { useEffect, type FormEvent } from 'react';
+import { KeyRound, Lock, PlugZap, RefreshCw, Sparkles } from 'lucide-react';
 import { useAiConfig } from './useAiConfig';
 import {
   providerDefaultScope,
@@ -9,20 +9,26 @@ import {
   configScopeLabels,
 } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
+import type { FeatureEntitlements } from '../../types/workspace';
 
 interface AiConfigPageProps {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
   triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
   onWorkspaceRefresh?: () => Promise<void>;
+  featureEntitlements?: Partial<FeatureEntitlements>;
+  onOpenBilling?: () => void;
 }
 
 export function AiConfigPage({
   workspaceScope,
   username,
   triggerToast,
-  onWorkspaceRefresh,
+  onWorkspaceRefresh: _onWorkspaceRefresh,
+  featureEntitlements,
+  onOpenBilling,
 }: AiConfigPageProps) {
+  void _onWorkspaceRefresh;
   const {
     aiConfigs,
     activeConfigForm,
@@ -36,7 +42,7 @@ export function AiConfigPage({
     fetchConfigs,
     handleFetchModels,
     handleSaveConfig,
-  } = useAiConfig({ workspaceScope, username, triggerToast, onWorkspaceRefresh });
+  } = useAiConfig({ workspaceScope, username, triggerToast });
 
   useEffect(() => {
     void fetchConfigs();
@@ -59,11 +65,32 @@ export function AiConfigPage({
   const textModelOptions = modelOptions.filter((model) => model.capabilities.includes('text'));
   const imageModelOptions = modelOptions.filter((model) => model.capabilities.includes('image'));
   const videoModelOptions = modelOptions.filter((model) => model.capabilities.includes('video'));
+  const canWriteAiConfig = featureEntitlements?.ai_config_write ?? true;
+  const canUseByok = featureEntitlements?.byok_config ?? canWriteAiConfig;
+  const openProGate = () => {
+    triggerToast('AI 设置和 BYOK 配置需要 Pro。', 'info');
+    onOpenBilling?.();
+  };
+  const submitConfig = (event: FormEvent) => {
+    if (!canWriteAiConfig) {
+      event.preventDefault();
+      openProGate();
+      return;
+    }
+    void handleSaveConfig(event);
+  };
+  const fetchModels = () => {
+    if (!canWriteAiConfig) {
+      openProGate();
+      return;
+    }
+    void handleFetchModels();
+  };
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-5 overflow-hidden font-mono xl:grid-cols-[minmax(0,1fr)_360px]">
       <form
-        onSubmit={handleSaveConfig}
+        onSubmit={submitConfig}
         className="min-h-0 overflow-y-auto rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-panel)]"
       >
         <div className="mb-5 flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
@@ -78,6 +105,16 @@ export function AiConfigPage({
           </div>
           <Sparkles className="h-6 w-6 shrink-0 text-[var(--brand-accent-strong)]" />
         </div>
+
+        {!canWriteAiConfig ? (
+          <div className="mb-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4 text-xs leading-6 text-[var(--editorial-text-gray)]">
+            <span className="mb-1 flex items-center gap-2 font-black text-[var(--editorial-text)]">
+              <Lock className="h-3.5 w-3.5" />
+              Pro AI Gateway
+            </span>
+            免费用户使用平台默认模型；自定义 Provider、获取模型列表、BYOK 和激活配置需要 Pro。
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">
@@ -130,7 +167,13 @@ export function AiConfigPage({
             <button
               key={mode.id}
               type="button"
-              onClick={() => setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id })}
+              onClick={() => {
+                if (mode.id === 'byok' && !canUseByok) {
+                  openProGate();
+                  return;
+                }
+                setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id });
+              }}
               className={`rounded-2xl border px-3 py-3 text-left transition-all ${
                 activeConfigForm.billing_mode === mode.id
                   ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)] text-[var(--editorial-text)]'
@@ -177,12 +220,12 @@ export function AiConfigPage({
             </label>
             <button
               type="button"
-              onClick={handleFetchModels}
+              onClick={fetchModels}
               disabled={fetchingModels}
               className="mt-5 inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[var(--editorial-stroke)] bg-[var(--brand-accent)] px-3 text-[10px] font-black uppercase tracking-wider text-black shadow-editorial-sm disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${fetchingModels ? 'animate-spin' : ''}`} />
-              获取模型
+              {canWriteAiConfig ? <RefreshCw className={`h-3.5 w-3.5 ${fetchingModels ? 'animate-spin' : ''}`} /> : <Lock className="h-3.5 w-3.5" />}
+              {canWriteAiConfig ? '获取模型' : 'Pro 获取'}
             </button>
           </div>
 
@@ -268,7 +311,8 @@ export function AiConfigPage({
           className="btn-editorial-primary mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black uppercase tracking-wider"
         >
           {loading ? <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : null}
-          保存并激活配置
+          {!loading && !canWriteAiConfig ? <Lock className="h-3.5 w-3.5" /> : null}
+          {canWriteAiConfig ? '保存并激活配置' : '升级 Pro 后配置'}
         </button>
       </form>
 

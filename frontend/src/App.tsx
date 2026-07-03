@@ -25,7 +25,7 @@ import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
 import { AssetsLibrary } from './features/assets';
 import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from './features/generation';
-import { taskTypeLabels, type CreationContent } from './features/generation';
+import { taskTypeLabels, type CreationContent, type StoryboardOutput } from './features/generation';
 import { ContentPackagePanel, buildContentPackage, buildContentPackageRequest } from './features/content-package';
 import type { ContentPackage } from './features/generation';
 import { CommunityPage } from './features/community';
@@ -258,7 +258,8 @@ export default function App() {
   const isLegalRoute = location.pathname.startsWith('/legal/');
   const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
   const activeTab = routeSynced ? activeSection : routeSection;
-  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !sidebarCollapsed;
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
+  const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed;
   const rightPanelAvailable = activeTab !== 'builder';
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
@@ -277,6 +278,7 @@ export default function App() {
     );
   });
   const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>('AI 初稿');
+  const [latestStoryboardOutput, setLatestStoryboardOutput] = useState<StoryboardOutput | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [apiLive, setApiLive] = useState(false);
@@ -289,9 +291,6 @@ export default function App() {
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
     navigate(pathForSection(tab));
-    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
-      setSidebarCollapsed(true);
-    }
   }, [navigate, setActiveSection]);
 
   // Workspace & dashboard state (shared across panels)
@@ -771,21 +770,47 @@ export default function App() {
     triggerToast('已成功退出登录', 'info');
   };
 
-  const handleSelectPlan = useCallback(async (plan: 'free' | 'pro' | 'enterprise') => {
+  const handleRedeemProInvite = useCallback(async (code: string) => {
     setLoading(true);
     try {
-      const res = await apiFetch('/billing/plans/', {
+      const res = await apiFetch('/billing/redeem-pro-invite/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username || DEMO_USERNAME, plan }),
+        body: JSON.stringify({ username: username || DEMO_USERNAME, code }),
       });
-      if (!res.ok) throw new Error('Plan update failed');
-      const data: BillingPlanResponse = await res.json();
-      setBillingPlans(data);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invite redeem failed');
+      setBillingPlans(data as BillingPlanResponse);
       await fetchWorkspaceBootstrap();
-      triggerToast('订阅方案已更新', 'success');
-    } catch {
-      triggerToast('订阅方案更新失败', 'error');
+      triggerToast('Pro 邀请码兑换成功', 'success');
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : '邀请码兑换失败', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [username, triggerToast, fetchWorkspaceBootstrap]);
+
+  const handleSubmitEnterpriseRequest = useCallback(async (payload: {
+    company_name: string;
+    contact_name: string;
+    contact_email: string;
+    contact_phone: string;
+    team_size: string;
+    requirements: string;
+  }) => {
+    setLoading(true);
+    try {
+      const res = await apiFetch('/billing/enterprise-requests/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username || DEMO_USERNAME, ...payload }),
+      });
+      const data: BillingPlanResponse = await res.json();
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'Enterprise request failed');
+      setBillingPlans(data);
+      triggerToast('企业定制需求已提交', 'success');
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : '企业定制提交失败', 'error');
     } finally {
       setLoading(false);
     }
@@ -801,9 +826,6 @@ export default function App() {
     setActiveSection('profile');
     const target = targetUsername?.trim();
     navigate(target ? `/profile/${encodeURIComponent(target)}` : '/profile');
-    if (typeof window !== 'undefined' && window.innerWidth < 1280) {
-      setSidebarCollapsed(true);
-    }
   }, [navigate, setActiveSection]);
 
   const handleGlobalSearchSelect = useCallback(async (result: GlobalSearchResult) => {
@@ -1141,11 +1163,11 @@ export default function App() {
       )}
 
       {/* 左侧导航 */}
-      <div className={`app-sidebar-shell ${sidebarOpen ? 'app-sidebar-shell--open' : ''}`}>
+      <div className={`app-sidebar-shell ${sidebarOpen ? 'app-sidebar-shell--open' : ''} ${sidebarIconOnly ? 'app-sidebar-shell--collapsed' : ''}`}>
         {activeTab !== 'brainstorm' && (
           <button
             type="button"
-            className={`app-sidebar-scrim xl:hidden ${sidebarOpen ? 'app-sidebar-scrim--open' : ''}`}
+            className={`app-sidebar-scrim xl:hidden ${sidebarOpen && !sidebarIconOnly ? 'app-sidebar-scrim--open' : ''}`}
             onClick={() => setSidebarCollapsed(true)}
             aria-label="关闭侧栏遮罩"
           />
@@ -1157,6 +1179,7 @@ export default function App() {
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           username={username}
           isSuperuser={!!authUser?.is_superuser}
+          collapsed={sidebarIconOnly}
           onOpenProfile={() => handleOpenProfile()}
           onLogout={handleLogout}
           className="app-sidebar-shell__panel"
@@ -1164,7 +1187,7 @@ export default function App() {
       </div>
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`app-main-shell ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
+      <main ref={mainRef} className={`app-main-shell ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} ${sidebarIconOnly ? 'app-main-shell--sidebar-collapsed' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
@@ -1174,19 +1197,21 @@ export default function App() {
                 type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
                 className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
-                title={sidebarOpen ? '收起侧栏' : '展开侧栏'}
-                aria-label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
+                title={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
+                aria-label={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
               >
                 <Menu className="h-4 w-4" />
               </button>
 
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <h2 className="text-sm md:text-base font-bold text-[var(--editorial-text)] serif-header whitespace-nowrap shrink-0">
-                  {TAB_META[activeTab]?.title || '工作台'}
-                </h2>
-                <span className="hidden md:inline text-[10px] text-[var(--editorial-text-gray)] truncate min-w-0">
-                  {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
-                </span>
+                <div className="min-w-0">
+                  <h2 className="text-sm md:text-base font-bold text-[var(--editorial-text)] serif-header whitespace-nowrap">
+                    {TAB_META[activeTab]?.title || '工作台'}
+                  </h2>
+                  <span className="hidden md:block text-[10px] text-[var(--editorial-text-gray)] truncate min-w-0">
+                    {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
@@ -1245,18 +1270,26 @@ export default function App() {
               </div>
             </div>
             <div className="flex min-w-0 items-center justify-between gap-3 pb-2 text-[9px] font-bold font-mono">
-              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pr-2">
-                <span className="h-6 shrink-0 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 flex items-center gap-1">
-                  <BriefcaseBusiness className="h-3 w-3" />
-                  {workspaceScope?.organization.name || 'Marketing Hub'}
-                </span>
-                <span className="shrink-0 text-[var(--editorial-text-gray)]">/</span>
-                <span className="h-6 max-w-[220px] shrink-0 truncate rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 inline-flex items-center">
-                  {workspaceScope?.project.name || 'Core Launch'}
-                </span>
-                <span className="h-6 max-w-[200px] shrink-0 truncate rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 inline-flex items-center">
-                  {workspaceScope?.campaign.name || 'Product Launch'}
-                </span>
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden pr-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('projects')}
+                  className={`current-project-scope ${workspaceScope?.project ? 'current-project-scope--active' : 'current-project-scope--empty'}`}
+                  title={workspaceScope?.project ? `当前项目：${workspaceScope.project.name}` : '未选择项目，点击进入项目页选择'}
+                >
+                  <span className="current-project-scope__icon">
+                    <BriefcaseBusiness className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="current-project-scope__body">
+                    <span className="current-project-scope__label">当前项目</span>
+                    <strong>{workspaceScope?.project.name || '未选择项目'}</strong>
+                  </span>
+                  <span className="current-project-scope__meta">
+                    {workspaceScope?.organization.name || '未选择组织'}
+                    {workspaceScope?.campaign?.name ? ` / ${workspaceScope.campaign.name}` : ''}
+                  </span>
+                  <span className="current-project-scope__action">切换</span>
+                </button>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 text-[var(--editorial-text-gray)]">
                 <button
@@ -1319,8 +1352,11 @@ export default function App() {
                 <WorkflowBuilder
                   project={workspaceScope?.project || null}
                   campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
+                  organizationSlug={workspaceScope?.organization.slug}
                   username={username || DEMO_USERNAME}
                   triggerToast={triggerToast}
+                  featureEntitlements={billingPlans?.feature_entitlements}
+                  onOpenBilling={() => setActiveTab('billing')}
                 />
               </Suspense>
             )}
@@ -1424,6 +1460,7 @@ export default function App() {
                 triggerToast={triggerToast}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
+                onStoryboardChange={setLatestStoryboardOutput}
               />
             )}
 
@@ -1455,6 +1492,9 @@ export default function App() {
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
                 onShare={handleShareToCommunity}
+                latestStoryboard={latestStoryboardOutput}
+                featureEntitlements={billingPlans?.feature_entitlements}
+                onOpenBilling={() => setActiveTab('billing')}
               />
             )}
 
@@ -1492,7 +1532,8 @@ export default function App() {
             {activeTab === 'billing' && (
               <BillingPage
                 billingPlans={billingPlans}
-                onSelectPlan={handleSelectPlan}
+                onRedeemProInvite={handleRedeemProInvite}
+                onSubmitEnterpriseRequest={handleSubmitEnterpriseRequest}
               />
             )}
 
@@ -1509,6 +1550,8 @@ export default function App() {
                 username={username}
                 triggerToast={triggerToast}
                 onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
+                featureEntitlements={billingPlans?.feature_entitlements}
+                onOpenBilling={() => setActiveTab('billing')}
               />
             )}
           </div>

@@ -71,6 +71,8 @@ def _validate_payload(task_type: str, payload: dict[str, Any]) -> None:
     if task_type == 'audio' and len(str(payload.get('text') or '')) > 5000:
         raise ValidationError({'text': 'text must be 5000 characters or fewer.'})
     if task_type in {'storyboard', 'video'}:
+        if len(str(payload.get('script') or payload.get('prompt') or '')) > 12000:
+            raise ValidationError({'script': 'script or prompt must be 12000 characters or fewer.'})
         try:
             duration = int(payload.get('duration') or payload.get('duration_seconds') or 30)
         except (TypeError, ValueError):

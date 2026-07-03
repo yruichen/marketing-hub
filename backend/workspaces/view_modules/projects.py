@@ -18,7 +18,7 @@ from api.access import (
     require_role,
 )
 from api.audit import record_audit_log
-from api.contracts import PLAN_LIMITS
+from api.entitlements import effective_limits_for_scope
 from api.models import (
     Asset,
     Campaign,
@@ -159,7 +159,7 @@ class ProjectCollectionView(APIView):
         org = get_organization_for_member(request.user, slug=org_slug)
         require_role(request.user, org, 'creator')
 
-        plan = PLAN_LIMITS.get(org.subscription_plan, PLAN_LIMITS['free'])
+        plan = effective_limits_for_scope(request.user, org)
         active_project_count = Project.objects.filter(organization=org, is_archived=False).count()
         if active_project_count >= plan['project_limit']:
             return Response(

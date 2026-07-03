@@ -8,3 +8,4 @@ db.sqlite3
 .env
 .vscode/
 backend/db.sqlite3-journal
+tmp/

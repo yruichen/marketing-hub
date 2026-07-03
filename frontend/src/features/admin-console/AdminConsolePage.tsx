@@ -37,6 +37,9 @@ type AdminUser = {
   profile: {
     email_verified: boolean;
     status: 'pending' | 'active' | 'suspended' | 'deleted';
+    subscription_plan: 'free' | 'pro';
+    subscription_source: string;
+    subscription_expires_at: string | null;
     signup_source: string;
     signup_ip: string | null;
     last_login_ip: string | null;
@@ -92,6 +95,22 @@ type AdminInvite = {
   is_active: boolean;
   created_by: string;
   created_at: string;
+  plain_code?: string;
+  deactivated?: boolean;
+};
+
+type AdminEnterpriseRequest = {
+  id: number;
+  company_name: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  team_size: string;
+  requirements: string;
+  status: string;
+  username: string;
+  organization: string;
+  created_at: string;
 };
 
 type AdminConsolePageProps = {
@@ -107,6 +126,8 @@ const tabs = [
   { id: 'grants', label: '资源发放' },
   { id: 'orgs', label: '组织' },
   { id: 'invites', label: '邀请码' },
+  { id: 'pro-invites', label: 'Pro 邀请码' },
+  { id: 'enterprise', label: '企业需求' },
   { id: 'security', label: '安全事件' },
   { id: 'logs', label: '审计日志' },
 ] as const;
@@ -154,6 +175,8 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
   const [auditLogs, setAuditLogs] = useState<AdminLog[]>([]);
   const [securityLogs, setSecurityLogs] = useState<AdminLog[]>([]);
   const [invites, setInvites] = useState<AdminInvite[]>([]);
+  const [proInvites, setProInvites] = useState<AdminInvite[]>([]);
+  const [enterpriseRequests, setEnterpriseRequests] = useState<AdminEnterpriseRequest[]>([]);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [emailFilter, setEmailFilter] = useState('');
@@ -168,26 +191,36 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
   const [inviteCode, setInviteCode] = useState('');
   const [inviteLabel, setInviteLabel] = useState('种子用户测试邀请');
   const [inviteMaxUses, setInviteMaxUses] = useState('1');
+  const [proInviteLabel, setProInviteLabel] = useState('Pro 种子用户邀请');
+  const [proInviteMaxUses, setProInviteMaxUses] = useState('1');
+  const [generatedProInviteCode, setGeneratedProInviteCode] = useState('');
+  const [editingProInviteId, setEditingProInviteId] = useState<number | null>(null);
+  const [editingProInviteLabel, setEditingProInviteLabel] = useState('');
+  const [editingProInviteMaxUses, setEditingProInviteMaxUses] = useState('1');
 
   const loadData = async () => {
     if (!isStaff) return;
     setLoading(true);
     try {
-      const [summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes] = await Promise.all([
+      const [summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes, proInviteRes, enterpriseRes] = await Promise.all([
         apiFetch('/admin-console/summary/'),
         apiFetch('/admin-console/users/'),
         apiFetch('/admin-console/organizations/'),
         apiFetch('/admin-console/audit-logs/'),
         apiFetch('/admin-console/security-events/'),
         apiFetch('/admin-console/invites/'),
+        apiFetch('/admin-console/pro-invites/'),
+        apiFetch('/admin-console/enterprise-requests/'),
       ]);
-      if (![summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes].every((res) => res.ok)) throw new Error('admin api failed');
+      if (![summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes, proInviteRes, enterpriseRes].every((res) => res.ok)) throw new Error('admin api failed');
       setSummary(await summaryRes.json());
       setUsers((await usersRes.json()).results || []);
       setOrgs((await orgsRes.json()).results || []);
       setAuditLogs((await auditRes.json()).results || []);
       setSecurityLogs((await securityRes.json()).results || []);
       setInvites((await inviteRes.json()).results || []);
+      setProInvites((await proInviteRes.json()).results || []);
+      setEnterpriseRequests((await enterpriseRes.json()).results || []);
     } catch {
       triggerToast('运营后台数据加载失败', 'error');
     } finally {
@@ -258,6 +291,23 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     }
   };
 
+  const updateUserSubscriptionPlan = async (user: AdminUser, subscriptionPlan: 'free' | 'pro') => {
+    try {
+      const response = await apiFetch(`/admin-console/users/${user.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ subscription_plan: subscriptionPlan }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'failed');
+      setUsers((items) => items.map((item) => (item.id === user.id ? data : item)));
+      if (selectedUser?.id === user.id) setSelectedUser(data);
+      triggerToast(`用户订阅已切换为 ${subscriptionPlan.toUpperCase()}`, 'success');
+      void loadData();
+    } catch {
+      triggerToast('用户订阅更新失败', 'error');
+    }
+  };
+
   const grantCreditToUserOrg = async (user: AdminUser) => {
     const amount = Math.round(Number(userGrantAmount || 0) * 100);
     try {
@@ -313,6 +363,66 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
       void loadData();
     } catch {
       triggerToast('邀请码创建失败', 'error');
+    }
+  };
+
+  const createProInvite = async () => {
+    try {
+      const response = await apiFetch('/admin-console/pro-invites/', {
+        method: 'POST',
+        body: JSON.stringify({ label: proInviteLabel, max_uses: Number(proInviteMaxUses || 1) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'failed');
+      setProInvites((items) => [data, ...items]);
+      setGeneratedProInviteCode(data.plain_code || '');
+      triggerToast('Pro 邀请码已生成，请记录明文 code', 'success');
+      void loadData();
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码创建失败', 'error');
+    }
+  };
+
+  const startEditProInvite = (invite: AdminInvite) => {
+    setEditingProInviteId(invite.id);
+    setEditingProInviteLabel(invite.label);
+    setEditingProInviteMaxUses(String(invite.max_uses));
+  };
+
+  const updateProInvite = async (invite: AdminInvite, patch?: Partial<Pick<AdminInvite, 'label' | 'max_uses' | 'is_active'>>) => {
+    try {
+      const payload = patch || {
+        label: editingProInviteLabel,
+        max_uses: Number(editingProInviteMaxUses || invite.max_uses),
+      };
+      const response = await apiFetch(`/admin-console/pro-invites/${invite.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'failed');
+      setProInvites((items) => items.map((item) => (item.id === invite.id ? data : item)));
+      setEditingProInviteId(null);
+      triggerToast('Pro 邀请码已更新', 'success');
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码更新失败', 'error');
+    }
+  };
+
+  const deleteProInvite = async (invite: AdminInvite) => {
+    try {
+      const response = await apiFetch(`/admin-console/pro-invites/${invite.id}/`, { method: 'DELETE' });
+      if (response.status === 204) {
+        setProInvites((items) => items.filter((item) => item.id !== invite.id));
+        triggerToast('Pro 邀请码已删除', 'success');
+        return;
+      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'failed');
+      setProInvites((items) => items.map((item) => (item.id === invite.id ? data : item)));
+      triggerToast('邀请码已有兑换记录，已改为停用', 'info');
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码删除失败', 'error');
     }
   };
 
@@ -406,6 +516,9 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
                   <StatusPill status={user.profile.status} />
                   {user.is_active ? <span className="text-xs font-black text-emerald-700">可登录</span> : <span className="text-xs font-black text-red-700">已停用</span>}
                   {user.profile.email_verified ? <span className="inline-flex items-center gap-1 text-xs font-black text-emerald-700"><CheckCircle2 className="h-3 w-3" />邮箱已验证</span> : <span className="inline-flex items-center gap-1 text-xs font-black text-amber-700"><AlertTriangle className="h-3 w-3" />未验证</span>}
+                  <span className={`border px-2 py-0.5 text-[10px] font-black ${user.profile.subscription_plan === 'pro' ? 'border-emerald-700 text-emerald-800' : 'border-[var(--editorial-stroke)] text-[var(--editorial-text-gray)]'}`}>
+                    {user.profile.subscription_plan.toUpperCase()}
+                  </span>
                   {user.is_superuser ? <span className="border border-black px-2 py-0.5 text-[10px] font-black">SUPERUSER</span> : user.is_staff ? <span className="border border-[var(--editorial-stroke)] px-2 py-0.5 text-[10px] font-black">STAFF</span> : null}
                 </div>
                 <p className="mt-1 text-xs text-[var(--editorial-text-gray)]">{user.email || '无邮箱'} · 注册 {formatDate(user.date_joined)} · 最近登录 {formatDate(user.last_login)}</p>
@@ -415,6 +528,17 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
                 </div>
               </div>
               <div className="flex max-w-xl flex-wrap items-center gap-2 lg:justify-end">
+                <label className="flex items-center gap-1 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1 text-[10px] font-black">
+                  订阅
+                  <select
+                    value={user.profile.subscription_plan}
+                    onChange={(event) => void updateUserSubscriptionPlan(user, event.target.value as 'free' | 'pro')}
+                    className="bg-transparent text-xs font-black outline-none"
+                  >
+                    <option value="free">free</option>
+                    <option value="pro">pro</option>
+                  </select>
+                </label>
                 <button type="button" onClick={() => setSelectedUserId(user.id)} className="border border-[var(--editorial-stroke)] bg-[var(--brand-accent)] px-3 py-2 text-xs font-black text-black">
                   详情
                 </button>
@@ -443,6 +567,20 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
                 <div>
                   <b>{selectedUser.username}</b>
                   <p className="mt-1 text-[var(--editorial-text-gray)]">{selectedUser.email || '无邮箱'} · 注册 {formatDate(selectedUser.date_joined)}</p>
+                </div>
+                <div className="grid gap-2 border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3">
+                  <div className="font-black">个人订阅状态</div>
+                  <select
+                    value={selectedUser.profile.subscription_plan}
+                    onChange={(event) => void updateUserSubscriptionPlan(selectedUser, event.target.value as 'free' | 'pro')}
+                    className="border border-[var(--border-default)] bg-[var(--editorial-paper)] px-3 py-2 font-black outline-none"
+                  >
+                    <option value="free">free</option>
+                    <option value="pro">pro</option>
+                  </select>
+                  <p className="text-[10px] leading-relaxed text-[var(--editorial-text-gray)]">
+                    来源 {selectedUser.profile.subscription_source || 'default'}；管理员修改后立即影响 Pro-only 功能。
+                  </p>
                 </div>
                 <div>
                   <div className="mb-2 font-black">所属组织</div>
@@ -554,6 +692,97 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
             <h3 className="mb-3 flex items-center gap-2 text-sm font-black"><Activity className="h-4 w-4" />审计日志</h3>
             <div className="grid gap-2">{auditLogs.map((log) => <div key={log.id} className="border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 text-xs"><div className="flex justify-between gap-2"><b>{log.action}</b><span>{formatDate(log.created_at)}</span></div><p className="mt-1 text-[var(--editorial-text-gray)]">{log.actor || '-'} · {log.organization || '-'} · {log.target_type}#{log.target_id}</p></div>)}</div>
           </section>
+        </div>
+      )}
+
+      {activeTab === 'pro-invites' && (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
+          <section className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4 shadow-[4px_4px_0_var(--editorial-stroke)]">
+            <h3 className="text-lg font-black">创建 Pro 邀请码</h3>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--editorial-text-gray)]">Pro 邀请码由系统随机生成，管理员只需要填写 label 用于记忆。明文 code 只会在创建成功后显示一次。</p>
+            {generatedProInviteCode ? (
+              <div className="mt-4 border border-emerald-600 bg-emerald-50 p-3 text-xs">
+                <span className="font-black text-emerald-700">刚生成的 Pro 邀请码</span>
+                <div className="mt-2 select-all border border-emerald-600 bg-white px-3 py-2 font-mono text-base font-black tracking-wider text-emerald-800">{generatedProInviteCode}</div>
+              </div>
+            ) : null}
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-xs font-black">标签<input value={proInviteLabel} onChange={(event) => setProInviteLabel(event.target.value)} className="border border-[var(--editorial-stroke)] bg-[var(--surface-elevated)] px-3 py-2 outline-none" /></label>
+              <label className="grid gap-1 text-xs font-black">可用次数<input value={proInviteMaxUses} onChange={(event) => setProInviteMaxUses(event.target.value)} className="border border-[var(--editorial-stroke)] bg-[var(--surface-elevated)] px-3 py-2 outline-none" /></label>
+              <button type="button" onClick={() => void createProInvite()} className="border border-[var(--editorial-stroke)] bg-[var(--brand-accent)] px-4 py-2 text-xs font-black text-black">随机生成 Pro 邀请码</button>
+            </div>
+          </section>
+          <section className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4">
+            <h3 className="mb-3 text-lg font-black">Pro 邀请码记录</h3>
+            <div className="grid gap-2">
+              {proInvites.map((invite) => (
+                <div key={invite.id} className="grid gap-2 border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 text-xs lg:grid-cols-[minmax(0,1fr)_120px_80px_210px]">
+                  <div>
+                    {editingProInviteId === invite.id ? (
+                      <input value={editingProInviteLabel} onChange={(event) => setEditingProInviteLabel(event.target.value)} className="w-full border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1 font-black outline-none" />
+                    ) : (
+                      <b>{invite.label}</b>
+                    )}
+                    <p className="mt-1 text-[var(--editorial-text-gray)]">{invite.code_hash_preview}</p>
+                    <p className="mt-1 text-[var(--editorial-text-gray)]">{formatDate(invite.created_at)}</p>
+                  </div>
+                  <div>
+                    {editingProInviteId === invite.id ? (
+                      <input value={editingProInviteMaxUses} onChange={(event) => setEditingProInviteMaxUses(event.target.value)} className="w-full border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-2 py-1 outline-none" />
+                    ) : (
+                      <span>{invite.used_count} / {invite.max_uses}</span>
+                    )}
+                  </div>
+                  <span>{invite.is_active ? '启用' : '停用'}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {editingProInviteId === invite.id ? (
+                      <>
+                        <button type="button" onClick={() => void updateProInvite(invite)} className="border border-[var(--editorial-stroke)] px-2 py-1 font-black">保存</button>
+                        <button type="button" onClick={() => setEditingProInviteId(null)} className="border border-[var(--editorial-stroke)] px-2 py-1">取消</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => startEditProInvite(invite)} className="border border-[var(--editorial-stroke)] px-2 py-1">编辑</button>
+                        <button type="button" onClick={() => void updateProInvite(invite, { is_active: !invite.is_active })} className="border border-[var(--editorial-stroke)] px-2 py-1">{invite.is_active ? '停用' : '启用'}</button>
+                        <button type="button" onClick={() => void deleteProInvite(invite)} className="border border-red-600 px-2 py-1 text-red-700">删除</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'enterprise' && (
+        <div className="mt-4 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4 shadow-[4px_4px_0_var(--editorial-stroke)]">
+          <h3 className="mb-3 text-lg font-black">企业定制需求</h3>
+          <div className="grid gap-2">
+            {enterpriseRequests.length === 0 ? (
+              <p className="text-xs text-[var(--editorial-text-gray)]">暂无企业定制需求。</p>
+            ) : enterpriseRequests.map((request) => (
+              <div key={request.id} className="grid gap-3 border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3 text-xs lg:grid-cols-[minmax(0,1.2fr)_180px_150px_100px]">
+                <div>
+                  <b>{request.company_name}</b>
+                  <p className="mt-1 text-[var(--editorial-text-gray)]">{request.requirements || '未填写详细需求'}</p>
+                </div>
+                <div>
+                  <b>{request.contact_name}</b>
+                  <p className="mt-1 text-[var(--editorial-text-gray)]">{request.contact_email}</p>
+                  {request.contact_phone ? <p className="text-[var(--editorial-text-gray)]">{request.contact_phone}</p> : null}
+                </div>
+                <div>
+                  <span>{request.username}</span>
+                  <p className="mt-1 text-[var(--editorial-text-gray)]">{request.organization || '无组织'}</p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <StatusPill status={request.status} />
+                  <span className="text-[var(--editorial-text-gray)]">{formatDate(request.created_at)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

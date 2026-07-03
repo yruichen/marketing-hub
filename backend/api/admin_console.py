@@ -1,8 +1,10 @@
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.db import IntegrityError
 from django.db.models import Count, Q, Sum
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -15,15 +17,30 @@ from api.models import (
     AuditLog,
     CreditGrant,
     CreditLedgerEntry,
+    EnterpriseContactRequest,
     GenerationTask,
     Membership,
     Organization,
+    ProInvite,
     SecurityEvent,
     SignupInvite,
     UsageEvent,
     UserProfile,
+    hash_pro_invite_code,
     hash_signup_invite_code,
 )
+
+
+PRO_INVITE_RANDOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def _generate_pro_invite_code() -> tuple[str, str]:
+    for _ in range(12):
+        code = f'PRO-{get_random_string(6, allowed_chars=PRO_INVITE_RANDOM_CHARS).upper()}'
+        code_hash = hash_pro_invite_code(code)
+        if not ProInvite.objects.filter(code_hash=code_hash).exists():
+            return code, code_hash
+    raise IntegrityError('unable to generate unique pro invite code')
 
 
 class IsPlatformAdmin(BasePermission):
@@ -54,6 +71,9 @@ def _profile_payload(user: User):
         'profile': {
             'email_verified': profile.email_verified,
             'status': profile.status,
+            'subscription_plan': profile.subscription_plan,
+            'subscription_source': profile.subscription_source,
+            'subscription_expires_at': profile.subscription_expires_at.isoformat() if profile.subscription_expires_at else None,
             'signup_source': profile.signup_source,
             'signup_ip': profile.signup_ip,
             'last_login_ip': profile.last_login_ip,
@@ -117,6 +137,37 @@ def _org_payload(org: Organization):
         'credit_balance_usd': _money_from_cents(credit_balance),
         'total_tokens': usage['tokens'] or 0,
         'total_cost_usd': str(usage['cost'] or Decimal('0')),
+    }
+
+
+def _pro_invite_payload(invite: ProInvite):
+    return {
+        'id': invite.id,
+        'label': invite.label,
+        'code_hash_preview': f'{invite.code_hash[:10]}...{invite.code_hash[-6:]}',
+        'max_uses': invite.max_uses,
+        'used_count': invite.used_count,
+        'is_active': invite.is_active,
+        'expires_at': invite.expires_at.isoformat() if invite.expires_at else None,
+        'created_by': invite.created_by.username if invite.created_by_id else '',
+        'created_at': invite.created_at.isoformat(),
+    }
+
+
+def _enterprise_request_payload(request_obj: EnterpriseContactRequest):
+    return {
+        'id': request_obj.id,
+        'company_name': request_obj.company_name,
+        'contact_name': request_obj.contact_name,
+        'contact_email': request_obj.contact_email,
+        'contact_phone': request_obj.contact_phone,
+        'team_size': request_obj.team_size,
+        'requirements': request_obj.requirements,
+        'status': request_obj.status,
+        'username': request_obj.user.username,
+        'organization': request_obj.organization.name if request_obj.organization_id else '',
+        'created_at': request_obj.created_at.isoformat(),
+        'updated_at': request_obj.updated_at.isoformat(),
     }
 
 
@@ -205,7 +256,13 @@ class AdminUserDetailView(APIView):
         if not user:
             return Response({'error': '用户不存在。'}, status=status.HTTP_404_NOT_FOUND)
         profile, _ = UserProfile.objects.get_or_create(user=user)
-        old_profile = {'status': profile.status, 'email_verified': profile.email_verified, 'is_active': user.is_active}
+        old_profile = {
+            'status': profile.status,
+            'email_verified': profile.email_verified,
+            'is_active': user.is_active,
+            'subscription_plan': profile.subscription_plan,
+            'subscription_source': profile.subscription_source,
+        }
 
         if 'is_staff' in request.data or request.data.get('password'):
             return Response({'error': '该接口不允许修改 staff 权限或直接设置密码。'}, status=status.HTTP_400_BAD_REQUEST)
@@ -224,10 +281,23 @@ class AdminUserDetailView(APIView):
             if user.id == request.user.id and not next_active:
                 return Response({'error': '不能停用当前管理员账号。'}, status=status.HTTP_400_BAD_REQUEST)
             user.is_active = next_active
+        if 'subscription_plan' in request.data:
+            next_plan = request.data.get('subscription_plan')
+            if next_plan not in dict(UserProfile._meta.get_field('subscription_plan').choices):
+                return Response({'error': '用户订阅状态不支持。'}, status=status.HTTP_400_BAD_REQUEST)
+            profile.subscription_plan = next_plan
+            profile.subscription_source = 'admin'
+            profile.subscription_expires_at = None
 
         user.save(update_fields=['is_active'])
-        profile.save(update_fields=['status', 'email_verified', 'updated_at'])
-        next_profile = {'status': profile.status, 'email_verified': profile.email_verified, 'is_active': user.is_active}
+        profile.save(update_fields=['status', 'email_verified', 'subscription_plan', 'subscription_source', 'subscription_expires_at', 'updated_at'])
+        next_profile = {
+            'status': profile.status,
+            'email_verified': profile.email_verified,
+            'is_active': user.is_active,
+            'subscription_plan': profile.subscription_plan,
+            'subscription_source': profile.subscription_source,
+        }
         membership = Membership.objects.filter(user=user).select_related('organization').first()
         record_audit_log(
             action='member_change',
@@ -579,3 +649,121 @@ class AdminInviteListCreateView(APIView):
             'created_by': request.user.username,
             'created_at': invite.created_at.isoformat(),
         }, status=status.HTTP_201_CREATED)
+
+
+class AdminProInviteListCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def get(self, request):
+        return Response({'results': [
+            _pro_invite_payload(invite)
+            for invite in ProInvite.objects.select_related('created_by').order_by('-created_at')[:80]
+        ]})
+
+    def post(self, request):
+        label = (request.data.get('label') or '').strip()
+        try:
+            max_uses = int(request.data.get('max_uses') or 1)
+        except (TypeError, ValueError):
+            return Response({'error': '可用次数必须是数字。'}, status=status.HTTP_400_BAD_REQUEST)
+        if max_uses <= 0:
+            return Response({'error': '可用次数必须大于 0。'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            plain_code, code_hash = _generate_pro_invite_code()
+            invite = ProInvite.objects.create(
+                code_hash=code_hash,
+                label=label or 'Pro 邀请码',
+                max_uses=max_uses,
+                created_by=request.user,
+            )
+        except IntegrityError:
+            return Response({'error': '邀请码生成失败，请重试。'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        record_audit_log(
+            action='billing_change',
+            actor=request.user,
+            target_type='pro_invite',
+            target_id=str(invite.id),
+            ip_address=_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            metadata={'label': invite.label, 'max_uses': invite.max_uses, 'source': 'admin_console'},
+        )
+        return Response({**_pro_invite_payload(invite), 'plain_code': plain_code}, status=status.HTTP_201_CREATED)
+
+
+class AdminProInviteDetailView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def patch(self, request, pk: int):
+        invite = ProInvite.objects.filter(pk=pk).first()
+        if not invite:
+            return Response({'error': 'Pro 邀请码不存在。'}, status=status.HTTP_404_NOT_FOUND)
+        updates = []
+        if 'label' in request.data:
+            invite.label = (request.data.get('label') or '').strip() or 'Pro 邀请码'
+            updates.append('label')
+        if 'max_uses' in request.data:
+            try:
+                max_uses = int(request.data.get('max_uses') or 1)
+            except (TypeError, ValueError):
+                return Response({'error': '可用次数必须是数字。'}, status=status.HTTP_400_BAD_REQUEST)
+            if max_uses < invite.used_count:
+                return Response({'error': '可用次数不能小于已使用次数。'}, status=status.HTTP_400_BAD_REQUEST)
+            if max_uses <= 0:
+                return Response({'error': '可用次数必须大于 0。'}, status=status.HTTP_400_BAD_REQUEST)
+            invite.max_uses = max_uses
+            updates.append('max_uses')
+        if 'is_active' in request.data:
+            invite.is_active = bool(request.data.get('is_active'))
+            updates.append('is_active')
+        if updates:
+            invite.save(update_fields=updates)
+            record_audit_log(
+                action='billing_change',
+                actor=request.user,
+                target_type='pro_invite',
+                target_id=str(invite.id),
+                ip_address=_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                metadata={'updates': updates, 'source': 'admin_console'},
+            )
+        return Response(_pro_invite_payload(invite))
+
+    def delete(self, request, pk: int):
+        invite = ProInvite.objects.filter(pk=pk).first()
+        if not invite:
+            return Response({'error': 'Pro 邀请码不存在。'}, status=status.HTTP_404_NOT_FOUND)
+        if invite.used_count > 0:
+            invite.is_active = False
+            invite.save(update_fields=['is_active'])
+            record_audit_log(
+                action='billing_change',
+                actor=request.user,
+                target_type='pro_invite',
+                target_id=str(invite.id),
+                ip_address=_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                metadata={'deleted': False, 'deactivated': True, 'source': 'admin_console'},
+            )
+            return Response({**_pro_invite_payload(invite), 'deactivated': True})
+        invite_id = invite.id
+        invite.delete()
+        record_audit_log(
+            action='billing_change',
+            actor=request.user,
+            target_type='pro_invite',
+            target_id=str(invite_id),
+            ip_address=_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            metadata={'deleted': True, 'source': 'admin_console'},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AdminEnterpriseRequestListView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def get(self, request):
+        return Response({'results': [
+            _enterprise_request_payload(request_obj)
+            for request_obj in EnterpriseContactRequest.objects.select_related('user', 'organization').order_by('-created_at')[:80]
+        ]})

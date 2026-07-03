@@ -1,11 +1,12 @@
 from django.contrib.auth.models import User
 from decimal import Decimal
+from django.core.cache import cache
 from django.core.checks import Tags, run_checks
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, GenerationTask, Membership, Organization, PolicyDocument, Project, UsageEvent, UserConsent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft
+from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, EnterpriseContactRequest, GenerationTask, Membership, Organization, PolicyDocument, ProInvite, Project, UsageEvent, UserConsent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft, hash_pro_invite_code
 from api.audit import record_audit_log
 from api.redaction import redact_text
 
@@ -77,6 +78,55 @@ class AdminConsoleSeparationTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['demo_account'])
         self.assertFalse(response.data['is_superuser'])
+
+    def test_admin_can_create_update_and_delete_pro_invite(self):
+        self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        response = self.client.post('/api/admin-console/pro-invites/', {
+            'label': 'Seed Pro',
+            'max_uses': 2,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertRegex(response.data['plain_code'], r'^PRO-[A-Z2-9]{6}$')
+        invite_id = response.data['id']
+        invite = ProInvite.objects.get(pk=invite_id)
+        self.assertEqual(invite.label, 'Seed Pro')
+        self.assertEqual(invite.max_uses, 2)
+
+        response = self.client.patch(f'/api/admin-console/pro-invites/{invite_id}/', {
+            'label': 'Edited Pro',
+            'max_uses': 3,
+            'is_active': False,
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['label'], 'Edited Pro')
+        self.assertEqual(response.data['max_uses'], 3)
+        self.assertFalse(response.data['is_active'])
+
+        response = self.client.delete(f'/api/admin-console/pro-invites/{invite_id}/')
+        self.assertEqual(response.status_code, 204, response.content)
+        self.assertFalse(ProInvite.objects.filter(pk=invite_id).exists())
+
+    def test_admin_can_update_user_personal_subscription(self):
+        self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        response = self.client.patch(
+            f'/api/admin-console/users/{self.member.id}/',
+            {'subscription_plan': 'pro'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['profile']['subscription_plan'], 'pro')
+        self.assertEqual(response.data['profile']['subscription_source'], 'admin')
+        profile = UserProfile.objects.get(user=self.member)
+        self.assertEqual(profile.subscription_plan, 'pro')
+        self.assertEqual(profile.subscription_source, 'admin')
+
+        response = self.client.patch(
+            f'/api/admin-console/users/{self.member.id}/',
+            {'subscription_plan': 'free'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['profile']['subscription_plan'], 'free')
 
 
 class CreatorProfileTests(APITestCase):
@@ -161,6 +211,7 @@ class CreatorProfileTests(APITestCase):
 
 class WorkspaceUpgradeTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user(username='workspace-user', password='123')
         self.organization = Organization.objects.create(name='Test Organization', slug='test-org')
         Membership.objects.create(user=self.user, organization=self.organization, role='admin')
@@ -183,6 +234,13 @@ class WorkspaceUpgradeTests(APITestCase):
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         grant_required_policy_consents(self.user)
         self.client.login(username='workspace-user', password='123')
+
+    def _set_personal_plan(self, plan='pro'):
+        profile, _ = UserProfile.objects.get_or_create(user=self.user)
+        profile.subscription_plan = plan
+        profile.subscription_source = 'admin'
+        profile.subscription_expires_at = None
+        profile.save(update_fields=['subscription_plan', 'subscription_source', 'subscription_expires_at'])
 
     def test_copy_generation_returns_structured_payload(self):
         response = self.client.post('/api/generate/copy/', {
@@ -224,6 +282,65 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertGreaterEqual(len(package['storyboard']), 1)
         self.assertIn('content_package:orchestration=copy+storyboard', response.data['logs'][0])
 
+    def test_billing_plans_include_feature_entitlements(self):
+        response = self.client.get('/api/billing/plans/?organization=test-org')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['feature_entitlements']['video_render'])
+        self.assertFalse(response.data['feature_entitlements']['workflow_run'])
+
+        self._set_personal_plan('pro')
+        response = self.client.get('/api/billing/plans/?organization=test-org')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['feature_entitlements']['video_render'])
+        self.assertTrue(response.data['feature_entitlements']['workflow_run'])
+
+    def test_free_user_cannot_use_pro_only_video_and_workflow_features(self):
+        response = self.client.post('/api/generate/video/', {
+            'organization': 'test-org',
+            'project': 'spring-launch',
+            'video_topic': 'Launch video',
+            'prompt': 'A simple product video',
+            'async': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertTrue(response.data['upgrade_required'])
+        self.assertEqual(response.data['feature'], 'video_render')
+
+        draft = WorkspaceDraft.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            name='Free Flow',
+            brand_context=self.project.brand_context,
+            nodes=[],
+            edges=[],
+        )
+        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'DEMO'}, format='json')
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertTrue(response.data['upgrade_required'])
+        self.assertEqual(response.data['feature'], 'workflow_run')
+
+        response = self.client.post(
+            f'/api/drafts/{draft.id}/ai-edit/',
+            {'mode': 'workflow', 'instruction': 'Add a copy node.'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertTrue(response.data['upgrade_required'])
+        self.assertEqual(response.data['feature'], 'advanced_nodes')
+
+    def test_free_user_cannot_write_ai_config(self):
+        response = self.client.post('/api/ai/config/', {
+            'organization': 'test-org',
+            'provider': 'agnes',
+            'api_key': 'org-key',
+            'model_name': 'agnes-2.0-flash',
+            'billing_mode': 'byok',
+        }, format='json')
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertTrue(response.data['upgrade_required'])
+        self.assertEqual(response.data['feature'], 'ai_config_write')
+
     def test_image_generation_returns_structured_payload(self):
         AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         response = self.client.post('/api/generate/image/', {
@@ -263,6 +380,7 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.status_code, 204)
 
     def test_workflow_run_persists_bound_assets_and_retry(self):
+        self._set_personal_plan('pro')
         draft = WorkspaceDraft.objects.create(
             organization=self.organization,
             project=self.project,
@@ -337,6 +455,59 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['workflow_run']['idempotency_key'], 'retry-copy-1')
         self.assertEqual(response.data['task']['status'], 'succeeded')
 
+    def test_workflow_ai_edit_applies_safe_node_patch(self):
+        self._set_personal_plan('pro')
+        draft = WorkspaceDraft.objects.create(
+            organization=self.organization,
+            project=self.project,
+            campaign=self.campaign,
+            name='Editable Flow',
+            brand_context=self.project.brand_context,
+            nodes=[
+                {
+                    'id': 'context-1',
+                    'type': 'context',
+                    'label': 'Context',
+                    'x': 10,
+                    'y': 10,
+                    'config': {'summary': 'Launchbook creator toolkit'},
+                    'output': {},
+                },
+                {
+                    'id': 'copy-1',
+                    'type': 'copy',
+                    'label': 'Copy',
+                    'x': 200,
+                    'y': 10,
+                    'config': {'tone': 'concise', 'platform': 'Xiaohongshu'},
+                    'output': {},
+                },
+            ],
+            edges=[{'id': 'context-copy', 'source': 'context-1', 'target': 'copy-1'}],
+        )
+
+        response = self.client.post(
+            f'/api/drafts/{draft.id}/ai-edit/',
+            {
+                'mode': 'node',
+                'node_id': 'copy-1',
+                'instruction': 'Make this more playful.',
+                'nodes': draft.nodes,
+                'edges': draft.edges,
+                'brand_context': draft.brand_context,
+            },
+            format='json',
+            HTTP_IDEMPOTENCY_KEY='ai-edit-copy-1',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(response.data['nodes']), 2)
+        context_node = next(node for node in response.data['nodes'] if node['id'] == 'context-1')
+        copy_node = next(node for node in response.data['nodes'] if node['id'] == 'copy-1')
+        self.assertEqual(context_node['config']['summary'], 'Launchbook creator toolkit')
+        self.assertEqual(copy_node['config']['ai_edit_instruction'], 'Make this more playful.')
+        self.assertEqual(response.data['edges'], draft.edges)
+        self.assertIn('copy-1', response.data['changed_node_ids'])
+
     def test_template_can_be_forked_into_project_draft(self):
         template = WorkflowTemplate.objects.create(
             organization=self.organization,
@@ -367,7 +538,7 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['draft']['name'], 'Forked Flow')
         self.assertEqual(response.data['template']['fork_count'], 1)
 
-    def test_billing_plans_include_usage_summary_and_project_count_after_update(self):
+    def test_billing_plans_include_usage_summary_and_blocks_direct_plan_switch(self):
         UsageEvent.objects.create(
             organization=self.organization,
             project=self.project,
@@ -391,10 +562,63 @@ class WorkspaceUpgradeTests(APITestCase):
             'organization': 'test-org',
             'plan': 'pro',
         }, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['current_plan'], 'pro')
-        self.assertEqual(response.data['project_count'], 1)
-        self.assertIn('usage_by_provider', response.data)
+        self.assertEqual(response.status_code, 403)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.subscription_plan, 'free')
+
+    def test_pro_invite_redeem_upgrades_personal_plan(self):
+        ProInvite.objects.create(
+            code_hash=hash_pro_invite_code('PRO-SEED-001'),
+            label='Seed Pro',
+            max_uses=1,
+        )
+
+        response = self.client.post('/api/billing/redeem-pro-invite/', {
+            'organization': 'test-org',
+            'code': 'pro-seed-001',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertEqual(profile.subscription_plan, 'pro')
+        self.assertEqual(profile.subscription_source, 'invite_code')
+        self.assertEqual(response.data['personal_plan'], 'pro')
+        self.assertEqual(response.data['effective_plan'], 'pro')
+
+    def test_enterprise_contact_request_is_recorded(self):
+        response = self.client.post('/api/billing/enterprise-requests/', {
+            'organization': 'test-org',
+            'company_name': 'Acme Co',
+            'contact_name': 'Alice',
+            'contact_email': 'alice@example.com',
+            'team_size': '20',
+            'requirements': 'Need SSO and private deployment.',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201, response.content)
+        request_obj = EnterpriseContactRequest.objects.get(user=self.user)
+        self.assertEqual(request_obj.organization, self.organization)
+        self.assertEqual(request_obj.company_name, 'Acme Co')
+        self.assertEqual(response.data['enterprise_request_status'], 'new')
+
+    def test_project_limit_uses_personal_pro_entitlement(self):
+        Project.objects.create(organization=self.organization, name='Second', slug='second')
+        Project.objects.create(organization=self.organization, name='Third', slug='third')
+        response = self.client.post('/api/projects/', {
+            'organization': 'test-org',
+            'name': 'Fourth',
+        }, format='json')
+        self.assertEqual(response.status_code, 402)
+
+        profile, _ = UserProfile.objects.get_or_create(user=self.user)
+        profile.subscription_plan = 'pro'
+        profile.subscription_source = 'admin'
+        profile.save(update_fields=['subscription_plan', 'subscription_source'])
+        response = self.client.post('/api/projects/', {
+            'organization': 'test-org',
+            'name': 'Fourth',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
 
     def test_dashboard_includes_visualization_snapshot(self):
         task = GenerationTask.objects.create(
@@ -633,7 +857,7 @@ class SecurityAccessLayerTests(APITestCase):
             {'organization': self.organization.slug, 'plan': 'pro'},
             format='json',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
 
     def test_community_and_rag_do_not_cross_organization(self):
         own_private = CommunityCreation.objects.create(

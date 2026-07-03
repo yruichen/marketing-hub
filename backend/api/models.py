@@ -10,6 +10,10 @@ def hash_signup_invite_code(code: str) -> str:
     return hashlib.sha256(code.strip().upper().encode('utf-8')).hexdigest()
 
 
+def hash_pro_invite_code(code: str) -> str:
+    return hashlib.sha256(code.strip().upper().encode('utf-8')).hexdigest()
+
+
 class UserProfile(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -35,6 +39,13 @@ class UserProfile(models.Model):
     specialties = models.JSONField(default=list, blank=True)
     social_links = models.JSONField(default=list, blank=True)
     profile_visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='workspace')
+    subscription_plan = models.CharField(max_length=20, choices=[('free', 'Free'), ('pro', 'Pro')], default='free')
+    subscription_source = models.CharField(
+        max_length=30,
+        choices=[('default', 'Default'), ('invite_code', 'Invite Code'), ('admin', 'Admin')],
+        default='default',
+    )
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
     signup_source = models.CharField(max_length=60, blank=True, default='')
     signup_ip = models.GenericIPAddressField(null=True, blank=True)
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
@@ -538,6 +549,68 @@ class CreditLedgerEntry(models.Model):
 
     def __str__(self) -> str:
         return f'{self.organization.slug}:{self.source}:{self.delta_cents}c'
+
+
+class ProInvite(models.Model):
+    code_hash = models.CharField(max_length=128, unique=True)
+    label = models.CharField(max_length=120, blank=True, default='')
+    max_uses = models.PositiveIntegerField(default=1)
+    used_count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_pro_invites')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return self.label or f'pro-invite:{self.id}'
+
+
+class ProInviteRedemption(models.Model):
+    invite = models.ForeignKey(ProInvite, on_delete=models.CASCADE, related_name='redemptions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='pro_invite_redemptions')
+    redeemed_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['-redeemed_at']
+        unique_together = [('invite', 'user')]
+
+    def __str__(self) -> str:
+        return f'{self.user_id}:{self.invite_id}'
+
+
+class EnterpriseContactRequest(models.Model):
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('contacted', 'Contacted'),
+        ('closed', 'Closed'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='enterprise_contact_requests')
+    organization = models.ForeignKey(Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name='enterprise_contact_requests')
+    company_name = models.CharField(max_length=160)
+    contact_name = models.CharField(max_length=100)
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=40, blank=True, default='')
+    team_size = models.CharField(max_length=40, blank=True, default='')
+    requirements = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.company_name}:{self.status}'
 
 
 class AIConfiguration(models.Model):

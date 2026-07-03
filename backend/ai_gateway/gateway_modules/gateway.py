@@ -233,7 +233,12 @@ class AIModelGateway:
             width, height = aspect_ratio_to_video_dimensions(str(payload.get('aspect_ratio') or '9:16'))
             frame_rate = int(payload.get('frame_rate') or AGNES_VIDEO_DEFAULT_FRAME_RATE)
             num_frames = snap_agnes_num_frames(int(payload.get('duration') or 5), frame_rate)
+            scenes = payload.get('scenes') if isinstance(payload.get('scenes'), list) else []
+            references = payload.get('reference_images') if isinstance(payload.get('reference_images'), list) else []
             logs.append('gateway:video_api=agnes-videos')
+            logs.append(f'gateway:video_mode={payload.get("creative_mode") or "single_shot"}')
+            logs.append(f'gateway:video_scenes={len(scenes)}')
+            logs.append(f'gateway:video_references={len(references)}')
             logs.append(f'gateway:video_size={width}x{height}')
             logs.append(f'gateway:video_frames={num_frames}@{frame_rate}fps')
         fallback_used = False

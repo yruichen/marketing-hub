@@ -217,21 +217,23 @@ export function useGenerationTask({
     setAgentLogs(['[0.00s] [INFO] 提交 Agnes 视频任务…', '视频生成通常需要 2–5 分钟，请保持页面打开。']);
     const startedAt = Date.now();
     try {
-      const res = await apiFetch('/tasks/', {
+      const res = await apiFetch('/generate/video/', {
         method: 'POST',
         body: JSON.stringify({
-          task_type: 'video',
-          payload,
+          ...payload,
           username: username || DEMO_USERNAME,
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
           campaign: workspaceScope?.campaign.id,
-          run_now: false,
+          async: true,
         }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        const errorInfo = explainGenerationError(errBody.error || errBody.detail || `任务提交失败 (${res.status})`, res.status);
+        const rawError = errBody.requires_consent
+          ? 'Current legal policies require consent before this action.'
+          : errBody.error || errBody.detail || `任务提交失败 (${res.status})`;
+        const errorInfo = explainGenerationError(rawError, res.status);
         setTaskUiState({
           phase: 'failed',
           task: null,

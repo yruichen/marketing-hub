@@ -1,0 +1,9 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Marketing Hub brand mark</title>
+  <desc id="desc">A minimal editorial brand mark for Marketing Hub.</desc>
+  <rect x="16" y="16" width="128" height="128" fill="#FAF8F5" stroke="#1C1A17" stroke-width="4"/>
+  <rect x="58" y="53" width="58" height="36" fill="#FEF08A" stroke="#1C1A17" stroke-width="3"/>
+  <path d="M42 105V48H52L80 83L108 48H118V105H106V69L82 99H78L54 69V105H42Z" fill="#1C1A17"/>
+  <path d="M36 119H124" stroke="#1C1A17" stroke-width="4"/>
+  <path d="M48 132H112" stroke="#1C1A17" stroke-width="3"/>
+</svg>

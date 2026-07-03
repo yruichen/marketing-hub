@@ -59,6 +59,20 @@ export function explainGenerationError(raw: unknown, status?: number) {
   const text = raw instanceof Error ? raw.message : String(raw || '生成任务失败');
   const lowered = text.toLowerCase();
 
+  if (
+    lowered.includes('legal policies require consent')
+    || lowered.includes('requires consent')
+    || lowered.includes('policy consent')
+    || lowered.includes('consent')
+    || lowered.includes('条款')
+    || lowered.includes('隐私政策')
+  ) {
+    return {
+      message: '需要先同意最新条款。',
+      detail: '当前账号还没有完成服务条款、隐私政策或 AI 使用规则确认。',
+      recoveryActions: ['点击页面顶部的「同意并继续」', '确认后重新提交生成任务', '如果没有看到提示，请刷新页面后再试'],
+    };
+  }
   if (status === 401 || status === 403 || lowered.includes('permission') || lowered.includes('csrf')) {
     return {
       message: '登录状态或项目权限异常。',

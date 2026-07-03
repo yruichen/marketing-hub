@@ -19,8 +19,8 @@ export function wfToRF(node: WorkflowNode): FlowNode {
       inputSchema: node.input_schema || {},
       outputSchema: node.output_schema || {},
     },
-    width: node.width || 260,
-    height: node.height || 200,
+    width: node.width || 320,
+    height: node.height || 360,
   };
 }
 
@@ -32,8 +32,8 @@ export function rfToWF(node: FlowNode): WorkflowNode {
     label: node.data.label,
     x: node.position.x,
     y: node.position.y,
-    width: node.width || 260,
-    height: node.height || 200,
+    width: node.width || 320,
+    height: node.height || 360,
     status: node.data.status as WorkflowNode['status'],
     config: node.data.config as WorkflowNode['config'],
     output: node.data.output,
