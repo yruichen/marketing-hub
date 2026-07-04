@@ -35,8 +35,10 @@ export interface CreatorProfileStats {
 export interface CreatorProfileResponse {
   profile: CreatorProfile;
   stats: CreatorProfileStats;
+  featured_creations: CommunityItem[];
   creations: CommunityItem[];
   is_owner: boolean;
+  is_private: boolean;
 }
 
 export type CreatorProfilePatch = Partial<
@@ -107,6 +109,25 @@ export function useProfile(username?: string | null) {
     }
   }, []);
 
+  const updateProfileCreation = useCallback(async (id: number, patch: { profile_featured: boolean; profile_featured_rank?: number }) => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await apiFetch(`/profiles/me/creations/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error || '作品展示设置失败');
+      }
+      setData(payload as CreatorProfileResponse);
+      return payload as CreatorProfileResponse;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchProfile();
@@ -122,5 +143,6 @@ export function useProfile(username?: string | null) {
     setError,
     fetchProfile,
     saveProfile,
+    updateProfileCreation,
   };
 }

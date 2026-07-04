@@ -232,7 +232,12 @@ export default function App() {
   } = useUiStore();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => storedDarkMode);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [compactSidebarViewport, setCompactSidebarViewport] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+  ));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
+  ));
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
   const [token, setToken] = useState<string | null>(null);
@@ -258,11 +263,30 @@ export default function App() {
   const isLegalRoute = location.pathname.startsWith('/legal/');
   const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
   const activeTab = routeSynced ? activeSection : routeSection;
-  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
-  const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed;
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !(compactSidebarViewport && sidebarCollapsed);
+  const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed && !compactSidebarViewport;
+  const sidebarToggleLabel = sidebarOpen ? '收起侧栏' : '展开侧栏';
   const rightPanelAvailable = activeTab !== 'builder';
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
+
+  useEffect(() => {
+    const compactQuery = window.matchMedia('(max-width: 767px)');
+    const narrowQuery = window.matchMedia('(max-width: 1023px)');
+    const syncSidebarViewport = () => {
+      setCompactSidebarViewport(compactQuery.matches);
+      if (narrowQuery.matches) {
+        setSidebarCollapsed(true);
+      }
+    };
+    syncSidebarViewport();
+    compactQuery.addEventListener('change', syncSidebarViewport);
+    narrowQuery.addEventListener('change', syncSidebarViewport);
+    return () => {
+      compactQuery.removeEventListener('change', syncSidebarViewport);
+      narrowQuery.removeEventListener('change', syncSidebarViewport);
+    };
+  }, []);
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('mh_onboarding_complete') !== 'true');
@@ -292,6 +316,13 @@ export default function App() {
     setActiveSection(tab);
     navigate(pathForSection(tab));
   }, [navigate, setActiveSection]);
+
+  const handleSidebarNavigate = useCallback((tab: AppSection) => {
+    setActiveTab(tab);
+    if (compactSidebarViewport) {
+      setSidebarCollapsed(true);
+    }
+  }, [compactSidebarViewport, setActiveTab]);
 
   // Workspace & dashboard state (shared across panels)
   const { workspaceScope, fetchWorkspaceBootstrap, selectProjectScope } = useWorkspaceScope(username);
@@ -1174,7 +1205,7 @@ export default function App() {
         )}
         <AppSidebar
           activeTab={activeTab}
-          onNavigate={setActiveTab}
+          onNavigate={handleSidebarNavigate}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           username={username}
@@ -1187,7 +1218,7 @@ export default function App() {
       </div>
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`app-main-shell ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} ${sidebarIconOnly ? 'app-main-shell--sidebar-collapsed' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
+      <main ref={mainRef} className={`app-main-shell ${activeTab === 'brainstorm' ? 'app-main-shell--brainstorm' : ''} ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} ${sidebarIconOnly ? 'app-main-shell--sidebar-collapsed' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
@@ -1197,8 +1228,8 @@ export default function App() {
                 type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
                 className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
-                title={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
-                aria-label={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
+                title={sidebarToggleLabel}
+                aria-label={sidebarToggleLabel}
               >
                 <Menu className="h-4 w-4" />
               </button>

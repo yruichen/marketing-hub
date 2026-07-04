@@ -136,21 +136,23 @@ class CreatorProfileTests(APITestCase):
         self.organization = Organization.objects.create(name='Profile Org', slug='profile-org')
         Membership.objects.create(user=self.user, organization=self.organization, role='creator')
         Membership.objects.create(user=self.viewer, organization=self.organization, role='viewer')
-        CommunityCreation.objects.create(
+        self.copy_creation = CommunityCreation.objects.create(
             organization=self.organization,
             username='profile-user',
             creation_type='copy',
             title='Launch Copy',
             content='{"title": "Launch Copy", "paragraphs": ["Hello"]}',
             likes=3,
+            visibility='public',
         )
-        CommunityCreation.objects.create(
+        self.image_creation = CommunityCreation.objects.create(
             organization=self.organization,
             username='profile-user',
             creation_type='image',
             title='Launch Visual',
             content='{"prompt": "editorial desk"}',
             likes=5,
+            visibility='public',
         )
 
     def test_profile_me_requires_login(self):
@@ -206,6 +208,106 @@ class CreatorProfileTests(APITestCase):
         self.assertEqual(response.data['profile']['username'], 'profile-user')
 
         response = self.client.get('/api/profiles/missing-user/')
+        self.assertEqual(response.status_code, 404)
+
+    def test_profile_respects_visibility_and_private_profiles(self):
+        CommunityCreation.objects.create(
+            organization=self.organization,
+            username='profile-user',
+            creation_type='audio',
+            title='Internal Voice',
+            content='{"text": "team only"}',
+            visibility='organization',
+        )
+        CommunityCreation.objects.create(
+            organization=self.organization,
+            username='profile-user',
+            creation_type='video',
+            title='Private Video',
+            content='{"prompt": "private"}',
+            visibility='private',
+        )
+        outsider = User.objects.create_user(username='outsider-user', password='123')
+        other_org = Organization.objects.create(name='Other Org', slug='other-org')
+        Membership.objects.create(user=outsider, organization=other_org, role='viewer')
+
+        self.client.login(username='viewer-user', password='123')
+        response = self.client.get('/api/profiles/profile-user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({item['title'] for item in response.data['creations']}, {'Launch Copy', 'Launch Visual', 'Internal Voice'})
+
+        self.client.logout()
+        self.client.login(username='outsider-user', password='123')
+        response = self.client.get('/api/profiles/profile-user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual({item['title'] for item in response.data['creations']}, {'Launch Copy', 'Launch Visual'})
+
+        profile = UserProfile.objects.get(user=self.user)
+        profile.profile_visibility = 'private'
+        profile.save(update_fields=['profile_visibility'])
+        response = self.client.get('/api/profiles/profile-user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['is_private'])
+        self.assertEqual(response.data['creations'], [])
+
+    def test_owner_can_manage_featured_profile_creations(self):
+        self.client.login(username='profile-user', password='123')
+        response = self.client.patch(
+            f'/api/profiles/me/creations/{self.copy_creation.id}/',
+            {'profile_featured': True, 'profile_featured_rank': 1},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual([item['id'] for item in response.data['featured_creations']], [self.copy_creation.id])
+
+        self.copy_creation.refresh_from_db()
+        self.assertTrue(self.copy_creation.metadata['profile_featured'])
+        self.assertEqual(self.copy_creation.metadata['profile_featured_rank'], 1)
+
+        response = self.client.patch(
+            f'/api/profiles/me/creations/{self.copy_creation.id}/',
+            {'profile_featured': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['featured_creations'], [])
+
+    def test_featured_profile_creations_are_limited_to_three_and_owner_only(self):
+        extra_items = [
+            CommunityCreation.objects.create(
+                organization=self.organization,
+                username='profile-user',
+                creation_type='copy',
+                title=f'Extra {index}',
+                content='{"title": "Extra"}',
+                visibility='public',
+            )
+            for index in range(3)
+        ]
+
+        self.client.login(username='profile-user', password='123')
+        for item in [self.copy_creation, self.image_creation, extra_items[0]]:
+            response = self.client.patch(
+                f'/api/profiles/me/creations/{item.id}/',
+                {'profile_featured': True},
+                format='json',
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+
+        response = self.client.patch(
+            f'/api/profiles/me/creations/{extra_items[1].id}/',
+            {'profile_featured': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+        self.client.logout()
+        self.client.login(username='viewer-user', password='123')
+        response = self.client.patch(
+            f'/api/profiles/me/creations/{self.copy_creation.id}/',
+            {'profile_featured': True},
+            format='json',
+        )
         self.assertEqual(response.status_code, 404)
 
 

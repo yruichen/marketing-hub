@@ -9,8 +9,12 @@ export interface CommunityItem {
   content: CreationContent;
   image_url?: string;
   audio_url?: string;
+  tags?: string[];
   likes: number;
   created_at: string;
+  published_at?: string | null;
+  visibility?: 'private' | 'organization' | 'public';
+  metadata?: Record<string, unknown>;
   similarity_score?: number;
   ai_generated?: boolean;
   reported_count?: number;

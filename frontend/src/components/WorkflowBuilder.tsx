@@ -85,7 +85,9 @@ export function WorkflowBuilder({
   const [currentWorkflowRun, setCurrentWorkflowRun] = useState<WorkflowRunRecord | null>(null);
   const [detailNodeId, setDetailNodeId] = useState('');
   const [detailMode, setDetailMode] = useState<'edit' | 'ai'>('edit');
-  const [workflowDockOpen, setWorkflowDockOpen] = useState(true);
+  const [workflowDockOpen, setWorkflowDockOpen] = useState(() => (
+    typeof window !== 'undefined' ? !window.matchMedia('(max-width: 1023px)').matches : true
+  ));
   const [workflowDockTab, setWorkflowDockTab] = useState<'assets' | 'ai' | 'nodes'>('assets');
   const [globalAiInstruction, setGlobalAiInstruction] = useState('');
   const [aiEditLoading, setAiEditLoading] = useState(false);
@@ -126,6 +128,18 @@ export function WorkflowBuilder({
   useEffect(() => { edgesRef.current = edges; }, [edges]);
   useEffect(() => { brandCtxRef.current = brandContext; }, [brandContext]);
   useEffect(() => { selIdRef.current = selectedNodeId; }, [selectedNodeId]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const syncWorkflowDock = () => {
+      if (mediaQuery.matches) {
+        setWorkflowDockOpen(false);
+      }
+    };
+    syncWorkflowDock();
+    mediaQuery.addEventListener('change', syncWorkflowDock);
+    return () => mediaQuery.removeEventListener('change', syncWorkflowDock);
+  }, []);
 
   // History
   const [history, setHistory] = useState<WorkflowSnapshot[]>([]);
