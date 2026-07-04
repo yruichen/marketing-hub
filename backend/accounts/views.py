@@ -6,7 +6,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.validators import URLValidator
 from django.core import signing
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils.text import slugify
@@ -106,8 +106,23 @@ def _profile_dict(user: User, profile: UserProfile) -> dict:
     }
 
 
-def _profile_creations(username: str):
-    return CommunityCreation.objects.filter(username__iexact=username).select_related('organization', 'project', 'campaign')
+def _share_organizations(left: User, right: User) -> bool:
+    if not left.is_authenticated or not right.is_authenticated:
+        return False
+    left_orgs = Membership.objects.filter(user=left).values('organization_id')
+    return Membership.objects.filter(user=right, organization_id__in=left_orgs).exists()
+
+
+def _profile_creations(user: User, viewer: User):
+    query = CommunityCreation.objects.filter(
+        username__iexact=user.username,
+        moderation_status='visible',
+    ).select_related('organization', 'project', 'campaign')
+    if viewer.is_authenticated and viewer.id == user.id:
+        return query
+    if _share_organizations(user, viewer):
+        return query.filter(Q(visibility='public') | Q(visibility='organization'))
+    return query.filter(visibility='public')
 
 
 def _profile_stats(creations) -> dict:
@@ -124,15 +139,57 @@ def _profile_stats(creations) -> dict:
     }
 
 
+def _featured_profile_creations(creations):
+    items = [
+        item for item in creations
+        if isinstance(item.metadata, dict) and item.metadata.get('profile_featured')
+    ]
+    return sorted(
+        items,
+        key=lambda item: (
+            int(item.metadata.get('profile_featured_rank') or 99),
+            -int(item.likes or 0),
+            item.created_at,
+        ),
+    )[:3]
+
+
 def _profile_payload(user: User, viewer: User) -> dict:
     profile = _get_or_create_profile(user)
-    creations = _profile_creations(user.username)
+    is_owner = viewer.is_authenticated and viewer.id == user.id
+    if profile.profile_visibility == 'private' and not is_owner:
+        return {
+            'profile': _profile_dict(user, profile),
+            'stats': _profile_stats(CommunityCreation.objects.none()),
+            'creations': [],
+            'featured_creations': [],
+            'is_owner': False,
+            'is_private': True,
+        }
+    creations = _profile_creations(user, viewer)
+    featured = _featured_profile_creations(list(creations))
     return {
         'profile': _profile_dict(user, profile),
         'stats': _profile_stats(creations),
+        'featured_creations': CommunityCreationSerializer(featured, many=True).data,
         'creations': CommunityCreationSerializer(creations, many=True).data,
-        'is_owner': viewer.is_authenticated and viewer.id == user.id,
+        'is_owner': is_owner,
+        'is_private': False,
     }
+
+
+def _profile_featured_count(user: User, exclude_id: int | None = None) -> int:
+    items = CommunityCreation.objects.filter(
+        username__iexact=user.username,
+        moderation_status='visible',
+    )
+    if exclude_id:
+        items = items.exclude(pk=exclude_id)
+    count = 0
+    for item in items.only('metadata'):
+        if isinstance(item.metadata, dict) and item.metadata.get('profile_featured'):
+            count += 1
+    return count
 
 
 def _clean_specialties(value):
@@ -514,6 +571,38 @@ class MyProfileView(APIView):
         for field, value in cleaned.items():
             setattr(profile, field, value)
         profile.save(update_fields=[*cleaned.keys(), 'updated_at'])
+        return Response(_profile_payload(request.user, request.user))
+
+
+class MyProfileCreationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk: int):
+        item = CommunityCreation.objects.filter(
+            pk=pk,
+            username__iexact=request.user.username,
+            moderation_status='visible',
+        ).first()
+        if not item:
+            return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        featured = bool(request.data.get('profile_featured'))
+        metadata = item.metadata if isinstance(item.metadata, dict) else {}
+        if featured:
+            if _profile_featured_count(request.user, exclude_id=item.id) >= 3:
+                return Response({'error': '最多只能精选 3 个主页作品'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                rank = int(request.data.get('profile_featured_rank') or metadata.get('profile_featured_rank') or 99)
+            except (TypeError, ValueError):
+                rank = 99
+            metadata['profile_featured'] = True
+            metadata['profile_featured_rank'] = max(1, min(3, rank))
+        else:
+            metadata.pop('profile_featured', None)
+            metadata.pop('profile_featured_rank', None)
+
+        item.metadata = metadata
+        item.save(update_fields=['metadata'])
         return Response(_profile_payload(request.user, request.user))
 
 
