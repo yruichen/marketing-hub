@@ -3,20 +3,15 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
-  Boxes,
   CheckCircle2,
   Clock3,
   Database,
   DollarSign,
-  FolderKanban,
   Image,
-  LayoutDashboard,
   Mic,
   RefreshCw,
-  Sparkles,
   Video,
   Workflow,
-  Zap,
 } from 'lucide-react';
 import type { AppSection } from '../../shared/stores/uiStore';
 import { TaskCenter } from '../generation';
@@ -188,15 +183,6 @@ export function DashboardPage({
   const maxProviderCost = Math.max(...providerRows.map((item) => Number(item.cost_usd)), 0.0001);
   const recentTasks = snapshot?.recent_tasks?.length ? snapshot.recent_tasks : latestTask ? [latestTask] : [];
   const health = snapshot?.workspace_health;
-
-  const quickActions: Array<{ tab: AppSection; label: string; desc: string; icon: typeof Activity }> = [
-    { tab: 'brainstorm', label: '灵感风暴', desc: '从想法生成工作流', icon: Sparkles },
-    { tab: 'builder', label: '工作流', desc: '编排与运行节点', icon: Workflow },
-    { tab: 'projects', label: '我的项目', desc: '整理项目与资料', icon: FolderKanban },
-    { tab: 'assets', label: '资产库', desc: '查看生成沉淀', icon: Boxes },
-    { tab: 'content', label: '内容包', desc: '批量生成初稿', icon: Zap },
-    { tab: 'config', label: 'AI 设置', desc: '模型与 API Key', icon: LayoutDashboard },
-  ];
 
   return (
     <div className="space-y-5">
@@ -436,28 +422,6 @@ export function DashboardPage({
               emptyAction={() => setActiveTab('brainstorm')}
             />
           </div>
-        </div>
-      </section>
-
-      <section className="border-1.5 border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-5 shadow-editorial-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-black">快捷行动</h3>
-            <p className="text-xs text-[var(--editorial-text-gray)]">把首页从数据展板变成生产入口</p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-[var(--editorial-text-gray)]" />
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          {quickActions.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button key={item.tab} type="button" onClick={() => setActiveTab(item.tab)} className="min-w-0 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-3 text-left hover:bg-[var(--editorial-accent-yellow)]">
-                <Icon className="h-4 w-4" />
-                <span className="mt-3 block truncate text-sm font-black">{item.label}</span>
-                <span className="mt-1 block truncate text-xs text-[var(--editorial-text-gray)]">{item.desc}</span>
-              </button>
-            );
-          })}
         </div>
       </section>
     </div>
