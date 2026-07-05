@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { AppSection } from '../shared/stores/uiStore';
 import { NAV_SECTIONS } from '../app/navigation';
 import { LogOut, Moon, UserCircle } from 'lucide-react';
@@ -29,31 +30,38 @@ export function AppSidebar({
   onLogout,
   className = '',
 }: AppSidebarProps) {
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!navRef.current) return;
+    const active = navRef.current.querySelector('[data-active="true"]');
+    if (active) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [activeTab]);
+
   return (
-    <aside className={`h-full border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none flex flex-col justify-between shrink-0 border-b-0 transition-[width,padding] duration-200 ${collapsed ? 'w-16 px-2 pt-3 pb-3' : 'w-[272px] px-3 xl:px-4 pt-4 xl:pt-5 pb-3'} ${className}`}>
+    <aside className={`h-full border-r border-[var(--border-subtle)] bg-[var(--surface-sidebar)] shadow-editorial-lg xl:shadow-none flex flex-col justify-between shrink-0 border-b-0 transition-[width,padding] duration-200 ${collapsed ? 'w-16 px-2 pt-3 pb-3' : 'w-[220px] px-3 xl:px-4 pt-4 xl:pt-5 pb-3'} ${className}`}>
       <div className={`flex min-h-0 flex-1 flex-col ${collapsed ? 'gap-3' : 'gap-5'}`}>
         <div className={`select-none border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 shadow-[var(--shadow-panel)] ${collapsed ? 'flex h-11 items-center justify-center rounded-lg p-0' : 'rounded-xl px-3 py-3'}`}>
           {collapsed ? (
             <img src="/brand-mark.svg" alt="Marketing Hub" className="h-8 w-8 rounded-md" />
           ) : (
-            <>
-              <div className="flex items-center gap-3">
-                <img src="/brand-mark.svg" alt="Marketing Hub" className="h-12 w-12 shrink-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)]" />
-                <div className="min-w-0">
-                  <h1 className="serif-header text-lg font-bold tracking-tight text-[var(--editorial-text)]">
-                    Marketing-Hub
-                  </h1>
-                  <div className="mt-1 h-1.5 w-10 rounded-full bg-[var(--brand-accent)]" />
-                </div>
+            <div className="flex items-center gap-3 px-1 py-1">
+              <img src="/brand-mark.svg" alt="Marketing Hub" className="h-12 w-12 shrink-0 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)]" />
+              <div className="min-w-0 flex-1">
+                <h1 className="serif-header text-lg font-bold tracking-tight text-[var(--editorial-text)] leading-tight">
+                  Marketing-Hub
+                </h1>
+                <p className="text-[10px] font-medium text-[var(--editorial-text-gray)] leading-tight mt-0.5">
+                  Creative marketing operating system
+                </p>
               </div>
-              <p className="mt-1 text-[10px] text-[var(--editorial-text-gray)] font-semibold leading-snug">
-                Creative marketing operating system
-              </p>
-            </>
+            </div>
           )}
         </div>
 
-        <nav className={`app-sidebar-nav flex flex-col font-mono flex-1 min-h-0 overflow-y-auto ${collapsed ? 'gap-2 pr-0' : 'gap-4 pr-1'}`}>
+        <nav ref={navRef} className={`app-sidebar-nav flex flex-col font-mono flex-1 min-h-0 overflow-y-auto ${collapsed ? 'gap-2 pr-0' : 'gap-4 pr-1'}`}>
           {NAV_SECTIONS.map((section) => (
             <div key={section.title}>
               {!collapsed && (
@@ -71,6 +79,7 @@ export function AppSidebar({
                       type="button"
                       onClick={() => onNavigate(item.id)}
                       title={collapsed ? `${item.label} - ${item.hint}` : item.hint}
+                      data-active={isActive}
                       className={`group relative w-full text-left text-[11px] transition-all cursor-pointer flex items-center border rounded-lg ${
                         collapsed ? 'h-10 justify-center px-0 py-0' : 'gap-2 px-2.5 py-2.5'
                       } ${

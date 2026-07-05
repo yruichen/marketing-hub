@@ -12,6 +12,7 @@ import {
   BriefcaseBusiness,
   CheckCircle2,
   Clock3,
+  ChevronDown,
   Loader2,
   Menu,
   PanelRight,
@@ -232,12 +233,7 @@ export default function App() {
   } = useUiStore();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => storedDarkMode);
-  const [compactSidebarViewport, setCompactSidebarViewport] = useState(() => (
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
-  ));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
-    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
-  ));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
   const [token, setToken] = useState<string | null>(null);
@@ -263,36 +259,18 @@ export default function App() {
   const isLegalRoute = location.pathname.startsWith('/legal/');
   const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
   const activeTab = routeSynced ? activeSection : routeSection;
-  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : !(compactSidebarViewport && sidebarCollapsed);
-  const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed && !compactSidebarViewport;
-  const sidebarToggleLabel = sidebarOpen ? '收起侧栏' : '展开侧栏';
+  const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
+  const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed;
   const rightPanelAvailable = activeTab !== 'builder';
   const showAppRightPanel = rightPanelOpen && activeTab !== 'builder';
   const showInlineRightPanel = rightPanelOpen && activeTab !== 'builder';
-
-  useEffect(() => {
-    const compactQuery = window.matchMedia('(max-width: 767px)');
-    const narrowQuery = window.matchMedia('(max-width: 1023px)');
-    const syncSidebarViewport = () => {
-      setCompactSidebarViewport(compactQuery.matches);
-      if (narrowQuery.matches) {
-        setSidebarCollapsed(true);
-      }
-    };
-    syncSidebarViewport();
-    compactQuery.addEventListener('change', syncSidebarViewport);
-    narrowQuery.addEventListener('change', syncSidebarViewport);
-    return () => {
-      compactQuery.removeEventListener('change', syncSidebarViewport);
-      narrowQuery.removeEventListener('change', syncSidebarViewport);
-    };
-  }, []);
 
   const [globalSearch, setGlobalSearch] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('mh_onboarding_complete') !== 'true');
   const [onboardingSubmitting, setOnboardingSubmitting] = useState(false);
   const [onboardingError, setOnboardingError] = useState('');
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [headerOpen, setHeaderOpen] = useState(true);
 
   const [onboarding, setOnboarding] = useState<OnboardingState>(onboardingDefaults);
   const [contentPackage, setContentPackage] = useState<ContentPackage>(() => {
@@ -316,13 +294,6 @@ export default function App() {
     setActiveSection(tab);
     navigate(pathForSection(tab));
   }, [navigate, setActiveSection]);
-
-  const handleSidebarNavigate = useCallback((tab: AppSection) => {
-    setActiveTab(tab);
-    if (compactSidebarViewport) {
-      setSidebarCollapsed(true);
-    }
-  }, [compactSidebarViewport, setActiveTab]);
 
   // Workspace & dashboard state (shared across panels)
   const { workspaceScope, fetchWorkspaceBootstrap, selectProjectScope } = useWorkspaceScope(username);
@@ -1205,7 +1176,7 @@ export default function App() {
         )}
         <AppSidebar
           activeTab={activeTab}
-          onNavigate={handleSidebarNavigate}
+          onNavigate={setActiveTab}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           username={username}
@@ -1218,18 +1189,27 @@ export default function App() {
       </div>
 
       {/* 主工作区 */}
-      <main ref={mainRef} className={`app-main-shell ${activeTab === 'brainstorm' ? 'app-main-shell--brainstorm' : ''} ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} ${sidebarIconOnly ? 'app-main-shell--sidebar-collapsed' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-hidden w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
+      <main ref={mainRef} className={`app-main-shell ${sidebarOpen ? 'app-main-shell--sidebar-open' : ''} ${sidebarIconOnly ? 'app-main-shell--sidebar-collapsed' : ''} min-w-0 h-full min-h-0 flex flex-col overflow-y-auto w-full z-10 transition-colors duration-250 ${activeTab === 'brainstorm' ? 'p-0' : 'px-3 md:px-5 pt-3 md:pt-5 pb-3'}`}>
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
+          headerOpen ? (
           <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 px-3 py-3 shadow-[var(--shadow-panel)] backdrop-blur">
             <div className="flex min-w-0 items-center gap-2 pb-2">
               <button
                 type="button"
+                onClick={() => setHeaderOpen(false)}
+                className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
+                title="收起顶部"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
                 className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
-                title={sidebarToggleLabel}
-                aria-label={sidebarToggleLabel}
+                title={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
+                aria-label={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
               >
                 <Menu className="h-4 w-4" />
               </button>
@@ -1363,11 +1343,25 @@ export default function App() {
               </div>
             </div>
           </header>
+          ) : (
+          <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 shadow-[var(--shadow-panel)] backdrop-blur">
+            <div className="flex min-w-0 items-center py-1 px-3">
+              <button
+                type="button"
+                onClick={() => setHeaderOpen(true)}
+                className="h-6 w-6 rounded border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
+                title="展开顶部"
+              >
+                <ChevronDown className="h-3 w-3 -rotate-90" />
+              </button>
+            </div>
+          </header>
+          )
         )}
 
         {/* Workspace Panels Overlapping Paper Sheet Grid */}
-        <div className={`workspace-panel-layout ${showInlineRightPanel ? 'workspace-panel-layout--right-open' : ''} mt-1 z-0 flex-1 min-h-0 overflow-hidden ${isFullHeightTab ? 'items-stretch' : ''}`}>
-          <div className={`min-w-0 h-full min-h-0 ${isFullHeightTab ? 'overflow-hidden' : 'overflow-y-auto'} ${isFullHeightTab ? '' : 'space-y-4 pr-1'}`}>
+        <div className={`workspace-panel-layout ${showInlineRightPanel ? 'workspace-panel-layout--right-open' : ''} mt-1 z-0 flex-1 min-h-0 overflow-y-auto ${isFullHeightTab ? 'items-stretch' : ''}`}>
+          <div className={`min-w-0 h-full min-h-0 ${isFullHeightTab && activeTab !== 'builder' ? 'overflow-hidden' : 'overflow-y-auto'} ${isFullHeightTab ? '' : 'space-y-4 pr-1'}`}>
             {activeTab === 'projects' && (
               <ProjectManager
                 organization={workspaceScope?.organization || null}

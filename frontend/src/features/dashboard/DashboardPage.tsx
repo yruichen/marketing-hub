@@ -424,6 +424,7 @@ export function DashboardPage({
           </div>
         </div>
       </section>
+
     </div>
   );
 }
