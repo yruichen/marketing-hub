@@ -13,7 +13,6 @@ interface PropertyPanelProps {
   runPreview: { stepCount: number; estimatedCost: string; estimatedMinutes: number };
   lastTasks: GenerationTaskRecord[];
   currentWorkflowRun?: WorkflowRunRecord | null;
-  onTidyLayout: () => void;
   onSelectNode: (id: string) => void;
   onCopyNodeDiagnostics: (id: string) => void;
   onRecoverFromNode: (id: string) => void;
@@ -87,7 +86,6 @@ export function PropertyPanel({
   runPreview,
   lastTasks,
   currentWorkflowRun,
-  onTidyLayout,
   onSelectNode,
   onCopyNodeDiagnostics,
   onRecoverFromNode,
@@ -131,7 +129,7 @@ export function PropertyPanel({
       : `${nodes.length} 个节点待运行`;
 
   return (
-    <aside className="border-l border-[var(--editorial-stroke)] p-4 space-y-4 bg-[var(--editorial-paper)] min-w-0 max-h-[calc(100vh-260px)] min-h-[400px] overflow-y-auto">
+    <aside className="border-l border-[var(--editorial-stroke)] p-4 space-y-4 bg-[var(--editorial-paper)] min-w-0 min-h-[400px]">
       <div className="border border-[var(--editorial-stroke)] p-3">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">运行</h4>
@@ -319,9 +317,6 @@ export function PropertyPanel({
       <div className="border border-[var(--editorial-stroke)] p-3">
         <div className="flex items-center justify-between gap-2 mb-3">
           <h4 className="text-[9px] text-[var(--editorial-text-gray)] font-black uppercase">检查</h4>
-          <button type="button" onClick={onTidyLayout} disabled={nodes.length === 0} className="border border-[var(--editorial-stroke)] px-2 py-1.5 text-[9px] font-black hover:bg-[var(--editorial-unselected)] disabled:opacity-40">
-            整理布局
-          </button>
         </div>
         <div className="space-y-2 text-[10px]">
           <div className="flex items-center justify-between border border-[var(--editorial-stroke)]/40 px-2.5 py-2">

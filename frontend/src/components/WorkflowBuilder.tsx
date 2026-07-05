@@ -30,11 +30,9 @@ import {
   WorkflowHandoffBanner,
   WorkflowLoadingOverlay,
 } from '../features/workflows/WorkflowBuilderOverlays';
-import { WorkflowRunPreflightPanel } from '../features/workflows/WorkflowRunPreflightPanel';
-import { buildWorkflowReadiness, type WorkflowReadinessIssue } from '../features/workflows/workflowReadiness';
+import { buildWorkflowReadiness } from '../features/workflows/workflowReadiness';
 import { classifyWorkflowFailure, formatNodeDiagnosticSnapshot } from '../features/workflows/workflowRecovery';
 import { mergeWorkflowRunIntoNodes, workflowRunIsActive } from '../features/workflows/workflowRunState';
-import { WorkflowFloatingRunBar } from '../features/workflows/WorkflowFloatingRunBar';
 import { WorkflowNodeDetailDialog } from '../features/workflows/WorkflowNodeDetailDialog';
 import {
   WorkflowAssetPanel,
@@ -81,13 +79,10 @@ export function WorkflowBuilder({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('clean');
   const [showHandoffBanner, setShowHandoffBanner] = useState(false);
   const [highlightedEdgeId, setHighlightedEdgeId] = useState('');
-  const [preflightOpen, setPreflightOpen] = useState(false);
   const [currentWorkflowRun, setCurrentWorkflowRun] = useState<WorkflowRunRecord | null>(null);
   const [detailNodeId, setDetailNodeId] = useState('');
   const [detailMode, setDetailMode] = useState<'edit' | 'ai'>('edit');
-  const [workflowDockOpen, setWorkflowDockOpen] = useState(() => (
-    typeof window !== 'undefined' ? !window.matchMedia('(max-width: 1023px)').matches : true
-  ));
+  const [workflowDockOpen, setWorkflowDockOpen] = useState(true);
   const [workflowDockTab, setWorkflowDockTab] = useState<'assets' | 'ai' | 'nodes'>('assets');
   const [globalAiInstruction, setGlobalAiInstruction] = useState('');
   const [aiEditLoading, setAiEditLoading] = useState(false);
@@ -128,18 +123,6 @@ export function WorkflowBuilder({
   useEffect(() => { edgesRef.current = edges; }, [edges]);
   useEffect(() => { brandCtxRef.current = brandContext; }, [brandContext]);
   useEffect(() => { selIdRef.current = selectedNodeId; }, [selectedNodeId]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 1023px)');
-    const syncWorkflowDock = () => {
-      if (mediaQuery.matches) {
-        setWorkflowDockOpen(false);
-      }
-    };
-    syncWorkflowDock();
-    mediaQuery.addEventListener('change', syncWorkflowDock);
-    return () => mediaQuery.removeEventListener('change', syncWorkflowDock);
-  }, []);
 
   // History
   const [history, setHistory] = useState<WorkflowSnapshot[]>([]);
@@ -344,7 +327,6 @@ export function WorkflowBuilder({
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
     if (!canRunWorkflow) { openWorkflowProGate(); return; }
     if (!workflowReadiness.canRun) {
-      setPreflightOpen(true);
       triggerToast('运行前仍有阻断项需要修复', 'error');
       return;
     }
@@ -451,8 +433,8 @@ export function WorkflowBuilder({
     if (!project) { triggerToast('请先选择项目', 'error'); return; }
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
     if (!canRunWorkflow) { openWorkflowProGate(); return; }
-    setPreflightOpen(true);
-  }, [canRunWorkflow, openWorkflowProGate, project, readOnly, triggerToast]);
+    void executeWorkflow();
+  }, [canRunWorkflow, executeWorkflow, openWorkflowProGate, project, readOnly, triggerToast]);
 
   const copyNodeDiagnostics = useCallback((nodeId: string) => {
     const node = nodes.find((item) => item.id === nodeId);
@@ -850,29 +832,6 @@ export function WorkflowBuilder({
     setTimeout(() => fitView({ padding: 0.22, duration: 320 }), 80);
   }, [readOnly, nodes, edges, markHistory, markDirty, fitView, setRfNodes]);
 
-  const handlePreflightAction = useCallback((issue: WorkflowReadinessIssue) => {
-    if (issue.action === 'select_node' && issue.nodeId) {
-      setPreflightOpen(false);
-      openNodeDetail(issue.nodeId, 'edit');
-      return;
-    }
-    if (issue.action === 'add_review') {
-      setPreflightOpen(false);
-      addNode('review', '内容审阅');
-      return;
-    }
-    if (issue.action === 'tidy_layout') {
-      setPreflightOpen(false);
-      tidyLayout();
-      return;
-    }
-    if (issue.action === 'open_brand_memory') {
-      setPreflightOpen(false);
-      window.dispatchEvent(new CustomEvent('mh:open-project-brand-memory', { detail: { projectId: project?.id } }));
-      triggerToast('请到「我的项目」打开当前项目检查器，补齐品牌记忆后再运行。', 'info');
-    }
-  }, [addNode, project?.id, openNodeDetail, tidyLayout, triggerToast]);
-
   const saveCustomAgent = useCallback((form: CustomAgentForm) => {
     const { name, ...rest } = form;
     addNode('custom_agent', name.trim(), {
@@ -900,14 +859,13 @@ export function WorkflowBuilder({
       if (e.key === 'Delete' && selectedNodeId && !readOnly) { e.preventDefault(); removeSelectedNode(); }
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (preflightOpen) setPreflightOpen(false);
-        else if (connectionSource) setConnectionSource('');
+        if (connectionSource) setConnectionSource('');
         else if (selectedNodeId) clearNodeSelection();
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [clearNodeSelection, connectionSource, copySelection, pasteSelection, preflightOpen, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
+  }, [clearNodeSelection, connectionSource, copySelection, pasteSelection, readOnly, redo, removeSelectedNode, selectedNodeId, undo]);
 
   // Inject callbacks into RF node data
   const setConnectionSourceRef = useRef(setConnectionSource);
@@ -982,7 +940,7 @@ export function WorkflowBuilder({
           onApplyGlobalAi={() => { void applyAiEdit('workflow', '', globalAiInstruction, false); }}
           onAddAssetGroup={() => createAssetGroupNode()}
         />
-      <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial overflow-hidden min-w-0">
+      <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial min-w-0 flex flex-col">
         <WorkflowBuilderToolbar
           projectName={projectDetail?.name || project.name}
           campaignName={campaign?.name || 'Default Campaign'}
@@ -1016,9 +974,9 @@ export function WorkflowBuilder({
         />
 
         {/* Canvas + Sidebar */}
-        <div className={`workflow-workbench grid grid-cols-1 ${propertyPanelOpen ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''} min-w-0`}>
+        <div className={`workflow-workbench grid grid-cols-1 grid-rows-[1fr] ${propertyPanelOpen ? 'xl:grid-cols-[minmax(0,1fr)_340px]' : ''} min-w-0 flex-1`}>
           <div
-            className="relative h-[calc(100vh-260px)] min-h-[400px] min-w-0 bg-[var(--editorial-bg)]"
+            className="relative min-w-0 bg-[var(--editorial-bg)] h-full min-h-[400px]"
             onDragOver={handleWorkflowDragOver}
             onDrop={handleWorkflowDrop}
           >
@@ -1056,18 +1014,6 @@ export function WorkflowBuilder({
               onNodeDragStart={() => { if (!readOnly) dragSnapshotRef.current = makeSnapshot('拖拽节点'); }}
               onNodeDragStop={() => { if (dragSnapshotRef.current) { pushSnapshot(dragSnapshotRef.current); dragSnapshotRef.current = null; } }}
             />
-            <WorkflowFloatingRunBar
-              nodes={nodes}
-              readOnly={readOnly}
-              saveStatus={saveStatus}
-              loadingState={loadingState}
-              canRunWorkflow={canRunWorkflow}
-              currentWorkflowRun={currentWorkflowRun}
-              onRunWorkflow={runWorkflow}
-              onLockedFeature={openWorkflowProGate}
-              onSave={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'))}
-              onTidyLayout={tidyLayout}
-            />
           </div>
           {propertyPanelOpen && (
             <PropertyPanel
@@ -1079,7 +1025,6 @@ export function WorkflowBuilder({
               runPreview={runPreview}
               lastTasks={lastTasks}
               currentWorkflowRun={currentWorkflowRun}
-              onTidyLayout={tidyLayout}
               onSelectNode={selectNode}
               onCopyNodeDiagnostics={copyNodeDiagnostics}
               onRecoverFromNode={(id) => { void recoverFromNode(id); }}
@@ -1128,21 +1073,6 @@ export function WorkflowBuilder({
         }}
         onCloseContextMenu={() => setContextMenu(null)}
         onCloseEdgeContextMenu={() => setEdgeContextMenu(null)}
-      />
-
-      <WorkflowRunPreflightPanel
-        open={preflightOpen}
-        projectName={projectDetail?.name || project.name}
-        brandContext={brandContext}
-        readiness={workflowReadiness}
-        estimatedCost={runPreview.estimatedCost}
-        estimatedMinutes={runPreview.estimatedMinutes}
-        onClose={() => setPreflightOpen(false)}
-        onConfirmRun={() => {
-          setPreflightOpen(false);
-          void executeWorkflow();
-        }}
-        onIssueAction={handlePreflightAction}
       />
 
       <WorkflowNodeDetailDialog
