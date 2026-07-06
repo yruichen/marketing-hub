@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   CreditCard,
   Film,
-  FolderKanban,
   ImageIcon,
   LayoutDashboard,
   Library,

@@ -7,8 +7,6 @@ interface SaveControlBarProps {
   visible: boolean;
   taskId: number | null;
   organizationSlug?: string;
-  projectSlug?: string;
-  campaignId?: number;
   onSaved?: () => void;
   onDiscard?: () => void;
 }
@@ -17,8 +15,6 @@ export function SaveControlBar({
   visible,
   taskId,
   organizationSlug,
-  projectSlug,
-  campaignId,
   onSaved,
   onDiscard,
 }: SaveControlBarProps) {
@@ -42,13 +38,13 @@ export function SaveControlBar({
         })
         .catch(() => setFolders([]));
     }
-  }, [visible, organizationSlug]);
+  }, [visible, organizationSlug, selectedFolderId]);
 
   const handleSave = useCallback(async () => {
     if (!taskId) return;
     setSaving(true);
     try {
-      let res = await apiFetch('/workspace/assets/create-from-task/', {
+      const res = await apiFetch('/workspace/assets/create-from-task/', {
         method: 'POST',
         body: JSON.stringify({ task_id: taskId }),
       });
@@ -78,6 +74,7 @@ export function SaveControlBar({
     onDiscard?.();
   }, [onDiscard]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (visible) {
       setSaving(false);
@@ -85,6 +82,7 @@ export function SaveControlBar({
       setDiscarded(false);
     }
   }, [visible]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if ((!visible || !taskId) && !saved) return null;
   if (discarded) return null;

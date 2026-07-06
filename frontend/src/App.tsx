@@ -815,7 +815,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [username, triggerToast, fetchWorkspaceBootstrap]);
+  }, [username, triggerToast]);
 
   const handleSelectProjectScope = useCallback(async (project: ProjectRecord, campaign?: CampaignRecord) => {
     try {

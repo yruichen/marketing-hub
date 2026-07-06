@@ -102,7 +102,6 @@ function LabeledSelect({ Icon, label, value, onChange, options, isActive }: Labe
  * macOS Finder 风格，纯受控展示。
  */
 export function DesktopToolbar({
-  organizationName,
   search,
   onSearchChange,
   platformFilter,
@@ -118,14 +117,10 @@ export function DesktopToolbar({
   onSortKeyChange,
   selectedCount,
   filteredCount,
-  stats,
   onSelectAll,
-  onClearSelection,
   onBatchReview,
   onBatchExport,
-  onCreateProjectClick,
   onCreateFolderClick,
-  createProjectOpen,
   createFolderOpen,
 }: DesktopToolbarProps) {
   const platformOptions = [
