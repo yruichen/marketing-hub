@@ -3,6 +3,7 @@ import { AgentTerminal } from './AgentTerminal';
 import { BrandMemorySummary } from '../brand-memory';
 import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
+import { SaveControlBar } from './SaveControlBar';
 import type { CopyOutput, CreationContent } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
@@ -57,7 +58,7 @@ export function CopyPanel({
 
   const [isRunning, setIsRunning] = useState(false);
 
-  const { submitQueuedGeneration, taskUiState } = useGenerationTask({
+  const { submitQueuedGeneration, taskUiState, lastCompletedTaskId, setLastCompletedTaskId } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -209,6 +210,15 @@ export function CopyPanel({
             <span>SEED: 827419-TYP</span>
             <span>MODEL: MANUSCRIPT-V2</span>
           </div>
+          <SaveControlBar
+            visible={taskUiState.phase === 'succeeded'}
+            taskId={lastCompletedTaskId}
+            organizationSlug={workspaceScope?.organization.slug}
+            projectSlug={workspaceScope?.project.slug}
+            campaignId={workspaceScope?.campaign.id}
+            onSaved={() => setLastCompletedTaskId(null)}
+            onDiscard={() => setLastCompletedTaskId(null)}
+          />
         </div>
       </div>
     </div>

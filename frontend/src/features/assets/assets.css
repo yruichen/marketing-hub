@@ -9,6 +9,7 @@
   gap: 18px;
   font-family: var(--mono-font);
   min-height: 0;
+  height: 100%;
 }
 
 .assets-library__header {
@@ -240,6 +241,7 @@
 
 /* 卡片 */
 .asset-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background:
@@ -620,7 +622,7 @@
   position: fixed;
   inset: 0;
   background: rgba(7, 9, 6, 0.68);
-  z-index: 60;
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1344,4 +1346,67 @@
   .assets-preview__body {
     min-height: 42vh;
   }
+}
+
+.asset-card--selectable {
+  cursor: pointer;
+}
+
+.asset-card--selected {
+  outline: 2px solid var(--brand-accent-strong);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
+.asset-card__select-overlay {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  opacity: 0;
+}
+
+.asset-card--selectable .asset-card__select-overlay {
+  opacity: 1 !important;
+}
+
+
+.asset-card__select-overlay:hover {
+  background: var(--surface-hover);
+}
+
+.asset-card__checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--editorial-text-gray);
+  background: transparent;
+  transition: all 0.12s ease;
+}
+
+.asset-card__checkbox--checked {
+  background: var(--info-accent);
+  border-color: var(--info-accent);
+  color: white;
+}
+
+.asset-card__open-hint {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.asset-card:hover .asset-card__open-hint {
+  opacity: 1;
 }

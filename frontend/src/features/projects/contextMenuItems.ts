@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, Copy, Pencil, Trash2, X } from 'lucide-react';
+import { Copy, Pencil, Trash2, X, RotateCcw } from 'lucide-react';
 
 export interface ContextMenuItem {
   key: string;
@@ -15,20 +15,21 @@ export interface ContextMenuItem {
  * 单独成文件，避免与 ContextMenu 组件同文件导出（react-refresh 约束）。
  */
 export function buildProjectContextItems(params: {
-  isArchived: boolean;
+  isDeleted: boolean;
   onOpen: () => void;
   onSetAsCurrent: () => void;
-  onArchive: () => void;
+  onRestore: () => void;
   onDelete: () => void;
   onCopyName: () => void;
 }): ContextMenuItem[] {
   return [
     { key: 'open', label: '打开 / 查看', icon: Pencil, onClick: params.onOpen },
-    { key: 'current', label: '设为当前', icon: Copy, onClick: params.onSetAsCurrent },
-    { key: 'archive', label: params.isArchived ? '恢复' : '归档', icon: params.isArchived ? ArchiveRestore : Archive, onClick: params.onArchive },
+    ...(params.isDeleted
+      ? [{ key: 'restore', label: '从回收站恢复', icon: RotateCcw as typeof Pencil, onClick: params.onRestore }]
+      : [{ key: 'current', label: '设为当前', icon: Copy as typeof Pencil, onClick: params.onSetAsCurrent }]),
     { key: 'd1', label: '', divider: true, onClick: () => undefined },
-    { key: 'copy', label: '复制名称', icon: X, onClick: params.onCopyName },
+    { key: 'copy', label: '复制名称', icon: X as typeof Pencil, onClick: params.onCopyName },
     { key: 'd2', label: '', divider: true, onClick: () => undefined },
-    { key: 'delete', label: '永久删除', icon: Trash2, danger: true, onClick: params.onDelete },
+    { key: 'delete', label: '移至回收站', icon: Trash2, danger: true, onClick: params.onDelete },
   ];
 }

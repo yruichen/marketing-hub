@@ -43,7 +43,7 @@ export function CommunityPage({
   const rest = featured ? communityItems.slice(1) : communityItems;
 
   return (
-    <div className="template-market flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1 font-mono">
+    <div className="template-market flex h-full min-h-0 flex-col gap-5 pr-1 font-mono">
       <section className="template-market__hero">
         <div className="template-market__hero-copy">
           <span className="template-market__eyebrow">Template Library</span>

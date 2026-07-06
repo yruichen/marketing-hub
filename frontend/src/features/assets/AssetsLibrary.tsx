@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, FolderOpen, Move, Plus, RefreshCw, X } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
@@ -9,6 +9,7 @@ import { useAssets } from './useAssets';
 import { useAssetGroups } from './useAssetGroups';
 import type { AssetFilterState, AssetsLibraryProps } from './types';
 import type { AssetRecord } from '../../types/workspace';
+import { apiFetch } from '../../hooks/useApi';
 import './assets.css';
 
 const DEFAULT_FILTER: AssetFilterState = { type: 'all', source: 'all', preview: 'all', search: '' };
@@ -20,24 +21,16 @@ type DialogState =
   | { mode: 'create' }
   | { mode: 'edit'; asset: AssetRecord };
 
-/**
- * 资产库主组件：
- *   - 顶部：标题 + 刷新 + 「新建资产」按钮
- *   - 筛选条（类型 chips + 搜索）
- *   - 5 个 group（按 metadata.task_type 分），每组可独立折叠
- *   - 底部：Pagination 页码
- *   - AssetFormDialog：新建 / 编辑共用
- *   - AssetPreviewModal：预览
- *   - 监听 mh:assets-updated 自动 refresh
- */
 export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
   const [filter, setFilter] = useState<AssetFilterState>(DEFAULT_FILTER);
   const { data, loading, error, page, setPage, refresh, createAsset, updateAsset, deleteAsset } =
     useAssets(organizationSlug, filter, PAGE_SIZE);
   const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null);
   const [dialog, setDialog] = useState<DialogState>({ mode: 'closed' });
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectMode, setSelectMode] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
 
-  // 监听工作流运行完成事件，自动刷新
   useEffect(() => {
     const handler = () => refresh();
     window.addEventListener('mh:assets-updated', handler);
@@ -53,9 +46,7 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
   const [timestamp, setTimestamp] = useState(() => Date.now());
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setTimestamp(Date.now());
-    }, 0);
+    const timeout = window.setTimeout(() => setTimestamp(Date.now()), 0);
     return () => window.clearTimeout(timeout);
   }, [items]);
 
@@ -70,22 +61,44 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
   const handleFilterChange = (next: AssetFilterState) => {
     setFilter(next);
     setPage(1);
+    setSelectedIds([]);
   };
 
-  const handleSaveDialog = async (
-    input: Parameters<typeof createAsset>[0] | Parameters<typeof updateAsset>[1],
-  ) => {
-    if (dialog.mode === 'create') {
-      await createAsset(input as Parameters<typeof createAsset>[0]);
-    } else if (dialog.mode === 'edit') {
-      await updateAsset(dialog.asset.id, input as Parameters<typeof updateAsset>[1]);
-    }
+  const handleSaveDialog = async (input: Parameters<typeof createAsset>[0] | Parameters<typeof updateAsset>[1]) => {
+    if (dialog.mode === 'create') await createAsset(input as Parameters<typeof createAsset>[0]);
+    else if (dialog.mode === 'edit') await updateAsset(dialog.asset.id, input as Parameters<typeof updateAsset>[1]);
     setDialog({ mode: 'closed' });
   };
 
   const handleDelete = async (asset: AssetRecord) => {
     await deleteAsset(asset.id);
     if (previewAsset?.id === asset.id) setPreviewAsset(null);
+    setSelectedIds((prev) => prev.filter((id) => id !== asset.id));
+  };
+
+  const toggleSelect = useCallback((assetId: number) => {
+    setSelectedIds((prev) => prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]);
+  }, []);
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === items.length) setSelectedIds([]);
+    else setSelectedIds(items.map((a) => a.id));
+  };
+
+  const handleMoveToFolder = async (folderId: number) => {
+    try {
+      const res = await apiFetch('/workspace/assets/batch/', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedIds, folder_id: folderId }),
+      });
+      if (res.ok) {
+        setSelectedIds([]);
+        setShowMoveDialog(false);
+        refresh();
+      }
+    } catch (err) {
+      console.error('Move failed', err);
+    }
   };
 
   return (
@@ -99,57 +112,44 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
           </p>
         </div>
         <div className="assets-library__stats" aria-label="资产统计">
-          <div>
-            <strong>{total}</strong>
-            <span>总资产</span>
-          </div>
-          <div>
-            <strong>{recentCount}</strong>
-            <span>近 7 天</span>
-          </div>
-          <div>
-            <strong>{sourceCounts?.workflow ?? 0}</strong>
-            <span>工作流</span>
-          </div>
-          <div>
-            <strong>{previewCounts?.with_file ?? 0}</strong>
-            <span>可预览</span>
-          </div>
-          <div>
-            <strong>{previewCounts?.records_only ?? 0}</strong>
-            <span>仅记录</span>
-          </div>
+          <div><strong>{total}</strong><span>总资产</span></div>
+          <div><strong>{recentCount}</strong><span>近 7 天</span></div>
+          <div><strong>{sourceCounts?.workflow ?? 0}</strong><span>工作流</span></div>
+          <div><strong>{previewCounts?.with_file ?? 0}</strong><span>可预览</span></div>
+          <div><strong>{previewCounts?.records_only ?? 0}</strong><span>仅记录</span></div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={refresh}
-            className="assets-library__refresh"
-            title="刷新"
-            aria-label="刷新"
-          >
+          <button type="button" onClick={refresh} className="assets-library__refresh" title="刷新" aria-label="刷新">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            type="button"
-            onClick={() => setDialog({ mode: 'create' })}
-            className="assets-library__new"
-            title="新建资产"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            新建资产
+          <button type="button" onClick={() => setSelectMode((v) => !v)} className={`assets-library__refresh ${selectMode ? 'is-active' : ''}`} title={selectMode ? '退出选择' : '选择资产'}>
+            <Check className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => setDialog({ mode: 'create' })} className="assets-library__new" title="新建资产">
+            <Plus className="h-3.5 w-3.5" />新建资产
           </button>
         </div>
       </header>
 
-      <AssetFilter
-        filter={filter}
-        onChange={handleFilterChange}
-        typeCounts={typeCounts}
-        sourceCounts={sourceCounts}
-        previewCounts={previewCounts}
-        total={total}
-      />
+      <AssetFilter filter={filter} onChange={handleFilterChange}
+        typeCounts={typeCounts} sourceCounts={sourceCounts} previewCounts={previewCounts} total={total} />
+
+      {selectMode && (
+        <div className="flex items-center gap-3 px-1 py-2 text-[10px] font-black text-[var(--editorial-text-gray)]">
+          <button type="button" onClick={handleSelectAll} className="border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
+            {selectedIds.length === items.length ? '取消全选' : '全选'}
+          </button>
+          <span>{selectedIds.length} / {items.length} 个已选</span>
+          {selectedIds.length > 0 && (
+            <button type="button" onClick={() => setShowMoveDialog(true)} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
+              <Move className="h-3 w-3 inline mr-1" />移动到文件夹
+            </button>
+          )}
+          <button type="button" onClick={() => { setSelectedIds([]); setSelectMode(false); }} className="ml-auto border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
+            <X className="h-3 w-3 inline mr-1" />退出
+          </button>
+        </div>
+      )}
 
       {error ? <div className="assets-library__error">{error}</div> : null}
 
@@ -167,6 +167,9 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
               onPreview={setPreviewAsset}
               onEdit={(a) => setDialog({ mode: 'edit', asset: a })}
               onDelete={handleDelete}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
             />
           ))}
         </div>
@@ -174,18 +177,66 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
 
       <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
 
-      {previewAsset ? (
-        <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} />
-      ) : null}
+      {previewAsset ? <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
 
       {dialog.mode !== 'closed' ? (
-        <AssetFormDialog
-          open
-          initial={dialog.mode === 'edit' ? dialog.asset : null}
-          onClose={() => setDialog({ mode: 'closed' })}
-          onSave={handleSaveDialog}
-        />
+        <AssetFormDialog open initial={dialog.mode === 'edit' ? dialog.asset : null} onClose={() => setDialog({ mode: 'closed' })} onSave={handleSaveDialog} />
       ) : null}
+
+      {showMoveDialog && (
+        <MoveToFolderDialog
+          selectedCount={selectedIds.length}
+          organizationSlug={organizationSlug || ''}
+          onConfirm={handleMoveToFolder}
+          onClose={() => setShowMoveDialog(false)}
+        />
+      )}
     </section>
+  );
+}
+
+function MoveToFolderDialog({ selectedCount, organizationSlug, onConfirm, onClose }: {
+  selectedCount: number;
+  organizationSlug: string;
+  onConfirm: (folderId: number) => void;
+  onClose: () => void;
+}) {
+  const [folders, setFolders] = useState<Array<{ id: number; path: string }>>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
+  const [moving, setMoving] = useState(false);
+
+  useEffect(() => {
+    apiFetch(`/folders/?organization=${organizationSlug}`)
+      .then((res) => res.ok ? res.json() : [])
+      .then((data) => setFolders(Array.isArray(data) ? data : []))
+      .catch(() => setFolders([]));
+  }, [organizationSlug]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>
+      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)] w-[400px]" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-black mb-1">移动到文件夹</h3>
+        <p className="text-[10px] text-[var(--editorial-text-gray)] mb-4">将 {selectedCount} 个资产移动到所选文件夹</p>
+        <div className="space-y-1 max-h-[300px] overflow-y-auto">
+          {folders.map((f) => (
+            <button key={f.id} type="button" onClick={() => setSelectedFolderId(f.id)}
+              className={`w-full text-left px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                selectedFolderId === f.id
+                  ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)]'
+                  : 'border-transparent hover:bg-[var(--surface-hover)]'
+              }`}>
+              <FolderOpen className="h-3.5 w-3.5 inline mr-2" />{f.path}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-[10px] font-black border border-[var(--border-subtle)] rounded-lg hover:bg-[var(--surface-hover)]">取消</button>
+          <button type="button" disabled={!selectedFolderId || moving} onClick={() => { setMoving(true); onConfirm(selectedFolderId!); }}
+            className="px-3 py-2 text-[10px] font-black border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] rounded-lg disabled:opacity-40">
+            {moving ? '移动中...' : '确认移动'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

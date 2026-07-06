@@ -11,7 +11,6 @@ interface InspectorMetaProps {
   onSaveBrandContext: () => void;
   brandContextDirty: boolean;
   brandContextSaving: boolean;
-  onArchive: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
@@ -25,7 +24,6 @@ export function InspectorProjectMeta({
   onSaveBrandContext,
   brandContextDirty,
   brandContextSaving,
-  onArchive,
   onDelete,
   onClose,
 }: InspectorMetaProps) {
@@ -98,11 +96,8 @@ export function InspectorProjectMeta({
       />
 
       <div className="border-t border-dashed border-[var(--editorial-stroke)]/30 pt-4 flex gap-2">
-        <button type="button" onClick={onArchive} className="desktop-toolbar__btn flex-1">
-          {selectedProject.is_archived ? '恢复' : '归档'}
-        </button>
         <button type="button" onClick={onDelete} className="desktop-toolbar__btn flex-1 text-rose-500">
-          删除
+          移至回收站
         </button>
       </div>
 

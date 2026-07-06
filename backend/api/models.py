@@ -204,6 +204,7 @@ class Folder(models.Model):
     sort_order = models.IntegerField(default=0)
     permission_scope = models.CharField(max_length=20, choices=PERMISSION_CHOICES, default='workspace')
     is_archived = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -236,6 +237,7 @@ class Project(models.Model):
     status_tag = models.CharField(max_length=40, default='creating')
     sort_order = models.IntegerField(default=0)
     is_archived = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -273,6 +275,7 @@ class Asset(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='assets')
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='assets')
     campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='assets')
+    folder = models.ForeignKey(Folder, on_delete=models.SET_NULL, null=True, blank=True, related_name='assets')
     asset_type = models.CharField(max_length=20, choices=ASSET_TYPES)
     title = models.CharField(max_length=255)
     source_url = models.CharField(max_length=600, blank=True, default='')

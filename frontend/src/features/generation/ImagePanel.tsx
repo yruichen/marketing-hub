@@ -3,6 +3,7 @@ import { AgentTerminal } from './AgentTerminal';
 import { BrandMemorySummary } from '../brand-memory';
 import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
+import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, ImageOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
@@ -55,7 +56,7 @@ export function ImagePanel({
 
   const [isRunning, setIsRunning] = useState(false);
 
-  const { submitQueuedGeneration, taskUiState } = useGenerationTask({
+  const { submitQueuedGeneration, taskUiState, lastCompletedTaskId, setLastCompletedTaskId } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -218,10 +219,13 @@ export function ImagePanel({
             </div>
           </div>
 
-          <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
-            <span>SEED: 309485-VIS</span>
-            <span>RATIO: {imageOutput.aspectRatio || imageOutput.aspect_ratio}</span>
-          </div>
+          <SaveControlBar
+            visible={taskUiState.phase === 'succeeded'}
+            taskId={lastCompletedTaskId}
+            organizationSlug={workspaceScope?.organization.slug}
+            onSaved={() => setLastCompletedTaskId(null)}
+            onDiscard={() => setLastCompletedTaskId(null)}
+          />
         </div>
       </div>
     </div>

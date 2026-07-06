@@ -50,7 +50,9 @@ export interface FolderRecord {
   sort_order: number;
   permission_scope: 'workspace' | 'private' | 'restricted';
   is_archived: boolean;
+  deleted_at?: string | null;
   project_count: number;
+  asset_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +72,7 @@ export interface ProjectRecord {
   status_tag?: string;
   sort_order?: number;
   is_archived: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
   campaign_count?: number;
@@ -163,6 +166,7 @@ export interface WorkspaceDraftRecord {
   organization_id: number;
   project_id: number;
   campaign_id: number | null;
+  folder_id?: number | null;
   name: string;
   brand_context: BrandContext;
   nodes: WorkflowNode[];
@@ -219,6 +223,7 @@ export interface WorkflowRunRecord {
   organization_id: number;
   project_id: number | null;
   campaign_id: number | null;
+  folder_id?: number | null;
   requested_by_id: number | null;
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'partial_success' | 'cancelled';
   idempotency_key: string;
@@ -245,6 +250,7 @@ export interface WorkflowTemplateRecord {
   organization_id: number | null;
   source_project_id: number | null;
   source_campaign_id: number | null;
+  folder_id?: number | null;
   title: string;
   description: string;
   author_username: string;
@@ -336,6 +342,7 @@ export interface AssetRecord {
   organization_id: number;
   project_id: number | null;
   campaign_id: number | null;
+  folder_id?: number | null;
   asset_type: AssetType;
   title: string;
   source_url: string;

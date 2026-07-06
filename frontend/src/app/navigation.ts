@@ -97,7 +97,7 @@ export const NAV_SECTIONS: NavSection[] = [
         id: 'projects',
         label: '我的项目',
         hint: '品牌信息与 brief',
-        icon: FolderKanban,
+        icon: Boxes,
       },
       {
         id: 'builder',

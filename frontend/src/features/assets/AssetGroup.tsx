@@ -10,13 +10,16 @@ interface AssetGroupProps {
   onPreview: (asset: AssetRecord) => void;
   onEdit?: (asset: AssetRecord) => void;
   onDelete?: (asset: AssetRecord) => void;
+  selectMode?: boolean;
+  selectedIds?: number[];
+  onToggleSelect?: (assetId: number) => void;
 }
 
 /**
  * 单个分组：标题 + 折叠 + 卡片网格。
  * 状态本地维护（不污染 props），首次默认展开。
  */
-export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDelete }: AssetGroupProps) {
+export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDelete, selectMode, selectedIds, onToggleSelect }: AssetGroupProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -46,6 +49,9 @@ export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDel
               onPreview={onPreview}
               onEdit={onEdit}
               onDelete={onDelete}
+              selectMode={selectMode}
+              selected={selectedIds?.includes(asset.id) ?? false}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>

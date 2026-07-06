@@ -694,11 +694,11 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
+  height: 1px;
   min-height: 600px;
 }
 
 .workflow-module-layout > .workflow-left-dock {
-  align-self: stretch;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   overflow: hidden;
@@ -1004,7 +1004,7 @@
     transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
     width 0.2s ease,
     opacity 0.2s ease;
-  will-change: transform, opacity;
+
 }
 
 .app-sidebar-shell--collapsed {

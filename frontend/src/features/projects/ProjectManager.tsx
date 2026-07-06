@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
+import { Folder } from 'lucide-react';
+import type { AssetRecord } from '../../types/workspace';
+import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
 import type {
   BrandContext,
   CampaignRecord,
@@ -8,8 +10,13 @@ import type {
   ProjectRecord,
 } from '../../types/workspace';
 import { DesktopSidebar } from './DesktopSidebar';
-import { DesktopToolbar } from './DesktopToolbar';
 import { DesktopCanvas } from './DesktopCanvas';
+import { AssetFilter } from '../assets/AssetFilter';
+import { AssetGroup } from '../assets/AssetGroup';
+import { AssetFormDialog } from '../assets/AssetFormDialog';
+import { AssetPreviewModal } from '../assets/AssetPreviewModal';
+import { useAssetGroups } from '../assets/useAssetGroups';
+import type { AssetFilterState } from '../assets/types';
 import { Inspector } from './Inspector';
 import { StatusBar } from './StatusBar';
 import { ContextMenu } from './ContextMenu';
@@ -31,6 +38,7 @@ import {
   type ViewMode,
 } from './types';
 import './desktop.css';
+import '../assets/assets.css';
 
 interface ContextMenuState {
   x: number;
@@ -39,7 +47,6 @@ interface ContextMenuState {
 }
 
 const ALL_FILTER = '全部';
-const ARCHIVED_PSEUDO = '__archived__';
 
 export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast, onOpenAssetsLibrary }: ProjectManagerProps) {
   const queryClient = useQueryClient();
@@ -70,7 +77,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [brandContextSaving, setBrandContextSaving] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [selectedFolderInfo, setSelectedFolderInfo] = useState<null | {id: number; name: string; path: string}>(null);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [trashProjects, setTrashProjects] = useState<ProjectRecord[]>([]);
+  const [trashFolders, setTrashFolders] = useState<FolderRecord[]>([]);
+  const [deletedFolders, setDeletedFolders] = useState<FolderRecord[]>([]);
+  const initialFolderSetRef = useRef(false);
 
   const organizationSlug = organization?.slug || 'marketing-hub';
   const projectsQueryKey = useMemo(() => ['projects', organizationSlug], [organizationSlug]);
@@ -100,6 +112,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         ]);
         setFolders(folderData);
         setProjects(projectData);
+
         const next =
           projectData.find((p) => p.id === preferredProjectId) ||
           projectData.find((p) => p.id === activeProjectId) ||
@@ -130,6 +143,15 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     }, 0);
     return () => window.clearTimeout(timer);
   }, [fetchProjects]);
+
+  // On initial mount, default to first folder when folders are loaded
+  const foldersReady = folders.length > 0;
+  useEffect(() => {
+    if (foldersReady && !initialFolderSetRef.current && sidebarFolderPath === ALL_FILTER) {
+      initialFolderSetRef.current = true;
+      setSidebarFolderPath(folders[0].path);
+    }
+  }, [foldersReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadProject = useCallback(
     async (projectId: number, openInspector = true) => {
@@ -180,6 +202,40 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     } finally {
       setLoading(false);
     }
+  };
+
+  const deleteFolder = async (folder: FolderRecord) => {
+    try {
+      await apiDelete(`/folders/${folder.id}/`);
+      setFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      setDeletedFolders((prev) => [...prev, folder]);
+      triggerToast('文件夹已移至回收站', 'info');
+    } catch {
+      triggerToast('文件夹删除失败', 'error');
+    }
+  };
+
+  const restoreFolder = async (folder: FolderRecord) => {
+    try {
+      await apiPost(`/folders/${folder.id}/restore/`, {});
+      setTrashFolders((prev) => prev.filter((f) => f.id !== folder.id));
+      setFolders((prev) => [...prev, folder]);
+      triggerToast('文件夹已恢复', 'success');
+    } catch {
+      triggerToast('文件夹恢复失败', 'error');
+    }
+  };
+
+  const permanentDeleteFolder = async (folder: FolderRecord) => {
+    if (!window.confirm(`永久删除文件夹「${folder.path}」？不可恢复。`)) return;
+    try {
+      await apiDelete(`/folders/${folder.id}/?permanent=true`);
+    } catch {
+      // ignore
+    }
+    setTrashFolders((prev) => prev.filter((f) => f.id !== folder.id));
+    setDeletedFolders((prev) => prev.filter((f) => f.id !== folder.id));
+    triggerToast('文件夹已永久删除', 'info');
   };
 
   const createProject = async () => {
@@ -267,24 +323,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     }
   };
 
-  const archiveProject = async (project: ProjectRecord) => {
-    try {
-      await apiPatch<ProjectRecord>(`/projects/${project.id}/`, { is_archived: !project.is_archived });
-      await fetchProjects(selectedProject?.id);
-      triggerToast(project.is_archived ? '项目已恢复' : '项目已归档', 'info');
-    } catch {
-      triggerToast('项目状态更新失败', 'error');
-    }
-  };
-
   const deleteProject = async (project: ProjectRecord) => {
-    const archiveFirst = window.confirm('建议先归档项目，避免误删。点击"确定"执行归档，点击"取消"继续永久删除确认。');
-    if (archiveFirst) {
-      await archiveProject(project);
-      return;
-    }
-    if (!window.confirm(`永久删除「${project.name}」后不可恢复。是否继续？`)) return;
-    if (!window.confirm('请再次确认：确实要永久删除这个项目吗？')) return;
+    if (!window.confirm(`将「${project.name}」移至回收站？30 天后自动永久删除。`)) return;
     try {
       await apiDelete(`/projects/${project.id}/`);
       if (selectedProject?.id === project.id) {
@@ -292,11 +332,23 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         setInspectorOpen(false);
       }
       await fetchProjects();
-      triggerToast('项目已删除', 'info');
+      triggerToast('项目已移至回收站', 'info');
     } catch {
       triggerToast('项目删除失败', 'error');
     }
   };
+
+  const restoreProject = async (project: ProjectRecord) => {
+    try {
+      await apiPost(`/projects/${project.id}/restore/`, {});
+      await fetchProjects(selectedProject?.id);
+      triggerToast('项目已从回收站恢复', 'success');
+    } catch {
+      triggerToast('项目恢复失败', 'error');
+    }
+  };
+
+  const archiveProject = async (_project: ProjectRecord) => {};
 
   const handleDropToFolder = async (project: ProjectRecord, folder: FolderRecord) => {
     if (getProjectFolder(project) === folder.path) return;
@@ -369,7 +421,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           path,
           sort_order: foldersByPath.size,
           permission_scope: 'workspace',
-          is_archived: false,
           project_count: 0,
           created_at: project.created_at,
           updated_at: project.updated_at,
@@ -385,13 +436,40 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       .sort((a, b) => (a.sort_order - b.sort_order) || a.path.localeCompare(b.path, 'zh-CN'));
   }, [folders, projects]);
 
+  // When sidebar folder changes, look up folder info and load assets
+  useEffect(() => {
+    if (sidebarFolderPath === '__trash__') {
+      setSelectedFolderInfo(null);
+      try {
+        const params = new URLSearchParams({ organization: organizationSlug, trash: 'true' });
+        apiFetch(`/projects/?${params.toString()}`)
+          .then((r) => r.ok ? r.json() : [])
+          .then((data) => setTrashProjects(Array.isArray(data) ? data : []))
+          .catch(() => setTrashProjects([]));
+        apiFetch(`/folders/?${params.toString()}`)
+          .then((r) => r.ok ? r.json() : [])
+          .then((data) => setTrashFolders(Array.isArray(data) ? data : []))
+          .catch(() => setTrashFolders([]));
+      } catch { setTrashProjects([]); }
+    } else if (sidebarFolderPath && sidebarFolderPath !== ALL_FILTER) {
+      const folder = displayFolders.find((f) => f.path === sidebarFolderPath);
+      if (folder) {
+        setSelectedFolderInfo({ id: folder.id, name: folder.name, path: folder.path });
+      } else {
+        setSelectedFolderInfo(null);
+      }
+    } else {
+      setSelectedFolderInfo(null);
+    }
+  }, [sidebarFolderPath, displayFolders, organizationSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const folderOptions = useMemo(() => [ALL_FILTER, ...displayFolders.map((f) => f.path)], [displayFolders]);
 
   const sidebarScopedProjects = useMemo(() => {
     if (sidebarFolderPath === ALL_FILTER) return projects;
-    if (sidebarFolderPath === ARCHIVED_PSEUDO) return projects.filter((p) => p.is_archived);
+    if (sidebarFolderPath === '__trash__') return trashProjects;
     return projects.filter((p) => getProjectFolder(p) === sidebarFolderPath);
-  }, [projects, sidebarFolderPath]);
+  }, [projects, sidebarFolderPath, trashProjects]);
 
   const filteredProjectsBase = useFilteredProjects(sidebarScopedProjects, {
     search,
@@ -415,19 +493,16 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const groupedByFolder = useGroupedByFolder(displayFolders, filteredProjects);
 
   const projectStats = useMemo(() => {
-    const active = projects.filter((p) => !p.is_archived).length;
     const review = projects.filter((p) => getProjectStatus(p) === 'review' || (p.pending_review_count || 0) > 0).length;
     const assets = projects.reduce((sum, p) => sum + (p.asset_count || 0), 0);
     const campaigns = projects.reduce((sum, p) => sum + (p.campaign_count || 0), 0);
     const spend = projects.reduce((sum, p) => sum + Number(p.total_cost_usd || 0), 0);
     return {
       total: projects.length,
-      active,
       review,
       assets,
       campaigns,
       spend: formatProjectCost(String(spend)),
-      archived: projects.length - active,
     };
   }, [projects]);
 
@@ -490,38 +565,14 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           }
         }}
         onRefresh={() => void fetchProjects()}
+        onCreateFolder={() => setShowCreateFolder((v) => !v)}
+        onDeleteFolder={deleteFolder}
+        deletedFolderCount={deletedFolders.length + trashFolders.length}
         loading={loading}
       />
 
       <div className="desktop-canvas">
-        <DesktopToolbar
-          organizationName={organization?.name || 'Marketing Hub'}
-          search={search}
-          onSearchChange={setSearch}
-          platformFilter={platformFilter}
-          onPlatformFilterChange={setPlatformFilter}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          folderOptions={folderOptions}
-          folderFilter={folderFilter}
-          onFolderFilterChange={setFolderFilter}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          sortKey={sortKey}
-          onSortKeyChange={setSortKey}
-          selectedCount={selectedIds.length}
-          filteredCount={filteredProjects.length}
-          stats={projectStats}
-          onSelectAll={onSelectAll}
-          onClearSelection={onClearSelection}
-          onBatchArchive={() => void batchPatch({ is_archived: true }, '已批量归档')}
-          onBatchReview={() => void batchPatch({ status_tag: 'review' }, '已批量设为待审')}
-          onBatchExport={batchExport}
-          onCreateProjectClick={() => setShowCreateProject((v) => !v)}
-          onCreateFolderClick={() => setShowCreateFolder((v) => !v)}
-          createProjectOpen={showCreateProject}
-          createFolderOpen={showCreateFolder}
-        />
+
 
         {showCreateProject ? (
           <div className="desktop-create-panel">
@@ -536,19 +587,28 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         ) : null}
 
         {showCreateFolder ? (
-          <div className="desktop-create-panel desktop-create-panel--compact">
-            <div className="desktop-create-panel__title">快速创建文件夹</div>
-            <CreateFolderForm
-              onCreate={(name) => {
-                void createFolder(name);
-                setShowCreateFolder(false);
-              }}
-              loading={loading}
-              defaultName={newFolderName}
-            />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowCreateFolder(false)}>
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)] p-5 shadow-[var(--shadow-soft)] w-[360px]" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-black mb-3">新建文件夹</h3>
+              <CreateFolderForm
+                onCreate={(name) => {
+                  void createFolder(name);
+                  setShowCreateFolder(false);
+                }}
+                loading={loading}
+                defaultName={newFolderName}
+              />
+            </div>
           </div>
         ) : null}
 
+        {selectedFolderInfo ? (
+          <FolderAssetsPanel
+            organizationSlug={organizationSlug}
+            folderId={selectedFolderInfo.id}
+            key={selectedFolderInfo.id}
+          />
+        ) : (
         <DesktopCanvas
           viewMode={viewMode}
           projects={filteredProjects}
@@ -556,6 +616,10 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           activeProjectId={activeProjectId}
           selectedIds={selectedIds}
           groupedByFolder={groupedByFolder}
+          isTrashView={sidebarFolderPath === '__trash__'}
+          trashFolders={trashFolders}
+          onRestoreFolder={restoreFolder}
+          onPermanentDeleteFolder={permanentDeleteFolder}
           loading={loading}
           onSelectProject={onSelectProject}
           onOpenProject={(p) => void onOpenProject(p)}
@@ -564,14 +628,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           onCheckToggle={onCheckToggle}
           onDropToFolder={(p, f) => void handleDropToFolder(p, f)}
         />
+        )}
 
-        <StatusBar
-          totalCount={projects.length}
-          filteredCount={filteredProjects.length}
-          selectedCount={selectedIds.length}
-          folderCount={displayFolders.length}
-          onClearFilters={onClearFilters}
-        />
       </div>
 
       <Inspector
@@ -593,9 +651,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         onSetCurrent={() => {
           if (selectedProject) setProjectAsCurrent(selectedProject, undefined);
         }}
-        onArchive={() => {
-          if (selectedProject) void archiveProject(selectedProject);
-        }}
         onDelete={() => {
           if (selectedProject) void deleteProject(selectedProject);
         }}
@@ -609,16 +664,78 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           y={contextMenu.y}
           onClose={closeContextMenu}
           items={buildProjectContextItems({
-            isArchived: !!contextMenu.project.is_archived,
+            isDeleted: !!contextMenu.project.deleted_at,
             onOpen: () => void onOpenProject(contextMenu.project),
             onSetAsCurrent: () => setProjectAsCurrent(contextMenu.project, undefined),
-            onArchive: () => void archiveProject(contextMenu.project),
+            onRestore: () => void restoreProject(contextMenu.project),
             onDelete: () => void deleteProject(contextMenu.project),
             onCopyName: () => {
               navigator.clipboard?.writeText(contextMenu.project.name);
               triggerToast('项目名已复制', 'info');
             },
           })}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function FolderAssetsPanel({ organizationSlug, folderId }: { organizationSlug: string; folderId: number }) {
+  const [items, setItems] = useState<AssetRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null);
+  const [filter, setFilter] = useState<AssetFilterState>({ type: 'all', source: 'all', preview: 'all', search: '' });
+  const [editAsset, setEditAsset] = useState<AssetRecord | null>(null);
+
+  const loadAssets = useCallback(() => {
+    const params = new URLSearchParams({ organization: organizationSlug, folder: String(folderId), page_size: '200' });
+    if (filter.type !== 'all') params.set('asset_type', filter.type);
+    setLoading(true);
+    apiFetch(`/workspace/assets/?${params.toString()}`)
+      .then((r) => r.ok ? r.json() : Promise.resolve({ items: [] }))
+      .then((data) => { setItems(Array.isArray(data) ? data : (data.items || [])); setLoading(false); })
+      .catch(() => { setItems([]); setLoading(false); });
+  }, [organizationSlug, folderId, filter]);
+
+  useEffect(() => { loadAssets(); }, [loadAssets]);
+
+  const handleEditAsset = (asset: AssetRecord) => setEditAsset(asset);
+  const handleSaveEdit = async (input: Parameters<typeof apiFetch>) => {
+    await apiPatch(`/workspace/assets/${editAsset!.id}/`, input);
+    setEditAsset(null);
+    loadAssets();
+  };
+  const handleDeleteAsset = async (asset: AssetRecord) => {
+    if (!window.confirm(`删除「${asset.title}」？此操作不可撤销。`)) return;
+    await apiDelete(`/workspace/assets/${asset.id}/`);
+    loadAssets();
+  };
+
+  const { groups } = useAssetGroups(items);
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <AssetFilter filter={filter} onChange={setFilter} total={items.length} />
+      <div className="flex-1 min-h-0 overflow-y-auto mt-3">
+        {loading ? (
+          <div className="text-[11px] text-[var(--editorial-text-gray)] p-4">加载中...</div>
+        ) : items.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-[11px] text-[var(--editorial-text-gray)]">暂无资产</div>
+        ) : (
+          <div className="assets-library__groups">
+            {groups.map((group) => (
+              <AssetGroup key={group.key} group={group} onPreview={setPreviewAsset} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />
+            ))}
+          </div>
+        )}
+      </div>
+      {previewAsset ? <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
+      {editAsset ? (
+        <AssetFormDialog
+          open
+          initial={editAsset}
+          onClose={() => setEditAsset(null)}
+          onSave={(input) => apiPatch(`/workspace/assets/${editAsset.id}/`, input).then(() => { setEditAsset(null); loadAssets(); })}
         />
       ) : null}
     </div>

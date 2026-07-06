@@ -39,6 +39,7 @@ export function useGenerationTask({
   onWorkspaceRefresh,
 }: SubmitOptions) {
   const [taskUiState, setTaskUiState] = useState<GenerationTaskUiState>(idleTaskUiState);
+  const [lastCompletedTaskId, setLastCompletedTaskId] = useState<number | null>(null);
 
   const pollGenerationTask = useCallback(async (
     taskId: number,
@@ -173,6 +174,7 @@ export function useGenerationTask({
       const result = task.result.data as T;
       applyResult(result);
       setAgentLogs(task.result.logs || []);
+      setLastCompletedTaskId(task.id);
       fetchDashboard();
       const successProgress = taskProgressMessage(task);
       setTaskUiState({
@@ -306,6 +308,7 @@ export function useGenerationTask({
 
       applyResult(task.result.data as VideoOutput);
       setAgentLogs(task.result.logs || []);
+      setLastCompletedTaskId(task.id);
       await fetchDashboard();
       await onWorkspaceRefresh?.();
       const result = task.result.data as VideoOutput;
@@ -339,5 +342,5 @@ export function useGenerationTask({
     }
   }, [pollGenerationTask, workspaceScope, username, setLoading, setAgentLogs, setLatestTask, triggerToast, fetchDashboard, onWorkspaceRefresh]);
 
-  return { submitQueuedGeneration, submitVideoGeneration, taskUiState };
+  return { submitQueuedGeneration, submitVideoGeneration, taskUiState, lastCompletedTaskId, setLastCompletedTaskId };
 }

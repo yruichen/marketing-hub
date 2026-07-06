@@ -1,13 +1,17 @@
 from django.urls import path
 
 from workspaces.views import (
+    AssetBatchUpdateView,
+    AssetCreateFromTaskView,
     AnalyticsDashboardView,
     CampaignCollectionView,
     CampaignDetailView,
     FolderCollectionView,
     FolderDetailView,
+    FolderRestoreView,
     ProjectCollectionView,
     ProjectDetailView,
+    ProjectRestoreView,
     WorkflowTemplateCollectionView,
     WorkflowTemplateForkView,
     WorkspaceAssetDetailView,
@@ -24,8 +28,10 @@ urlpatterns = [
     path('workspace/', WorkspaceView.as_view(), name='workspace'),
     path('folders/', FolderCollectionView.as_view(), name='folder_collection'),
     path('folders/<int:pk>/', FolderDetailView.as_view(), name='folder_detail'),
+    path('folders/<int:pk>/restore/', FolderRestoreView.as_view(), name='folder_restore'),
     path('projects/', ProjectCollectionView.as_view(), name='project_collection'),
     path('projects/<int:pk>/', ProjectDetailView.as_view(), name='project_detail'),
+    path('projects/<int:pk>/restore/', ProjectRestoreView.as_view(), name='project_restore'),
     path('campaigns/', CampaignCollectionView.as_view(), name='campaign_collection'),
     path('campaigns/<int:pk>/', CampaignDetailView.as_view(), name='campaign_detail'),
     path('drafts/', WorkspaceDraftCollectionView.as_view(), name='workspace_draft_collection'),
@@ -33,6 +39,8 @@ urlpatterns = [
     path('templates/', WorkflowTemplateCollectionView.as_view(), name='workflow_template_collection'),
     path('templates/<int:pk>/fork/', WorkflowTemplateForkView.as_view(), name='workflow_template_fork'),
     path('dashboard/', AnalyticsDashboardView.as_view(), name='dashboard'),
+    path('workspace/assets/create-from-task/', AssetCreateFromTaskView.as_view(), name='asset_create_from_task'),
+    path('workspace/assets/batch/', AssetBatchUpdateView.as_view(), name='asset_batch_update'),
     path('workspace/assets/', WorkspaceAssetsView.as_view(), name='workspace_assets'),
     path('workspace/assets/<int:pk>/', WorkspaceAssetDetailView.as_view(), name='workspace_asset_detail'),
 ]

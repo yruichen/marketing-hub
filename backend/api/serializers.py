@@ -50,6 +50,7 @@ class MembershipSerializer(serializers.ModelSerializer):
 class FolderSerializer(serializers.ModelSerializer):
     path = serializers.CharField(read_only=True)
     project_count = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Folder
@@ -63,7 +64,9 @@ class FolderSerializer(serializers.ModelSerializer):
             'sort_order',
             'permission_scope',
             'is_archived',
+            'deleted_at',
             'project_count',
+            'asset_count',
             'created_at',
             'updated_at',
         )
@@ -73,6 +76,9 @@ class FolderSerializer(serializers.ModelSerializer):
         if value is not None:
             return value
         return obj.projects.count()
+
+    def get_asset_count(self, obj: Folder):
+        return obj.assets.count()
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -96,6 +102,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'status_tag',
             'sort_order',
             'is_archived',
+            'deleted_at',
             'created_at',
             'updated_at',
         )
@@ -260,6 +267,7 @@ class AssetSerializer(serializers.ModelSerializer):
             'organization_id',
             'project_id',
             'campaign_id',
+            'folder_id',
             'asset_type',
             'title',
             'source_url',

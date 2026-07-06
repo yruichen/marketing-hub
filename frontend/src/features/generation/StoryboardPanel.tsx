@@ -3,6 +3,7 @@ import { AgentTerminal } from './AgentTerminal';
 import { BrandMemorySummary } from '../brand-memory';
 import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
+import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, StoryboardOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
@@ -73,7 +74,7 @@ export function StoryboardPanel({
     onStoryboardChange?.(storyboardOutput);
   }, [onStoryboardChange, storyboardOutput]);
 
-  const { submitQueuedGeneration, taskUiState } = useGenerationTask({
+  const { submitQueuedGeneration, taskUiState, lastCompletedTaskId, setLastCompletedTaskId } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -214,10 +215,13 @@ export function StoryboardPanel({
             )}
           </div>
 
-          <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
-            <span>TOPIC: "{storyboardOutput.video_topic}"</span>
-            <span>DURATION: {storyboardOutput.total_duration_seconds}S</span>
-          </div>
+          <SaveControlBar
+            visible={taskUiState.phase === 'succeeded'}
+            taskId={lastCompletedTaskId}
+            organizationSlug={workspaceScope?.organization.slug}
+            onSaved={() => setLastCompletedTaskId(null)}
+            onDiscard={() => setLastCompletedTaskId(null)}
+          />
         </div>
       </div>
     </div>

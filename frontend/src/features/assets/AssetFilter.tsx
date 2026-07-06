@@ -55,7 +55,6 @@ export function AssetFilter({ filter, onChange, typeCounts, sourceCounts, previe
       <div className="assets-filter__group">
         <div className="assets-filter__label">
           <span>素材类型</span>
-          <strong>{total}</strong>
         </div>
         <div className="assets-filter__chips">
           {TYPES.map((t) => {
