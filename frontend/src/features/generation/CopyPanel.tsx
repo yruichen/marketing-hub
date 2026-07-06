@@ -214,8 +214,6 @@ export function CopyPanel({
             visible={taskUiState.phase === 'succeeded'}
             taskId={lastCompletedTaskId}
             organizationSlug={workspaceScope?.organization.slug}
-            projectSlug={workspaceScope?.project.slug}
-            campaignId={workspaceScope?.campaign.id}
             onSaved={() => setLastCompletedTaskId(null)}
             onDiscard={() => setLastCompletedTaskId(null)}
           />

@@ -44,7 +44,6 @@ interface DesktopCanvasProps {
   folders: FolderRecord[];
   activeProjectId: number | undefined;
   selectedIds: number[];
-  groupedByFolder: Record<string, ProjectRecord[]>;
   folderAssets?: Record<string, AssetRecord[]>;
   isTrashView?: boolean;
   trashFolders?: FolderRecord[];
@@ -70,7 +69,6 @@ export function DesktopCanvas({
   folders,
   activeProjectId,
   selectedIds,
-  groupedByFolder,
   folderAssets = {},
   isTrashView = false,
   trashFolders = [],
@@ -265,13 +263,6 @@ export function DesktopCanvas({
   }
 
   // board: 按文件夹列分组，按资产类型分类展示
-  const ASSET_TYPE_LABEL: Record<string, string> = {
-    image: '图片',
-    audio: '音频',
-    video: '视频',
-    document: '文档',
-  };
-
   return (
     <div className="desktop-workspace">
       <div className="desktop-board">

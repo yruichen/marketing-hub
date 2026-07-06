@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Folder } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
 import type {
@@ -18,19 +17,15 @@ import { AssetPreviewModal } from '../assets/AssetPreviewModal';
 import { useAssetGroups } from '../assets/useAssetGroups';
 import type { AssetFilterState } from '../assets/types';
 import { Inspector } from './Inspector';
-import { StatusBar } from './StatusBar';
 import { ContextMenu } from './ContextMenu';
 import { buildProjectContextItems } from './contextMenuItems';
 import { CreateFolderForm } from './CreateFolderForm';
 import { CreateProjectForm } from './CreateProjectForm';
 import { useFilteredProjects } from './useFilteredProjects';
-import { useGroupedByFolder } from './useGroupedByFolder';
 import {
   EMPTY_BRAND_CONTEXT,
-  formatProjectCost,
   getProjectActivityTime,
   getProjectFolder,
-  getProjectStatus,
   type ProjectDetail,
   type ProjectForm,
   type ProjectManagerProps,
@@ -55,13 +50,13 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [selectedProject, setSelectedProject] = useState<ProjectDetail | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState('');
-  const [platformFilter, setPlatformFilter] = useState(ALL_FILTER);
-  const [statusFilter, setStatusFilter] = useState(ALL_FILTER);
-  const [folderFilter, setFolderFilter] = useState(ALL_FILTER);
+  const [search] = useState('');
+  const [platformFilter] = useState(ALL_FILTER);
+  const [statusFilter] = useState(ALL_FILTER);
+  const [folderFilter] = useState(ALL_FILTER);
   const [sidebarFolderPath, setSidebarFolderPath] = useState<string>(ALL_FILTER);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [sortKey, setSortKey] = useState<ProjectSortKey>('recent');
+  const [viewMode] = useState<ViewMode>('list');
+  const [sortKey] = useState<ProjectSortKey>('recent');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [newFolderName] = useState('默认文件夹');
   const [newProject, setNewProject] = useState<ProjectForm>({
@@ -348,8 +343,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     }
   };
 
-  const archiveProject = async (_project: ProjectRecord) => {};
-
   const handleDropToFolder = async (project: ProjectRecord, folder: FolderRecord) => {
     if (getProjectFolder(project) === folder.path) return;
     try {
@@ -366,30 +359,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
 
   const toggleSelected = (projectId: number) => {
     setSelectedIds((prev) => (prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId]));
-  };
-
-  const batchPatch = async (patch: Partial<ProjectRecord>, message: string) => {
-    if (selectedIds.length === 0) return;
-    setLoading(true);
-    try {
-      await Promise.all(selectedIds.map((id) => apiPatch<ProjectRecord>(`/projects/${id}/`, patch)));
-      setSelectedIds([]);
-      await fetchProjects(selectedProject?.id);
-      triggerToast(message, 'success');
-    } catch {
-      triggerToast('批量操作失败', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const batchExport = () => {
-    const rows = projects
-      .filter((p) => selectedIds.includes(p.id))
-      .map((p) => `${p.name},${p.brief},${(p.platform_tags || []).join('|')},${p.status_tag || ''}`)
-      .join('\n');
-    navigator.clipboard?.writeText(`项目名称,Brief,平台标签,状态\n${rows}`);
-    triggerToast('已复制批量导出 CSV', 'success');
   };
 
   // ===== derived state =====
@@ -422,6 +391,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           sort_order: foldersByPath.size,
           permission_scope: 'workspace',
           project_count: 0,
+          is_archived: false,
           created_at: project.created_at,
           updated_at: project.updated_at,
         });
@@ -437,6 +407,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   }, [folders, projects]);
 
   // When sidebar folder changes, look up folder info and load assets
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sidebarFolderPath === '__trash__') {
       setSelectedFolderInfo(null);
@@ -461,9 +432,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     } else {
       setSelectedFolderInfo(null);
     }
-  }, [sidebarFolderPath, displayFolders, organizationSlug]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const folderOptions = useMemo(() => [ALL_FILTER, ...displayFolders.map((f) => f.path)], [displayFolders]);
+  }, [sidebarFolderPath, displayFolders, organizationSlug]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const sidebarScopedProjects = useMemo(() => {
     if (sidebarFolderPath === ALL_FILTER) return projects;
@@ -489,22 +459,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     });
     return sorted;
   }, [filteredProjectsBase, sortKey]);
-
-  const groupedByFolder = useGroupedByFolder(displayFolders, filteredProjects);
-
-  const projectStats = useMemo(() => {
-    const review = projects.filter((p) => getProjectStatus(p) === 'review' || (p.pending_review_count || 0) > 0).length;
-    const assets = projects.reduce((sum, p) => sum + (p.asset_count || 0), 0);
-    const campaigns = projects.reduce((sum, p) => sum + (p.campaign_count || 0), 0);
-    const spend = projects.reduce((sum, p) => sum + Number(p.total_cost_usd || 0), 0);
-    return {
-      total: projects.length,
-      review,
-      assets,
-      campaigns,
-      spend: formatProjectCost(String(spend)),
-    };
-  }, [projects]);
 
   // ===== selection / open =====
   const onSelectProject = (project: ProjectRecord, event: MouseEvent) => {
@@ -532,16 +486,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
 
   const onCheckToggle = (projectId: number) => {
     toggleSelected(projectId);
-  };
-
-  const onSelectAll = () => setSelectedIds(filteredProjects.map((p) => p.id));
-  const onClearSelection = () => setSelectedIds([]);
-
-  const onClearFilters = () => {
-    setSearch('');
-    setPlatformFilter(ALL_FILTER);
-    setStatusFilter(ALL_FILTER);
-    setFolderFilter(ALL_FILTER);
   };
 
   const closeContextMenu = () => setContextMenu(null);
@@ -615,7 +559,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           folders={displayFolders}
           activeProjectId={activeProjectId}
           selectedIds={selectedIds}
-          groupedByFolder={groupedByFolder}
           isTrashView={sidebarFolderPath === '__trash__'}
           trashFolders={trashFolders}
           onRestoreFolder={restoreFolder}
@@ -687,7 +630,7 @@ function FolderAssetsPanel({ organizationSlug, folderId }: { organizationSlug: s
   const [filter, setFilter] = useState<AssetFilterState>({ type: 'all', source: 'all', preview: 'all', search: '' });
   const [editAsset, setEditAsset] = useState<AssetRecord | null>(null);
 
-  const loadAssets = useCallback(() => {
+  const loadAssets = () => {
     const params = new URLSearchParams({ organization: organizationSlug, folder: String(folderId), page_size: '200' });
     if (filter.type !== 'all') params.set('asset_type', filter.type);
     setLoading(true);
@@ -695,16 +638,13 @@ function FolderAssetsPanel({ organizationSlug, folderId }: { organizationSlug: s
       .then((r) => r.ok ? r.json() : Promise.resolve({ items: [] }))
       .then((data) => { setItems(Array.isArray(data) ? data : (data.items || [])); setLoading(false); })
       .catch(() => { setItems([]); setLoading(false); });
-  }, [organizationSlug, folderId, filter]);
+  };
 
-  useEffect(() => { loadAssets(); }, [loadAssets]);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { loadAssets(); }, [organizationSlug, folderId, filter.type]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleEditAsset = (asset: AssetRecord) => setEditAsset(asset);
-  const handleSaveEdit = async (input: Parameters<typeof apiFetch>) => {
-    await apiPatch(`/workspace/assets/${editAsset!.id}/`, input);
-    setEditAsset(null);
-    loadAssets();
-  };
   const handleDeleteAsset = async (asset: AssetRecord) => {
     if (!window.confirm(`删除「${asset.title}」？此操作不可撤销。`)) return;
     await apiDelete(`/workspace/assets/${asset.id}/`);

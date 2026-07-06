@@ -286,7 +286,7 @@ export function WorkflowBuilder({
 
   // --- API Actions ---
 
-  const persistDraft = async (nextNodes = nodes, nextEdges = edges, silent = false) => {
+  const persistDraft = useCallback(async (nextNodes = nodes, nextEdges = edges, silent = false) => {
     if (!project) throw new Error('Project is required');
     setSaveStatus('saving');
     try {
@@ -307,7 +307,7 @@ export function WorkflowBuilder({
       setSaveStatus('failed');
       throw err;
     }
-  };
+  }, [brandContext, campaign, draft, edges, nodes, project, selectedNodeId, setBrandContext, setDraft, setFuture, setHistory, setRfEdges, setRfNodes, setSaveStatus, triggerToast]);
 
   // Auto-save (must be after persistDraft declaration)
   useEffect(() => {
@@ -322,7 +322,7 @@ export function WorkflowBuilder({
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [nodes, edges, brandContext, saveStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const executeWorkflow = async () => {
+  const executeWorkflow = useCallback(async () => {
     if (!project) { triggerToast('请先选择项目', 'error'); return; }
     if (readOnly) { triggerToast('只读模式下无法运行', 'error'); return; }
     if (!canRunWorkflow) { openWorkflowProGate(); return; }
@@ -427,7 +427,7 @@ export function WorkflowBuilder({
       if (pollTimer) clearInterval(pollTimer);
       setLoadingState('idle');
     }
-  };
+  }, [brandContext, canRunWorkflow, edges, markHistory, nodes, nodesRef, openWorkflowProGate, persistDraft, project, readOnly, setCurrentWorkflowRun, setDraft, setLastTasks, setLoadingState, setRfEdges, setRfNodes, triggerToast, username, workflowReadiness]);
 
   const runWorkflow = useCallback(() => {
     if (!project) { triggerToast('请先选择项目', 'error'); return; }

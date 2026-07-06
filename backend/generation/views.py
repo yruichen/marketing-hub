@@ -205,7 +205,7 @@ class MarketingCopyView(APIView):
                 'generation_task',
                 task.id,
             )
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type='copy',
             payload={
                 'brand_name': request.data.get('brand_name', 'Marketing-Hub'),
@@ -252,7 +252,7 @@ class ImageGenerateView(APIView):
             )
             schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type='image',
             payload=_image_generation_payload(request.data),
             username=request_username,
@@ -293,7 +293,7 @@ class StoryboardView(APIView):
             )
             schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type='storyboard',
             payload={
                 'video_topic': request.data.get('video_topic', 'Coffee Shop Morning'),
@@ -338,7 +338,7 @@ class AudioVoiceoverView(APIView):
             )
             schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type='audio',
             payload={
                 'text': request.data.get('text', '欢迎使用 Marketing Hub AI 一站式营销场景配音助手'),
@@ -385,7 +385,7 @@ class VideoGenerateView(APIView):
             )
             schedule_generation_task(task)
             return finalize_idempotency(idempotency, Response({'task': serialize_task(task)}, status=status.HTTP_202_ACCEPTED), 'generation_task', task.id)
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type='video',
             payload=payload,
             username=request_username,
@@ -430,7 +430,7 @@ class TaskQueueView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         run_now = as_bool(request.data.get('run_now', True))
-        task = create_generation_task(auto_save=False, 
+        task = create_generation_task(
             task_type=task_type,
             payload=request.data.get('payload', {}),
             username=request_username,
