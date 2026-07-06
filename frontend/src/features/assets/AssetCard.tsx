@@ -9,6 +9,9 @@ interface AssetCardProps {
   onPreview: (asset: AssetRecord) => void;
   onEdit?: (asset: AssetRecord) => void;
   onDelete?: (asset: AssetRecord) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (assetId: number) => void;
 }
 
 /**
@@ -16,8 +19,9 @@ interface AssetCardProps {
  *   - 缩略图：image 直接 <img>，其它走 assetVisuals 矩阵配色 + 文档扩展名图标
  *   - 操作：预览 / 编辑 / 删除 / 复制 / 下载
  *   - 复制：写 clipboard.toast；下载：触发 <a download>
+ *   - selectMode：显示复选框，点击切换选中状态
  */
-export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps) {
+export function AssetCard({ asset, onPreview, onEdit, onDelete, selectMode, selected = false, onToggleSelect }: AssetCardProps) {
   const [copiedField, setCopiedField] = useState<'url' | 'title' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
@@ -64,16 +68,27 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete }: AssetCardProps
   };
 
   const showDownload = asset.source_url || asset.asset_type === 'document';
+  const isSelected = selectMode && selected;
 
   return (
     <article
-      className={`asset-card asset-card--${asset.asset_type}`}
+      className={`asset-card asset-card--${asset.asset_type} ${isSelected ? 'asset-card--selected' : ''} ${selectMode ? 'asset-card--selectable' : ''}`}
       style={{
         ['--asset-bg' as string]: `var(${palette.cssVar}-bg, ${palette.fallbackBg})`,
         ['--asset-fg' as string]: `var(${palette.cssVar}-fg, ${palette.fallbackFg})`,
       }}
     >
-      <button type="button" className="asset-card__open-zone" onClick={() => onPreview(asset)}>
+      {selectMode && (
+        <div
+          className="asset-card__select-overlay"
+          onClick={() => onToggleSelect?.(asset.id)}
+        >
+          <span className={`asset-card__checkbox ${selected ? 'asset-card__checkbox--checked' : ''}`}>
+            {selected ? <Check className="h-3.5 w-3.5" /> : null}
+          </span>
+        </div>
+      )}
+      <button type="button" className="asset-card__open-zone" onClick={() => selectMode ? onToggleSelect?.(asset.id) : onPreview(asset)}>
         <div
           className="asset-card__media"
           style={{ background: 'var(--asset-bg)', color: 'var(--asset-fg)' }}

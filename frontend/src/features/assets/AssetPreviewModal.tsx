@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Copy, Download, ExternalLink, X } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
@@ -22,7 +23,7 @@ const formatDate = (iso: string) => {
  * 多色配色与 AssetCard 一致（用同一份 assetVisuals 矩阵）。
  * 点击遮罩 / Esc / X 关闭。
  */
-export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
+function AssetPreviewModalInner({ asset, onClose }: AssetPreviewModalProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState<'title' | 'url' | null>(null);
   const palette = getAssetPalette(asset);
@@ -215,4 +216,9 @@ export function AssetPreviewModal({ asset, onClose }: AssetPreviewModalProps) {
       </div>
     </div>
   );
+}
+
+
+export function AssetPreviewModal(props: AssetPreviewModalProps) {
+  return createPortal(<AssetPreviewModalInner {...props} />, document.body);
 }

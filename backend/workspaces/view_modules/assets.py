@@ -60,6 +60,8 @@ class WorkspaceAssetsView(APIView):
         _, org, _, _ = get_scope(request)
         asset_type = request.query_params.get('asset_type')
         project_id = request.query_params.get('project')
+        folder_id = request.query_params.get('folder')
+        unfiled = request.query_params.get('unfiled') == 'true'
         source = request.query_params.get('source')
         workflow_run_id = request.query_params.get('workflow_run')
         workflow_node_id = request.query_params.get('workflow_node')
@@ -80,6 +82,10 @@ class WorkspaceAssetsView(APIView):
             qs = qs.filter(asset_type=asset_type)
         if project_id:
             qs = qs.filter(project_id=project_id)
+        if folder_id:
+            qs = qs.filter(folder_id=folder_id)
+        if unfiled:
+            qs = qs.filter(folder_id__isnull=True)
         if source and source != 'all':
             qs = qs.filter(metadata__source=source)
         if workflow_run_id:
@@ -267,3 +273,84 @@ class WorkspaceAssetDetailView(APIView):
             metadata={'asset_type': asset_type},
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AssetCreateFromTaskView(APIView):
+    """
+    From a completed generation task, create an asset (on-demand save).
+    User generates content, then frontend calls this to save, instead of auto-creating.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'creator')
+
+        task_id = request.data.get('task_id')
+        if not task_id:
+            return Response({'detail': 'task_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            task = GenerationTask.objects.get(pk=task_id, organization=org)
+        except GenerationTask.DoesNotExist:
+            return Response({'detail': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if task.status != 'succeeded':
+            return Response({'detail': 'Task not completed yet'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = task.result
+        if isinstance(result, dict):
+            result_data = result.get('data', result)
+        else:
+            result_data = result or {}
+
+        from api.service_modules.generation import create_asset_from_task_result
+        asset = create_asset_from_task_result(task, result_data if isinstance(result_data, dict) else {},
+                                               provider=result_data.get('provider', ''),
+                                               model_name=result_data.get('model_name', ''))
+
+        if asset is None:
+            return Response({'detail': 'Cannot create asset from this task'}, status=status.HTTP_400_BAD_REQUEST)
+
+        record_audit_log(
+            action='asset_create',
+            actor=user,
+            organization=org,
+            target_type='asset',
+            target_id=str(asset.id),
+            metadata={'source': 'generation_save', 'task_id': task_id},
+        )
+        return Response(serialize_asset(asset), status=status.HTTP_201_CREATED)
+
+
+class AssetBatchUpdateView(APIView):
+    """Batch move assets to a project."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'creator')
+        asset_ids = request.data.get('ids', [])
+        if not asset_ids or not isinstance(asset_ids, list):
+            return Response({'detail': 'ids must be a non-empty list'}, status=status.HTTP_400_BAD_REQUEST)
+        project_id = request.data.get('project_id')
+        folder_id = request.data.get('folder_id')
+        assets = Asset.objects.filter(pk__in=asset_ids, organization=org)
+        updated = 0
+        if project_id:
+            project = Project.objects.filter(pk=project_id, organization=org).first()
+            if not project:
+                return Response({'detail': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
+            for asset in assets:
+                asset.project = project
+                asset.save(update_fields=['project'])
+                updated += 1
+        if folder_id:
+            folder = Folder.objects.filter(pk=folder_id, organization=org).first()
+            if not folder:
+                return Response({'detail': 'Folder not found'}, status=status.HTTP_404_NOT_FOUND)
+            for asset in assets:
+                asset.folder = folder
+                asset.save(update_fields=['folder'])
+                updated += 1
+        return Response({'updated': updated})

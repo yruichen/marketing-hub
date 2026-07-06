@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Bell,
   BookOpen,
-  BriefcaseBusiness,
   CheckCircle2,
   Clock3,
   ChevronDown,
@@ -818,8 +817,18 @@ export default function App() {
     }
   }, [username, triggerToast, fetchWorkspaceBootstrap]);
 
-  const handleSelectProjectScope = useCallback((project: ProjectRecord, campaign?: CampaignRecord) => {
-    selectProjectScope(project, campaign, username);
+  const handleSelectProjectScope = useCallback(async (project: ProjectRecord, campaign?: CampaignRecord) => {
+    try {
+      const res = await apiFetch(`/projects/${project.id}/`);
+      if (res.ok) {
+        const detail: ProjectRecord = await res.json();
+        selectProjectScope({ ...project, ...detail }, campaign, username);
+      } else {
+        selectProjectScope(project, campaign, username);
+      }
+    } catch {
+      selectProjectScope(project, campaign, username);
+    }
     setActiveTab('content');
     triggerToast('当前项目范围已切换', 'success');
   }, [selectProjectScope, username, setActiveTab, triggerToast]);
@@ -1193,9 +1202,23 @@ export default function App() {
 
         {/* Workspace Title Bar */}
         {activeTab !== 'brainstorm' && (
-          headerOpen ? (
+          activeTab === 'builder' && !headerOpen ? (
+          <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 shadow-[var(--shadow-panel)] backdrop-blur">
+            <div className="flex min-w-0 items-center py-1 px-3">
+              <button
+                type="button"
+                onClick={() => setHeaderOpen(true)}
+                className="h-6 w-6 rounded border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
+                title="展开顶部"
+              >
+                <ChevronDown className="h-3 w-3 -rotate-90" />
+              </button>
+            </div>
+          </header>
+          ) : (
           <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 px-3 py-3 shadow-[var(--shadow-panel)] backdrop-blur">
             <div className="flex min-w-0 items-center gap-2 pb-2">
+              {activeTab === 'builder' && (
               <button
                 type="button"
                 onClick={() => setHeaderOpen(false)}
@@ -1204,6 +1227,7 @@ export default function App() {
               >
                 <ChevronDown className="h-4 w-4" />
               </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
@@ -1220,9 +1244,53 @@ export default function App() {
                     {TAB_META[activeTab]?.title || '工作台'}
                   </h2>
                   <span className="hidden md:block text-[10px] text-[var(--editorial-text-gray)] truncate min-w-0">
-                    {TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
+                    {workspaceScope?.campaign?.objective || workspaceScope?.project?.brief
+                      ? `${workspaceScope.campaign?.objective || workspaceScope.project?.brief}`
+                      : workspaceScope?.project?.name
+                      ? `${workspaceScope.project.name}${workspaceScope.campaign?.name ? ` · ${workspaceScope.campaign.name}` : ''}`
+                      : TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
                   </span>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5 flex-1 text-[var(--editorial-text-gray)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRightPanelOpen(true);
+                    setActiveTab('dashboard');
+                  }}
+                  className={`hidden h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-black transition sm:inline-flex ${
+                    activeTaskCount > 0
+                      ? 'border-[color-mix(in_srgb,var(--info-accent)_45%,var(--border-default))] bg-[color-mix(in_srgb,var(--info-accent)_12%,var(--surface-elevated))] text-[var(--editorial-text)]'
+                      : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)]'
+                  }`}
+                  title="查看正在处理的任务"
+                >
+                  {activeTaskCount > 0 ? <Loader2 className="h-3 w-3 animate-spin text-[var(--info-accent)]" /> : <Clock3 className="h-3 w-3" />}
+                  运行中 {activeTaskCount}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`hidden h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-black transition sm:inline-flex ${
+                    (dashboardSnapshot?.metrics.failed_tasks ?? 0) > 0
+                      ? 'border-[color-mix(in_srgb,var(--danger-accent)_45%,var(--border-default))] bg-[color-mix(in_srgb,var(--danger-accent)_10%,var(--surface-elevated))] text-[var(--editorial-text)]'
+                      : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)]'
+                  }`}
+                  title="查看失败任务"
+                >
+                  {(dashboardSnapshot?.metrics.failed_tasks ?? 0) > 0 ? <XCircle className="h-3 w-3 text-[var(--danger-accent)]" /> : <CheckCircle2 className="h-3 w-3 text-[var(--success-accent)]" />}
+                  异常 {dashboardSnapshot?.metrics.failed_tasks ?? 0}
+                </button>
+                <span className="hidden h-6 items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 text-[9px] font-black md:inline-flex" title={apiLive ? '后端服务正常' : '后端服务未确认'}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} />
+                  {apiLive ? '在线' : '待确认'}
+                </span>
+                <span className="hidden h-6 max-w-[160px] items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 text-[9px] font-black md:inline-flex">
+                  <UserCircle className="h-3 w-3" />
+                  <span className="truncate">{username || DEMO_USERNAME}</span>
+                </span>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
@@ -1280,81 +1348,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="flex min-w-0 items-center justify-between gap-3 pb-2 text-[9px] font-bold font-mono">
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden pr-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('projects')}
-                  className={`current-project-scope ${workspaceScope?.project ? 'current-project-scope--active' : 'current-project-scope--empty'}`}
-                  title={workspaceScope?.project ? `当前项目：${workspaceScope.project.name}` : '未选择项目，点击进入项目页选择'}
-                >
-                  <span className="current-project-scope__icon">
-                    <BriefcaseBusiness className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="current-project-scope__body">
-                    <span className="current-project-scope__label">当前项目</span>
-                    <strong>{workspaceScope?.project.name || '未选择项目'}</strong>
-                  </span>
-                  <span className="current-project-scope__meta">
-                    {workspaceScope?.organization.name || '未选择组织'}
-                    {workspaceScope?.campaign?.name ? ` / ${workspaceScope.campaign.name}` : ''}
-                  </span>
-                  <span className="current-project-scope__action">切换</span>
-                </button>
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5 text-[var(--editorial-text-gray)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRightPanelOpen(true);
-                    setActiveTab('dashboard');
-                  }}
-                  className={`hidden h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-black transition sm:inline-flex ${
-                    activeTaskCount > 0
-                      ? 'border-[color-mix(in_srgb,var(--info-accent)_45%,var(--border-default))] bg-[color-mix(in_srgb,var(--info-accent)_12%,var(--surface-elevated))] text-[var(--editorial-text)]'
-                      : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)]'
-                  }`}
-                  title="查看正在处理的任务"
-                >
-                  {activeTaskCount > 0 ? <Loader2 className="h-3 w-3 animate-spin text-[var(--info-accent)]" /> : <Clock3 className="h-3 w-3" />}
-                  运行中 {activeTaskCount}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('dashboard')}
-                  className={`hidden h-6 items-center gap-1 rounded-full border px-2 text-[9px] font-black transition sm:inline-flex ${
-                    (dashboardSnapshot?.metrics.failed_tasks ?? 0) > 0
-                      ? 'border-[color-mix(in_srgb,var(--danger-accent)_45%,var(--border-default))] bg-[color-mix(in_srgb,var(--danger-accent)_10%,var(--surface-elevated))] text-[var(--editorial-text)]'
-                      : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)]'
-                  }`}
-                  title="查看失败任务"
-                >
-                  {(dashboardSnapshot?.metrics.failed_tasks ?? 0) > 0 ? <XCircle className="h-3 w-3 text-[var(--danger-accent)]" /> : <CheckCircle2 className="h-3 w-3 text-[var(--success-accent)]" />}
-                  异常 {dashboardSnapshot?.metrics.failed_tasks ?? 0}
-                </button>
-                <span className="hidden h-6 items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 text-[9px] font-black md:inline-flex" title={apiLive ? '后端服务正常' : '后端服务未确认'}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${apiLive ? 'bg-emerald-500' : 'bg-yellow-500'}`} />
-                  {apiLive ? '在线' : '待确认'}
-                </span>
-                <span className="hidden h-6 max-w-[160px] items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 text-[9px] font-black md:inline-flex">
-                  <UserCircle className="h-3 w-3" />
-                  <span className="truncate">{username || DEMO_USERNAME}</span>
-                </span>
-              </div>
-            </div>
-          </header>
-          ) : (
-          <header className="shrink-0 mb-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-panel)]/86 shadow-[var(--shadow-panel)] backdrop-blur">
-            <div className="flex min-w-0 items-center py-1 px-3">
-              <button
-                type="button"
-                onClick={() => setHeaderOpen(true)}
-                className="h-6 w-6 rounded border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
-                title="展开顶部"
-              >
-                <ChevronDown className="h-3 w-3 -rotate-90" />
-              </button>
-            </div>
           </header>
           )
         )}
@@ -1370,6 +1363,10 @@ export default function App() {
                 triggerToast={triggerToast}
                 onOpenAssetsLibrary={() => setActiveTab('assets')}
               />
+            )}
+
+            {activeTab === 'assets' && workspaceScope?.organization && (
+              <AssetsLibrary organizationSlug={workspaceScope.organization.slug} />
             )}
 
             {activeTab === 'builder' && (
@@ -1419,7 +1416,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'content' && (
+            <div style={{ display: activeTab === 'content' ? 'block' : 'none' }} className="h-full">
               <ContentPackagePanel
                 onboarding={onboarding}
                 setOnboarding={setOnboarding}
@@ -1439,9 +1436,9 @@ export default function App() {
                   void fetchDashboard();
                 }}
               />
-            )}
+            </div>
 
-            {activeTab === 'copy' && (
+            <div style={{ display: activeTab === 'copy' ? 'block' : 'none' }} className="h-full">
               <CopyPanel
                 workspaceScope={workspaceScope}
                 username={username}
@@ -1455,9 +1452,9 @@ export default function App() {
                 onShare={handleShareToCommunity}
                 onCopy={handleCopyClipboard}
               />
-            )}
+            </div>
 
-            {activeTab === 'image' && (
+            <div style={{ display: activeTab === 'image' ? 'block' : 'none' }} className="h-full">
               <ImagePanel
                 workspaceScope={workspaceScope}
                 username={username}
@@ -1471,9 +1468,9 @@ export default function App() {
                 onShare={handleShareToCommunity}
                 onCopy={handleCopyClipboard}
               />
-            )}
+            </div>
 
-            {activeTab === 'storyboard' && (
+            <div style={{ display: activeTab === 'storyboard' ? 'block' : 'none' }} className="h-full">
               <StoryboardPanel
                 workspaceScope={workspaceScope}
                 username={username}
@@ -1487,9 +1484,9 @@ export default function App() {
                 onShare={handleShareToCommunity}
                 onStoryboardChange={setLatestStoryboardOutput}
               />
-            )}
+            </div>
 
-            {activeTab === 'audio' && (
+            <div style={{ display: activeTab === 'audio' ? 'block' : 'none' }} className="h-full">
               <AudioPanel
                 workspaceScope={workspaceScope}
                 username={username}
@@ -1502,9 +1499,9 @@ export default function App() {
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
               />
-            )}
+            </div>
 
-            {activeTab === 'video' && (
+            <div style={{ display: activeTab === 'video' ? 'block' : 'none' }} className="h-full">
               <VideoPanel
                 workspaceScope={workspaceScope}
                 username={username}
@@ -1521,7 +1518,7 @@ export default function App() {
                 featureEntitlements={billingPlans?.feature_entitlements}
                 onOpenBilling={() => setActiveTab('billing')}
               />
-            )}
+            </div>
 
             {activeTab === 'community' && (
               <CommunityPage
@@ -1540,9 +1537,6 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'assets' && workspaceScope?.organization && (
-              <AssetsLibrary organizationSlug={workspaceScope.organization.slug} />
-            )}
 
             {activeTab === 'review' && (
               <ReviewPage

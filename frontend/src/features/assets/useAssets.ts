@@ -59,6 +59,7 @@ export function useAssets(
       if (filter.preview === 'with_file') params.set('has_source', '1');
       if (filter.preview === 'records_only') params.set('has_source', '0');
       if (filter.search.trim()) params.set('search', filter.search.trim());
+      params.set('unfiled', 'true');
 
       const query = params.toString();
       const requestKey = `/workspace/assets/?${query}`;

@@ -28,14 +28,13 @@ export interface ProjectManagerProps {
 
 export const PLATFORM_CHOICES = ['小红书', '抖音', '微信公众号', '视频号', 'B站'];
 
-export const STATUS_CHOICES = ['creating', 'draft', 'review', 'published', 'archived'];
+export const STATUS_CHOICES = ['creating', 'draft', 'review', 'published'];
 
 export const STATUS_LABELS: Record<string, string> = {
   creating: '生产中',
   draft: '草稿',
   review: '待审',
   published: '已发布',
-  archived: '已归档',
 };
 
 export const CONTEXT_FIELDS: ReadonlyArray<readonly [keyof BrandContext, string]> = [
@@ -62,12 +61,11 @@ export function getProjectFolder(project: Pick<ProjectRecord, 'folder_path_displ
   return project.folder_path_display || project.folder_path || '默认文件夹';
 }
 
-export function getProjectStatus(project: Pick<ProjectRecord, 'status_tag' | 'is_archived'>): string {
-  if (project.is_archived) return 'archived';
+export function getProjectStatus(project: Pick<ProjectRecord, 'status_tag'>): string {
   return project.status_tag || 'creating';
 }
 
-export function getProjectStatusLabel(project: Pick<ProjectRecord, 'status_tag' | 'is_archived'>): string {
+export function getProjectStatusLabel(project: Pick<ProjectRecord, 'status_tag'>): string {
   const status = getProjectStatus(project);
   return STATUS_LABELS[status] || status;
 }

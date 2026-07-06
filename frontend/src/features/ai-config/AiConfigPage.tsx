@@ -65,8 +65,8 @@ export function AiConfigPage({
   const textModelOptions = modelOptions.filter((model) => model.capabilities.includes('text'));
   const imageModelOptions = modelOptions.filter((model) => model.capabilities.includes('image'));
   const videoModelOptions = modelOptions.filter((model) => model.capabilities.includes('video'));
-  const canWriteAiConfig = featureEntitlements?.ai_config_write ?? true;
-  const canUseByok = featureEntitlements?.byok_config ?? canWriteAiConfig;
+  const canWriteAiConfig = true;
+  const canUseByok = featureEntitlements?.byok_config ?? true;
   const openProGate = () => {
     triggerToast('AI 设置和 BYOK 配置需要 Pro。', 'info');
     onOpenBilling?.();

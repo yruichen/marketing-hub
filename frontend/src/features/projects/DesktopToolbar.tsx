@@ -1,14 +1,9 @@
 import {
-  Archive,
-  BarChart3,
-  CheckSquare,
-  CircleDollarSign,
   FileText,
   Folder,
   Grid2X2,
   Layers3,
   ListFilter,
-  Plus,
   Search,
   Table2,
   Tag,
@@ -37,16 +32,9 @@ interface DesktopToolbarProps {
   filteredCount: number;
   stats: {
     total: number;
-    active: number;
-    review: number;
-    assets: number;
-    campaigns: number;
-    spend: string;
-    archived: number;
   };
   onSelectAll: () => void;
   onClearSelection: () => void;
-  onBatchArchive: () => void;
   onBatchReview: () => void;
   onBatchExport: () => void;
   onCreateProjectClick: () => void;
@@ -133,7 +121,6 @@ export function DesktopToolbar({
   stats,
   onSelectAll,
   onClearSelection,
-  onBatchArchive,
   onBatchReview,
   onBatchExport,
   onCreateProjectClick,
@@ -151,32 +138,8 @@ export function DesktopToolbar({
   ];
   const folderSelectOptions = folderOptions.map((f) => ({ value: f, label: f }));
 
-  const metricItems = [
-    { label: '项目', value: stats.total, Icon: Folder },
-    { label: '待审', value: stats.review, Icon: CheckSquare },
-    { label: '活动', value: stats.campaigns, Icon: BarChart3 },
-    { label: '资产', value: stats.assets, Icon: FileText },
-    { label: '成本', value: stats.spend, Icon: CircleDollarSign },
-  ];
-
   return (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar__hero">
-        <div className="desktop-toolbar__title">
-          <span>{organizationName}</span>
-          <h2>项目概览</h2>
-        </div>
-        <div className="desktop-toolbar__metrics">
-          {metricItems.map(({ label, value, Icon }) => (
-            <div key={label} className="desktop-toolbar__metric">
-              <Icon className="h-3.5 w-3.5" />
-              <span>{label}</span>
-              <b>{value}</b>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <div className="desktop-toolbar__controls">
         <div className="desktop-toolbar__search">
           <Search className="h-3.5 w-3.5 text-[var(--editorial-text-gray)]" />
@@ -254,22 +217,24 @@ export function DesktopToolbar({
               <button type="button" onClick={onSelectAll} className="desktop-toolbar__btn" title="全选当前筛选结果">
                 全选
               </button>
-            </>
-          ) : (
-            <>
-              <span>{selectedCount} 个已选</span>
-              <button type="button" onClick={onBatchArchive} className="desktop-toolbar__btn">
-                <Archive className="h-3.5 w-3.5" />
-                归档
-              </button>
               <button type="button" onClick={onBatchReview} className="desktop-toolbar__btn">
                 待审
               </button>
               <button type="button" onClick={onBatchExport} className="desktop-toolbar__btn">
                 导出
               </button>
-              <button type="button" onClick={onClearSelection} className="desktop-toolbar__btn desktop-toolbar__btn--icon" title="取消选择">
-                <X className="h-3.5 w-3.5" />
+            </>
+          ) : (
+            <>
+              <span>{selectedCount} 个已选</span>
+              <button type="button" onClick={onSelectAll} className="desktop-toolbar__btn" title="全选当前筛选结果">
+                全选
+              </button>
+              <button type="button" onClick={onBatchReview} className="desktop-toolbar__btn">
+                待审
+              </button>
+              <button type="button" onClick={onBatchExport} className="desktop-toolbar__btn">
+                导出
               </button>
             </>
           )}
@@ -284,14 +249,6 @@ export function DesktopToolbar({
           >
             <Folder className="h-3.5 w-3.5" />
             文件夹
-          </button>
-          <button
-            type="button"
-            onClick={onCreateProjectClick}
-            className={`desktop-toolbar__btn desktop-toolbar__btn--primary ${createProjectOpen ? 'desktop-toolbar__btn--active' : ''}`}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            新建项目
           </button>
         </div>
       </div>

@@ -8,7 +8,7 @@
   --projects-canvas: var(--surface-canvas);
   position: relative;
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
@@ -647,10 +647,6 @@
   background: color-mix(in srgb, var(--editorial-accent-green) 12%, var(--surface-elevated));
 }
 
-.project-status--archived {
-  opacity: 0.75;
-}
-
 .project-meta-row,
 .project-stat-strip {
   display: flex;
@@ -681,7 +677,7 @@
 }
 
 .project-table {
-  min-width: 960px;
+  min-width: 720px;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -691,8 +687,8 @@
 .project-table__head,
 .project-table__row {
   display: grid;
-  grid-template-columns: minmax(360px, 1.7fr) 104px 132px minmax(132px, 0.7fr) 104px 168px;
-  gap: 12px;
+  grid-template-columns: minmax(280px, 1.5fr) 88px 110px minmax(100px, 0.6fr) 88px 132px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -763,6 +759,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .desktop-list__badge {
@@ -1295,4 +1292,16 @@
   .desktop-shell select {
     transition: none;
   }
+}
+
+/* Board view asset cards */
+.desktop-board__card--asset {
+  background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+  border-style: dashed;
+  padding: 8px 10px;
+  min-height: auto;
+}
+.desktop-board__card--asset:hover {
+  border-style: solid;
+  border-color: var(--brand-accent-strong);
 }

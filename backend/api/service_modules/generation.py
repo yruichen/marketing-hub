@@ -117,7 +117,7 @@ def generation_metadata(task: GenerationTask, result: dict[str, Any], *, provide
     }
 
 
-def run_generation_task(task: GenerationTask) -> GenerationTask:
+def run_generation_task(task: GenerationTask, auto_save: bool = True) -> GenerationTask:
     task.status = 'running'
     task.save(update_fields=['status', 'updated_at'])
 
@@ -267,7 +267,9 @@ def run_generation_task(task: GenerationTask) -> GenerationTask:
                 'harness_version': 'generation-service-v1',
                 'source_inputs_digest': source_inputs_digest(task.payload),
             }
-        asset = create_asset_from_task_result(task, result, provider=provider, model_name=model_name)
+        asset = None
+        if auto_save:
+            asset = create_asset_from_task_result(task, result, provider=provider, model_name=model_name)
         if isinstance(result, dict) and asset is not None:
             result = {**result, 'asset_id': asset.id}
         task.result = {'data': result, 'logs': logs}
@@ -308,6 +310,7 @@ def create_generation_task(
     project: Project | None = None,
     campaign: Campaign | None = None,
     run_now: bool = True,
+    auto_save: bool = True,
 ) -> GenerationTask:
     workspace = None
     if organization is None or project is None or campaign is None:
@@ -336,7 +339,7 @@ def create_generation_task(
 
     if run_now:
         try:
-            run_generation_task(task)
+            run_generation_task(task, auto_save=auto_save)
         except Exception:
             task.refresh_from_db()
     record_audit_log(

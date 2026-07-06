@@ -236,11 +236,6 @@ class AIConfigView(APIView):
         if not (request.user.is_staff or request.user.is_superuser):
             user, org, _, _ = get_scope(request)
             require_role(user, org, 'admin')
-            if not can_use_feature(user, org, 'ai_config_write'):
-                return Response(
-                    feature_denied_payload('ai_config_write', 'AI 设置和 BYOK 配置需要 Pro。请在计费页兑换 Pro 邀请码。'),
-                    status=status.HTTP_403_FORBIDDEN,
-                )
         provider = request.data.get('provider', 'agnes')
         if provider == 'mock' and not settings.AI_ALLOW_MOCK_PROVIDER:
             return Response(

@@ -51,9 +51,12 @@ class FolderCollectionView(APIView):
 
     def get(self, request):
         organization_slug = request.query_params.get('organization')
+        trash = request.query_params.get('trash') == 'true'
+        deleted_filter = {'deleted_at__isnull': False} if trash else {'deleted_at__isnull': True}
         query = Folder.objects.select_related('organization', 'parent').filter(
             organization__memberships__user=request.user,
-        ).annotate(project_count=Count('projects')).order_by('parent_id', 'sort_order', 'name')
+            **deleted_filter,
+        ).annotate(project_count=Count('projects', distinct=True), asset_count=Count('assets', distinct=True)).order_by('parent_id', 'sort_order', 'name')
         if organization_slug:
             query = query.filter(organization__slug=organization_slug)
         return Response([serialize_folder(item) for item in query])
@@ -111,8 +114,25 @@ class FolderDetailView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
         )
-        folder.delete()
+        permanent = request.query_params.get('permanent') == 'true'
+        if permanent or folder.deleted_at:
+            # Hard delete if already soft-deleted or permanent flag is set
+            folder.delete()
+        else:
+            from django.utils import timezone
+            folder.deleted_at = timezone.now()
+            folder.save(update_fields=['deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def restore(self, request, pk: int):
+        """Restore a soft-deleted folder."""
+        folder = get_folder_for_member(request.user, pk)
+        require_role(request.user, folder.organization, 'creator')
+        if not folder.deleted_at:
+            return Response({'detail': 'Folder is not deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+        folder.deleted_at = None
+        folder.save(update_fields=['deleted_at'])
+        return Response(serialize_folder(folder))
 
 
 class ProjectCollectionView(APIView):
@@ -124,8 +144,11 @@ class ProjectCollectionView(APIView):
         platform = request.query_params.get('platform')
         status_tag = request.query_params.get('status')
         search = request.query_params.get('q')
+        trash = request.query_params.get('trash') == 'true'
+        deleted_filter = {'deleted_at__isnull': False} if trash else {'deleted_at__isnull': True}
         query = Project.objects.select_related('organization', 'folder').filter(
             organization__memberships__user=request.user,
+            **deleted_filter,
         ).order_by('-created_at')
         if organization_slug:
             query = query.filter(organization__slug=organization_slug)
@@ -237,5 +260,43 @@ class ProjectDetailView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=request.META.get('HTTP_USER_AGENT', ''),
         )
-        project.delete()
+        from django.utils import timezone
+        project.deleted_at = timezone.now()
+        project.save(update_fields=['deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def restore(self, request, pk: int):
+        """Restore a soft-deleted project."""
+        project = get_project_for_member(request.user, pk)
+        require_role(request.user, project.organization, 'creator')
+        if not project.deleted_at:
+            return Response({'detail': 'Project is not deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+        project.deleted_at = None
+        project.save(update_fields=['deleted_at'])
+        return Response(serialize_project(project))
+
+
+class FolderRestoreView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        folder = get_folder_for_member(request.user, pk)
+        require_role(request.user, folder.organization, 'creator')
+        if not folder.deleted_at:
+            return Response({'detail': 'Folder is not deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+        folder.deleted_at = None
+        folder.save(update_fields=['deleted_at'])
+        return Response(serialize_folder(folder))
+
+
+class ProjectRestoreView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        project = get_project_for_member(request.user, pk)
+        require_role(request.user, project.organization, 'creator')
+        if not project.deleted_at:
+            return Response({'detail': 'Project is not deleted.'}, status=status.HTTP_400_BAD_REQUEST)
+        project.deleted_at = None
+        project.save(update_fields=['deleted_at'])
+        return Response(serialize_project(project))

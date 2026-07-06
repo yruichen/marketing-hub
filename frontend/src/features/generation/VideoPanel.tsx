@@ -15,6 +15,7 @@ import { AgentTerminal } from './AgentTerminal';
 import { BrandMemorySummary } from '../brand-memory';
 import { TaskStatusCard } from './TaskStatusCard';
 import { useGenerationTask } from './useGenerationTask';
+import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, StoryboardOutput, VideoOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { FeatureEntitlements, GenerationTaskRecord } from '../../types/workspace';
@@ -142,7 +143,7 @@ export function VideoPanel({
   const [isRunning, setIsRunning] = useState(false);
   const canRenderVideo = featureEntitlements?.video_render ?? true;
 
-  const { submitVideoGeneration, taskUiState } = useGenerationTask({
+  const { submitVideoGeneration, taskUiState, lastCompletedTaskId, setLastCompletedTaskId } = useGenerationTask({
     setLoading: setIsRunning,
     setAgentLogs,
     setLatestTask,
@@ -649,10 +650,13 @@ export function VideoPanel({
             </div>
           ) : null}
 
-          <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-2">
-            <span>SEED: 904216-VID</span>
-            <span>MODE: {videoOutput.creative_mode || videoInput.creativeMode}</span>
-          </div>
+          <SaveControlBar
+            visible={taskUiState.phase === 'succeeded'}
+            taskId={lastCompletedTaskId}
+            organizationSlug={workspaceScope?.organization.slug}
+            onSaved={() => setLastCompletedTaskId(null)}
+            onDiscard={() => setLastCompletedTaskId(null)}
+          />
         </div>
       </div>
     </div>

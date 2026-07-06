@@ -1,17 +1,33 @@
 import type { DragEvent, MouseEvent } from 'react';
 import {
-  Archive,
   Boxes,
   CalendarClock,
   Check,
   CircleDollarSign,
   FileStack,
+  FileText,
   Folder,
+  Image,
   Layers,
+  Music,
   PlayCircle,
   RadioTower,
+  Video,
 } from 'lucide-react';
-import type { FolderRecord, ProjectRecord } from '../../types/workspace';
+import type { AssetRecord, FolderRecord, ProjectRecord } from '../../types/workspace';
+const MAX_TRASH_DAYS = 30;
+function trashRemainingText(deletedAt?: string | null): string {
+  if (!deletedAt) return '';
+  const deleted = new Date(deletedAt).getTime();
+  if (!Number.isFinite(deleted)) return '';
+  const elapsedMs = Date.now() - deleted;
+  const elapsedDays = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+  const remaining = MAX_TRASH_DAYS - elapsedDays;
+  if (remaining <= 0) return '即将自动清理';
+  if (elapsedDays === 0) return '今天删除 · 剩余 ' + remaining + ' 天';
+  if (elapsedDays === 1) return '昨天删除 · 剩余 ' + remaining + ' 天';
+  return elapsedDays + ' 天前删除 · 剩余 ' + remaining + ' 天';
+}
 import type { ViewMode } from './types';
 import {
   formatProjectCost,
@@ -29,7 +45,12 @@ interface DesktopCanvasProps {
   activeProjectId: number | undefined;
   selectedIds: number[];
   groupedByFolder: Record<string, ProjectRecord[]>;
+  folderAssets?: Record<string, AssetRecord[]>;
+  isTrashView?: boolean;
+  trashFolders?: FolderRecord[];
   loading: boolean;
+  onRestoreFolder?: (folder: FolderRecord) => void;
+  onPermanentDeleteFolder?: (folder: FolderRecord) => void;
 
   onSelectProject: (project: ProjectRecord, event: MouseEvent) => void;
   onOpenProject: (project: ProjectRecord) => void;
@@ -50,7 +71,12 @@ export function DesktopCanvas({
   activeProjectId,
   selectedIds,
   groupedByFolder,
+  folderAssets = {},
+  isTrashView = false,
+  trashFolders = [],
   loading,
+  onRestoreFolder,
+  onPermanentDeleteFolder,
   onSelectProject,
   onOpenProject,
   onSetCurrentProject,
@@ -90,13 +116,13 @@ export function DesktopCanvas({
     </div>
   );
 
-  if (projects.length === 0) {
+  if (projects.length === 0 && trashFolders.length === 0) {
     return (
       <div className="desktop-workspace">
         <div className="desktop-icons__empty">
           <Folder className="h-8 w-8" />
-          <span>{loading ? '正在加载项目' : '没有匹配项目'}</span>
-          <p>{loading ? '请稍候' : '调整筛选或创建新项目'}</p>
+          <span>{loading ? '正在加载项目' : isTrashView ? '回收站暂无内容' : '没有匹配项目'}</span>
+          <p>{loading ? '请稍候' : isTrashView ? '已删除的项目和文件夹将显示在这里' : '调整筛选或创建新项目'}</p>
         </div>
       </div>
     );
@@ -151,16 +177,28 @@ export function DesktopCanvas({
   if (viewMode === 'list') {
     return (
       <div className="desktop-workspace">
-        <div className="project-table">
-          <div className="project-table__head">
-            <span>项目</span>
-            <span>状态</span>
-            <span>产出</span>
-            <span>平台</span>
-            <span>最近活跃</span>
-            <span>操作</span>
+        {isTrashView && trashFolders.length > 0 && (
+          <div className="mb-3 px-1">
+            <div className="text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-2">已删除文件夹 ({trashFolders.length})</div>
+            <div className="grid grid-cols-1 gap-1">
+              {trashFolders.map((f) => (
+                <div key={f.id} className="border border-[var(--border-subtle)] rounded-lg px-4 py-3 bg-[var(--surface-elevated)] flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <span className="text-[12px] font-bold truncate">{f.path}</span>
+                    <span className="text-[10px] text-[var(--editorial-text-gray)] shrink-0">{trashRemainingText(f.deleted_at)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] text-[var(--editorial-text-gray)]">{f.asset_count || 0} 资产</span>
+                    <button onClick={() => onRestoreFolder?.(f)} className="text-[10px] font-black text-[var(--info-accent)] hover:underline" title="恢复文件夹">恢复</button>
+                    <button onClick={() => onPermanentDeleteFolder?.(f)} className="text-[10px] font-black text-rose-500 hover:underline" title="永久删除">删除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          {projects.map((project) => (
+        )}
+        <div className="project-table">
+                 {projects.map((project) => (
             <div
               key={project.id}
               onClick={(event) => onSelectProject(project, event)}
@@ -184,7 +222,6 @@ export function DesktopCanvas({
                   <div>
                     <span className="project-table__name">{project.name}</span>
                     {activeProjectId === project.id && <span className="desktop-list__badge">当前</span>}
-                    {project.is_archived && <Archive className="h-3.5 w-3.5 text-[var(--editorial-text-gray)]" />}
                   </div>
                   <p>{project.brief || '暂无 Brief'}</p>
                   {renderProjectMeta(project)}
@@ -195,7 +232,9 @@ export function DesktopCanvas({
               <span className="project-table__platforms">
                 {(project.platform_tags || ['未设置平台']).map((tag) => <b key={tag}>{tag}</b>)}
               </span>
-              <span className="project-table__date">{formatProjectDate(getProjectActivityTime(project))}</span>
+              <span className="project-table__date">
+                {isTrashView ? trashRemainingText(project.deleted_at) : formatProjectDate(getProjectActivityTime(project))}
+              </span>
               <div className="project-table__actions">
                 <button
                   type="button"
@@ -225,12 +264,23 @@ export function DesktopCanvas({
     );
   }
 
-  // board: 按文件夹列分组，列本身可作为拖放目标
+  // board: 按文件夹列分组，按资产类型分类展示
+  const ASSET_TYPE_LABEL: Record<string, string> = {
+    image: '图片',
+    audio: '音频',
+    video: '视频',
+    document: '文档',
+  };
+
   return (
     <div className="desktop-workspace">
       <div className="desktop-board">
         {folders.map((folder) => {
-          const items = groupedByFolder[folder.path] || [];
+          const assets = folderAssets[folder.path] || [];
+          const imageAssets = assets.filter((a) => a.asset_type === 'image');
+          const audioAssets = assets.filter((a) => a.asset_type === 'audio');
+          const videoAssets = assets.filter((a) => a.asset_type === 'video');
+          const docAssets = assets.filter((a) => a.asset_type === 'document');
           return (
             <div
               key={folder.id}
@@ -248,31 +298,83 @@ export function DesktopCanvas({
                   <Folder className="inline h-3.5 w-3.5 mr-1" />
                   {folder.path}
                 </span>
-                <span className="text-[9px] text-[var(--editorial-text-gray)]">{items.length} 个项目</span>
+                <div className="flex items-center gap-2 text-[9px] text-[var(--editorial-text-gray)]">
+                  <span>{imageAssets.length} 图</span>
+                  <span>{audioAssets.length} 音</span>
+                  <span>{videoAssets.length} 视</span>
+                </div>
               </div>
               <div className="desktop-board__column__items">
-                {items.length === 0 ? (
-                  <div className="desktop-board__empty">拖入项目或创建新项目</div>
+                {assets.length === 0 ? (
+                  <div className="desktop-board__empty">暂无资产</div>
                 ) : (
-                  items.map((project) => (
-                    <div
-                      key={project.id}
-                      onClick={(event) => onSelectProject(project, event)}
-                      onDoubleClick={() => onSetCurrentProject(project)}
-                      onContextMenu={(event) => onContextMenu(project, event)}
-                      className={`desktop-board__card ${selectedIds.includes(project.id) ? 'desktop-board__card--selected' : ''} ${activeProjectId === project.id ? 'desktop-board__card--active' : ''}`}
-                    >
-                      <div className="desktop-board__card-title">
-                        <span>{project.name}</span>
-                        {activeProjectId === project.id && <span className="desktop-list__badge">当前</span>}
+                  <>
+                    {imageAssets.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 mt-1 text-[8px] font-black uppercase text-[var(--editorial-text-gray)] tracking-wider">图片</div>
+                        <div className="grid grid-cols-2 gap-1 px-1">
+                          {imageAssets.slice(0, 4).map((asset) => (
+                            <div key={asset.id} className="aspect-square rounded-lg overflow-hidden border border-[var(--border-subtle)] bg-[var(--surface-muted)]" title={asset.title}>
+                              {asset.source_url ? (
+                                <img src={asset.source_url} alt={asset.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-[var(--editorial-text-gray)]">
+                                  <Image className="h-5 w-5" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {imageAssets.length > 4 && (
+                            <div className="aspect-square rounded-lg border border-dashed border-[var(--border-subtle)] flex items-center justify-center text-[9px] font-bold text-[var(--editorial-text-gray)]">
+                              +{imageAssets.length - 4}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    {audioAssets.length > 0 && (
+                      <div>
+                        <div className="px-2 py-1 mt-1 text-[8px] font-black uppercase text-[var(--editorial-text-gray)] tracking-wider">音频</div>
+                        {audioAssets.slice(0, 3).map((asset) => (
+                          <div key={asset.id} className="desktop-board__card desktop-board__card--asset">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Music className="h-3.5 w-3.5 shrink-0 text-[var(--editorial-text-gray)]" />
+                              <span className="truncate text-[10px] font-bold">{asset.title}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {audioAssets.length > 3 && <div className="text-[8px] text-[var(--editorial-text-gray)] px-2 py-1">+ {audioAssets.length - 3} 个</div>}
                       </div>
-                      <p>{project.brief || '暂无 Brief'}</p>
-                      <div className="desktop-board__card-footer">
-                        {renderStatus(project)}
-                        <span>{project.asset_count || 0} 资产</span>
+                    )}
+                    {videoAssets.length > 0 && (
+                      <div>
+                        <div className="px-2 py-1 mt-1 text-[8px] font-black uppercase text-[var(--editorial-text-gray)] tracking-wider">视频</div>
+                        {videoAssets.slice(0, 3).map((asset) => (
+                          <div key={asset.id} className="desktop-board__card desktop-board__card--asset">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Video className="h-3.5 w-3.5 shrink-0 text-[var(--editorial-text-gray)]" />
+                              <span className="truncate text-[10px] font-bold">{asset.title}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {videoAssets.length > 3 && <div className="text-[8px] text-[var(--editorial-text-gray)] px-2 py-1">+ {videoAssets.length - 3} 个</div>}
                       </div>
-                    </div>
-                  ))
+                    )}
+                    {docAssets.length > 0 && (
+                      <div>
+                        <div className="px-2 py-1 mt-1 text-[8px] font-black uppercase text-[var(--editorial-text-gray)] tracking-wider">文档</div>
+                        {docAssets.slice(0, 3).map((asset) => (
+                          <div key={asset.id} className="desktop-board__card desktop-board__card--asset">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--editorial-text-gray)]" />
+                              <span className="truncate text-[10px] font-bold">{asset.title}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {docAssets.length > 3 && <div className="text-[8px] text-[var(--editorial-text-gray)] px-2 py-1">+ {docAssets.length - 3} 个</div>}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

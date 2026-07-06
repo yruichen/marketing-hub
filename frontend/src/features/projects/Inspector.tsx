@@ -25,7 +25,7 @@ interface InspectorProps {
   brandContextSaving: boolean;
   onSelectCampaign: (campaign: CampaignRecord) => void;
   onSetCurrent: () => void;
-  onArchive: () => void;
+  //  () => void;
   onDelete: () => void;
   onClose: () => void;
   onOpenAssetsLibrary: () => void;
@@ -50,7 +50,6 @@ export function Inspector({
   brandContextSaving,
   onSelectCampaign,
   onSetCurrent,
-  onArchive,
   onDelete,
   onClose,
   onOpenAssetsLibrary,
@@ -79,7 +78,7 @@ export function Inspector({
               <h3>{selectedProject.name}</h3>
               <p>{selectedProject.brief || '暂无 Brief'}</p>
               <button type="button" onClick={onSetCurrent} className="desktop-toolbar__btn desktop-toolbar__btn--primary w-full justify-center">
-                设为当前项目
+                设为当前文件夹
               </button>
             </div>
 
@@ -93,7 +92,6 @@ export function Inspector({
                 onSaveBrandContext={onSaveBrandContext}
                 brandContextDirty={brandContextDirty}
                 brandContextSaving={brandContextSaving}
-                onArchive={onArchive}
                 onDelete={onDelete}
                 onClose={onClose}
               />
