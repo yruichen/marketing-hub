@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Check, Folder, Inbox, Plus, RefreshCw, Trash, Trash2, X } from 'lucide-react';
 import type { FolderRecord, ProjectRecord } from '../../types/workspace';
-import { getProjectFolder } from './types';
 
 interface DesktopSidebarProps {
   folders: FolderRecord[];
@@ -18,7 +17,6 @@ interface DesktopSidebarProps {
 
 export function DesktopSidebar({
   folders,
-  projects,
   activeFolderPath,
   onSelectFolder,
   onDropProject,
