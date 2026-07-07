@@ -1,11 +1,11 @@
 services:
   postgres:
     restart: unless-stopped
-    ports: []
+    ports: !override []
 
   redis:
     restart: unless-stopped
-    ports: []
+    ports: !override []
 
   backend:
     restart: unless-stopped
@@ -31,7 +31,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
     restart: unless-stopped
-    ports:
+    ports: !override
       - "${FRONTEND_PORT:-5173}:80"
     environment: {}
     healthcheck:
