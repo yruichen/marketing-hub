@@ -14,6 +14,9 @@ services:
     environment:
       DJANGO_DEBUG: "False"
       CELERY_TASK_ALWAYS_EAGER: "false"
+      # HTTP deployment (no TLS yet): allow session/CSRF cookies over http://IP:5173
+      SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-false}"
+      CSRF_COOKIE_SECURE: "${CSRF_COOKIE_SECURE:-false}"
     healthcheck:
       test: ["CMD-SHELL", "uv run python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/schema/', timeout=5)\""]
       interval: 30s

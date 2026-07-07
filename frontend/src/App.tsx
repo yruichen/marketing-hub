@@ -423,9 +423,26 @@ export default function App() {
   }, []);
 
   const refreshAuthUser = useCallback(async () => {
-    const response = await apiFetch('/auth/me/');
-    const data = await response.json() as AuthMeResponse;
-    if (!response.ok || !data.authenticated || !data.username) {
+    try {
+      const response = await apiFetch('/auth/me/');
+      const data = await response.json() as AuthMeResponse;
+      if (!response.ok || !data.authenticated || !data.username) {
+        localStorage.removeItem('mh_token');
+        localStorage.removeItem('mh_username');
+        setToken(null);
+        setUsername(null);
+        setAuthUser(null);
+        setAuthStatus('anonymous');
+        return null;
+      }
+      localStorage.setItem('mh_token', 'session');
+      localStorage.setItem('mh_username', data.username);
+      setToken('session');
+      setUsername(data.username);
+      setAuthUser(data);
+      setAuthStatus('authenticated');
+      return data;
+    } catch {
       localStorage.removeItem('mh_token');
       localStorage.removeItem('mh_username');
       setToken(null);
@@ -434,13 +451,6 @@ export default function App() {
       setAuthStatus('anonymous');
       return null;
     }
-    localStorage.setItem('mh_token', 'session');
-    localStorage.setItem('mh_username', data.username);
-    setToken('session');
-    setUsername(data.username);
-    setAuthUser(data);
-    setAuthStatus('authenticated');
-    return data;
   }, []);
 
   useEffect(() => {
