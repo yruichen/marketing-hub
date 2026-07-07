@@ -14,8 +14,9 @@ flowchart LR
   PR[Pull Request] --> CI
   Push[Push to main] --> CI
   CI -->|全部通过| CD
-  CD --> SSH[SSH 到服务器]
-  SSH --> Deploy[scripts/deploy.sh]
+  CD --> Checkout[Actions checkout]
+  Checkout --> Rsync[rsync 同步到服务器]
+  Rsync --> Deploy[scripts/deploy.sh]
   Deploy --> Compose[docker compose prod]
 ```
 
@@ -32,7 +33,13 @@ CI 包含以下 Job，全部通过才允许合并 / 触发 CD：
 
 CD 在 CI 成功且事件为 `main` 分支 push 后自动运行，也可在 Actions 页面手动 **Run workflow**。
 
-服务器上执行的步骤（`scripts/deploy.sh`）：
+部署采用 **方案 B：Actions 传代码**，服务器**不需要** git 仓库，也**不需要** GitHub Deploy key 或私钥：
+
+1. GitHub Actions checkout 代码（使用 `GITHUB_TOKEN`）
+2. rsync 同步到服务器（保留服务器上的 `backend/.env` 和根目录 `.env`）
+3. SSH 执行 `scripts/deploy.sh`
+
+服务器上 `scripts/deploy.sh` 的步骤：
 
 1. `docker compose -f docker-compose.yml -f docker-compose.prod.yml build`
 2. `migrate --noinput`
@@ -50,14 +57,14 @@ sudo apt install -y git docker.io docker-compose-plugin
 sudo usermod -aG docker $USER
 ```
 
-### 2. 克隆仓库
+### 2. 创建部署目录
 
 ```bash
-sudo mkdir -p /opt/marketing-hub
-sudo chown $USER:$USER /opt/marketing-hub
-git clone <your-repo-url> /opt/marketing-hub
-cd /opt/marketing-hub
+mkdir -p /root/marketing-hub
+cd /root/marketing-hub
 ```
+
+首次部署由 CD 自动 rsync 代码；也可手动上传或解压代码到该目录。
 
 ### 3. 配置生产环境变量
 
@@ -89,8 +96,8 @@ bash scripts/deploy.sh
 |--------|------|------|
 | `DEPLOY_HOST` | 服务器 IP 或域名 | `117.72.16.215` |
 | `DEPLOY_USER` | SSH 用户名 | `ubuntu` |
-| `DEPLOY_SSH_KEY` | 私钥（PEM 全文） | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `DEPLOY_PATH` | 服务器上的项目路径 | `/opt/marketing-hub` |
+| `DEPLOY_SSH_KEY` | 私钥（用于 Actions SSH 登录服务器） | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `DEPLOY_PATH` | 服务器上的项目目录 | `/root/marketing-hub` |
 | `DEPLOY_PORT` | SSH 端口（可选） | `22` |
 
 ### GitHub Environment（推荐）
@@ -119,12 +126,7 @@ CD workflow 已声明 `environment: production`，Secrets 也可放在 Environme
 
 ## 回滚
 
-```bash
-cd /opt/marketing-hub
-git log --oneline -5
-git checkout <previous-commit>
-bash scripts/deploy.sh
-```
+在 GitHub Actions 中重新运行目标 commit 对应的 CD workflow，或在本地 checkout 目标版本后手动 rsync 并执行 `bash scripts/deploy.sh`。
 
 数据库 migration 已执行时，回滚代码后需自行评估是否需要 reverse migration。
 
