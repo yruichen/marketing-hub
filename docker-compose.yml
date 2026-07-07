@@ -18,12 +18,9 @@ services:
   backend:
     build:
       context: ./backend
+    env_file:
+      - ./backend/.env
     environment:
-      DJANGO_DEBUG: "true"
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
-      POSTGRES_DB: marketing_hub
-      POSTGRES_USER: marketing_hub
-      POSTGRES_PASSWORD: marketing_hub
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_URL: redis://redis:6379/0
@@ -40,12 +37,9 @@ services:
     build:
       context: ./backend
     command: ["uv", "run", "celery", "-A", "core", "worker", "--loglevel=info", "--concurrency=4", "--prefetch-multiplier=1", "--max-tasks-per-child=100"]
+    env_file:
+      - ./backend/.env
     environment:
-      DJANGO_DEBUG: "true"
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
-      POSTGRES_DB: marketing_hub
-      POSTGRES_USER: marketing_hub
-      POSTGRES_PASSWORD: marketing_hub
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_URL: redis://redis:6379/0
@@ -59,6 +53,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: dev
     environment:
       VITE_API_BASE_URL: http://localhost:8000/api
     ports:
