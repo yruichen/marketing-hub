@@ -1,0 +1,40 @@
+services:
+  postgres:
+    restart: unless-stopped
+    ports: []
+
+  redis:
+    restart: unless-stopped
+    ports: []
+
+  backend:
+    restart: unless-stopped
+    environment:
+      DJANGO_DEBUG: "False"
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "uv run python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/schema/', timeout=5)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    environment: {}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
