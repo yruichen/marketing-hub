@@ -76,10 +76,33 @@ cp backend/.env.example backend/.env
 在项目根目录创建 `.env`（供 docker compose 读取）：
 
 ```bash
-cat > .env <<'EOF'
-VITE_API_BASE_URL=https://your-domain.com/api
-FRONTEND_PORT=80
-EOF
+cp .env.example .env
+# 编辑 .env：VITE_API_BASE_URL 改为你的公网 IP/域名
+```
+
+默认端口映射（`docker-compose.prod.yml`）：
+
+| 服务 | 宿主机 | 容器内 | 访问示例 |
+|------|--------|--------|----------|
+| frontend | **5173** | 80 (Nginx) | `http://117.72.16.215:5173` |
+| backend | **8000** | 8000 | `http://117.72.16.215:8000/api` |
+| postgres / redis | 不暴露 | — | 仅 Docker 内网 |
+
+根目录 `.env` 默认值（见 `.env.example`）：
+
+```bash
+VITE_API_BASE_URL=http://117.72.16.215:8000/api
+FRONTEND_PORT=5173
+```
+
+`backend/.env` 需与前端 origin 一致，至少包含：
+
+```bash
+DJANGO_ALLOWED_HOSTS=117.72.16.215,localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://117.72.16.215:5173
+FRONTEND_BASE_URL=http://117.72.16.215:5173
+SESSION_COOKIE_SECURE=false
+CSRF_COOKIE_SECURE=false
 ```
 
 ### 4. 首次手动部署
@@ -108,10 +131,10 @@ CD workflow 已声明 `environment: production`，Secrets 也可放在 Environme
 
 ## 本地开发 vs 生产
 
-| 场景 | 命令 |
-|------|------|
-| 本地开发（热更新） | `docker compose up` |
-| 生产部署 | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` |
+| 场景 | 命令 | 前端端口 | 后端端口 |
+|------|------|----------|----------|
+| 本地开发（热更新） | `docker compose up` | 5173 | 8000 |
+| 生产部署 | `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` | 5173 | 8000 |
 
 - 本地 `frontend` 使用 Dockerfile `dev` target（Vite dev server，端口 5173）
 - 生产 `frontend` 使用 `prod` target（Nginx 静态资源，端口 80）
