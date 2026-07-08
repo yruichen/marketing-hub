@@ -294,10 +294,6 @@ export default function App() {
 
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
-    if (tab === 'community') {
-      window.open(pathForSection(tab), '_blank', 'noopener,noreferrer');
-      return;
-    }
     navigate(pathForSection(tab));
   }, [navigate, setActiveSection]);
 
@@ -928,11 +924,8 @@ export default function App() {
       triggerToast,
       creatorNote,
     });
-    if (ok) {
-      navigate('/templates');
-    }
     return ok;
-  }, [workspaceScope, username, triggerToast, navigate]);
+  }, [workspaceScope, username, triggerToast]);
 
   const handleOpenTemplateLibrary = useCallback(() => {
     window.open('/templates', '_blank', 'noopener,noreferrer');
@@ -1267,6 +1260,7 @@ export default function App() {
         <AppSidebar
           activeTab={activeTab}
           onNavigate={setActiveTab}
+          onOpenTemplateLibrary={handleOpenTemplateLibrary}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           username={username}
@@ -1449,7 +1443,6 @@ export default function App() {
             {activeTab === 'assets' && workspaceScope?.organization && (
               <AssetsLibrary
                 organizationSlug={workspaceScope.organization.slug}
-                onOpenTemplateLibrary={handleOpenTemplateLibrary}
                 onPublishAsset={handlePublishAsset}
               />
             )}
