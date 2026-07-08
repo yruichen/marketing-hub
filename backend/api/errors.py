@@ -330,11 +330,11 @@ def _log_api_error(
     exception: BaseException | None = None,
 ) -> None:
     payload = {
-        'code': code,
-        'message': message,
-        'status': status_code,
-        'detail': debug_detail or message,
-        'exception': exception.__class__.__name__ if exception else None,
+        'error_code': code,
+        'error_message': message,
+        'http_status': status_code,
+        'error_detail': debug_detail or message,
+        'exception_type': exception.__class__.__name__ if exception else None,
     }
     if status_code >= 500:
         logger.error('api_error', extra=payload, exc_info=exception)

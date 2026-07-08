@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import RequestFactory, override_settings
 from rest_framework.test import APITestCase
 
-from api.errors import AppAPIException, api_error_response, normalize_legacy_error_payload
+from api.errors import AppAPIException, _log_api_error, api_error_response, normalize_legacy_error_payload
 from api.exception_handler import api_exception_handler
 from api.models import Membership, Organization, PolicyDocument, UserConsent
 
@@ -18,6 +18,16 @@ def grant_required_policy_consents(user):
 
 
 class StructuredApiErrorTests(APITestCase):
+    def test_log_api_error_does_not_use_reserved_logrecord_fields(self):
+        # Regression: logging.extra must not include reserved keys like "message".
+        _log_api_error(
+            code='GENERATION_BUDGET_EXCEEDED',
+            message='今日生成额度已用完。',
+            status_code=402,
+            debug_detail='budget exceeded',
+            exception=AppAPIException(code='GENERATION_BUDGET_EXCEEDED'),
+        )
+
     def test_legacy_error_payload_is_normalized(self):
         payload = normalize_legacy_error_payload(
             {'error': '该邮箱已注册。'},
