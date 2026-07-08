@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ArrowRight, Heart, Mic, Search, Sparkles, Video, Wand2 } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Heart, Library, Mic, Search, Sparkles, Video, Wand2 } from 'lucide-react';
 import { useCommunity } from './useCommunity';
 import type { CommunityItem } from './types';
 import type { TriggerToastFn } from '../../shared/types/toast';
@@ -11,6 +11,7 @@ interface CommunityPageProps {
   triggerToast: TriggerToastFn;
   onLikeUpdate?: (id: number, likes: number) => void;
   onOpenProfile?: (username: string) => void;
+  onOpenAssetsLibrary?: () => void;
 }
 
 const SCENE_CHIPS = ['小红书种草', '新品上市', '短视频分镜', '品牌调性', '视觉 Prompt', '口播脚本'];
@@ -21,6 +22,7 @@ export function CommunityPage({
   triggerToast,
   onLikeUpdate,
   onOpenProfile,
+  onOpenAssetsLibrary,
 }: CommunityPageProps) {
   const {
     communityItems,
@@ -44,16 +46,23 @@ export function CommunityPage({
   const rest = featured ? communityItems.slice(1) : communityItems;
 
   return (
-    <div className="template-market flex h-full min-h-0 flex-col gap-5 pr-1 font-mono">
-      <section className="template-market__hero">
+    <div className="template-market template-market--page flex h-full min-h-0 flex-col font-mono">
+      <section className="template-market__hero template-market__hero--compact">
         <div className="template-market__hero-copy">
-          <span className="template-market__eyebrow">Template Library</span>
+          <span className="template-market__eyebrow">Template Library / 社区</span>
           <h2 className="serif-header text-3xl font-black leading-tight text-[var(--editorial-text)] md:text-5xl">
             找到可以直接复用的创意配方
           </h2>
           <p className="max-w-2xl text-sm leading-7 text-[var(--editorial-text-muted)]">
-            从团队沉淀的文案、视觉、分镜和口播里找灵感。这里不是作品陈列柜，而是下一次生成的起点。
+            团队发布的文案、视觉、分镜和口播模板集中在这里。从资产库发布的内容也会出现在下方列表中。
           </p>
+          {onOpenAssetsLibrary ? (
+            <button type="button" onClick={onOpenAssetsLibrary} className="template-market__jump-cta">
+              <Library className="h-4 w-4" />
+              <span>从资产库发布新模板</span>
+              <ArrowUpRight className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
         <form onSubmit={handleRAGSearch} className="template-market__search-card">
@@ -92,11 +101,19 @@ export function CommunityPage({
         </form>
       </section>
 
+      <div className="template-market__scroll-body">
       {communityItems.length === 0 ? (
         <section className="template-market__empty">
           <Sparkles className="h-8 w-8" />
           <h3>模板库还没有内容</h3>
-          <p>从 AIGC 生成结果点击「分享社区」，这里就会变成团队的创意配方库。</p>
+          <p>在资产库选择产出并点击「发布到模板库」，或从 AIGC 生成结果点击「分享社区」。</p>
+          {onOpenAssetsLibrary ? (
+            <button type="button" onClick={onOpenAssetsLibrary} className="template-market__jump-cta">
+              <Library className="h-4 w-4" />
+              <span>打开资产库发布</span>
+              <ArrowUpRight className="h-4 w-4" />
+            </button>
+          ) : null}
         </section>
       ) : (
         <>
@@ -110,13 +127,14 @@ export function CommunityPage({
             <span>{communityItems.length} items</span>
           </section>
 
-          <section className="template-market__grid">
+          <section className="template-market__grid template-market__grid--wide">
             {rest.map((item) => (
               <TemplateCard key={item.id} item={item} onLike={handleLike} onReport={handleReport} onOpenProfile={onOpenProfile} />
             ))}
           </section>
         </>
       )}
+      </div>
     </div>
   );
 }

@@ -124,7 +124,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         id: 'community',
         label: '模板库',
-        hint: '参考与灵感',
+        hint: '社区公开模板与灵感',
         icon: Library,
       },
       {
@@ -159,6 +159,8 @@ export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [
   'content',
   'projects',
   'builder',
+  'assets',
+  'community',
   'config',
 ];
 
@@ -222,7 +224,7 @@ export const TAB_META: Record<
   },
   community: {
     title: '模板库',
-    subtitle: '浏览社区模板与灵感',
+    subtitle: '浏览与复用团队发布的创意模板，也可从资产库发布新模板',
   },
   profile: {
     title: '个人主页',

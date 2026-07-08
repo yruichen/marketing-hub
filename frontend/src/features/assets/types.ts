@@ -75,4 +75,6 @@ export interface AssetFilterState {
 export interface AssetsLibraryProps {
   organizationSlug: string;
   onOpenProject?: (projectId: number) => void;
+  onOpenTemplateLibrary?: () => void;
+  onPublishAsset?: (asset: AssetRecord) => Promise<boolean>;
 }

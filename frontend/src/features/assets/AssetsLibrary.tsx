@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, FolderOpen, Move, Plus, RefreshCw, X } from 'lucide-react';
+import { ArrowUpRight, Check, FolderOpen, Move, Plus, RefreshCw, Share2, X } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
@@ -21,7 +21,11 @@ type DialogState =
   | { mode: 'create' }
   | { mode: 'edit'; asset: AssetRecord };
 
-export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
+export function AssetsLibrary({
+  organizationSlug,
+  onOpenTemplateLibrary,
+  onPublishAsset,
+}: AssetsLibraryProps) {
   const [filter, setFilter] = useState<AssetFilterState>(DEFAULT_FILTER);
   const { data, loading, error, page, setPage, refresh, createAsset, updateAsset, deleteAsset } =
     useAssets(organizationSlug, filter, PAGE_SIZE);
@@ -76,6 +80,31 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
     setSelectedIds((prev) => prev.filter((id) => id !== asset.id));
   };
 
+  const [publishingId, setPublishingId] = useState<number | null>(null);
+
+  const handlePublish = useCallback(async (asset: AssetRecord) => {
+    if (!onPublishAsset) return;
+    setPublishingId(asset.id);
+    try {
+      await onPublishAsset(asset);
+    } finally {
+      setPublishingId(null);
+    }
+  }, [onPublishAsset]);
+
+  const handleBatchPublish = async () => {
+    if (!onPublishAsset || selectedIds.length === 0) return;
+    for (const id of selectedIds) {
+      const asset = items.find((item) => item.id === id);
+      if (asset) {
+        const ok = await onPublishAsset(asset);
+        if (!ok) break;
+      }
+    }
+    setSelectedIds([]);
+    setSelectMode(false);
+  };
+
   const toggleSelect = useCallback((assetId: number) => {
     setSelectedIds((prev) => prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]);
   }, []);
@@ -108,7 +137,7 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
           <span className="assets-library__eyebrow">Brand asset wall</span>
           <h2 className="assets-library__title">资产库</h2>
           <p className="assets-library__subtitle">
-            按工作流运行、生成来源和预览可用性整理产物；点击卡片进入预览和溯源。
+            按工作流运行、生成来源整理产出；保存后可一键发布到模板库（社区），供团队复用。
           </p>
         </div>
         <div className="assets-library__stats" aria-label="资产统计">
@@ -118,7 +147,18 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
           <div><strong>{previewCounts?.with_file ?? 0}</strong><span>可预览</span></div>
           <div><strong>{previewCounts?.records_only ?? 0}</strong><span>仅记录</span></div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenTemplateLibrary ? (
+            <button
+              type="button"
+              onClick={onOpenTemplateLibrary}
+              className="assets-library__template-cta"
+              title="前往模板库浏览已发布模板"
+            >
+              <span>前往模板库</span>
+              <ArrowUpRight className="h-4 w-4" />
+            </button>
+          ) : null}
           <button type="button" onClick={refresh} className="assets-library__refresh" title="刷新" aria-label="刷新">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -140,6 +180,11 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
             {selectedIds.length === items.length ? '取消全选' : '全选'}
           </button>
           <span>{selectedIds.length} / {items.length} 个已选</span>
+          {selectedIds.length > 0 && onPublishAsset && (
+            <button type="button" onClick={() => void handleBatchPublish()} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
+              <Share2 className="h-3 w-3 inline mr-1" />发布到模板库
+            </button>
+          )}
           {selectedIds.length > 0 && (
             <button type="button" onClick={() => setShowMoveDialog(true)} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
               <Move className="h-3 w-3 inline mr-1" />移动到文件夹
@@ -167,6 +212,7 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
               onPreview={setPreviewAsset}
               onEdit={(a) => setDialog({ mode: 'edit', asset: a })}
               onDelete={handleDelete}
+              onPublish={onPublishAsset ? handlePublish : undefined}
               selectMode={selectMode}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
@@ -177,7 +223,14 @@ export function AssetsLibrary({ organizationSlug }: AssetsLibraryProps) {
 
       <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
 
-      {previewAsset ? <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
+      {previewAsset ? (
+        <AssetPreviewModal
+          asset={previewAsset}
+          onClose={() => setPreviewAsset(null)}
+          onPublish={onPublishAsset ? handlePublish : undefined}
+          publishing={publishingId === previewAsset.id}
+        />
+      ) : null}
 
       {dialog.mode !== 'closed' ? (
         <AssetFormDialog open initial={dialog.mode === 'edit' ? dialog.asset : null} onClose={() => setDialog({ mode: 'closed' })} onSave={handleSaveDialog} />
