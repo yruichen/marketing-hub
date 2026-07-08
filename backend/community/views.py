@@ -15,6 +15,8 @@ from api.scope import get_scope
 from api.access import require_role
 from api.serializers import CommunityCreationSerializer, ContentReportSerializer
 
+from community.moderation import apply_community_moderation
+
 
 def visible_community_creations(request):
     query = CommunityCreation.objects.select_related('organization', 'project', 'campaign').filter(moderation_status='visible')
@@ -84,9 +86,19 @@ class CommunityCreationView(APIView):
             source_task = GenerationTask.objects.filter(pk=source_task_id, organization=org).first()
         ai_generated = bool(request.data.get('ai_generated') or metadata.get('ai_generated') or source_task_id)
         metadata.setdefault('ai_generated', ai_generated)
+        metadata.setdefault('manual_review_status', 'auto_approved')
+        metadata.setdefault('ops_review_status', 'auto_approved')
         if source_task:
             metadata.setdefault('source_task_id', source_task.id)
             metadata.setdefault('provider', source_task.result.get('data', {}).get('provider') if isinstance(source_task.result, dict) else '')
+
+        # Public works default to approved; ops may reject later without deleting the record.
+        if visibility == 'public':
+            default_review_status = 'approved'
+        elif ai_generated:
+            default_review_status = 'approved'
+        else:
+            default_review_status = 'not_reviewed'
 
         item = CommunityCreation.objects.create(
             organization=org,
@@ -107,7 +119,7 @@ class CommunityCreationView(APIView):
             ai_generated=ai_generated,
             source_asset=source_asset,
             source_task=source_task,
-            review_status='pending' if visibility == 'public' and ai_generated else 'not_reviewed',
+            review_status=default_review_status,
         )
         record_audit_log(
             action='community_publish',
@@ -219,25 +231,28 @@ class CommunityModerationView(APIView):
         if not item:
             return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        moderation_status = str(request.data.get('moderation_status') or item.moderation_status).strip()
-        if moderation_status not in dict(CommunityCreation.MODERATION_STATUS_CHOICES):
-            return Response({'error': 'Unsupported moderation_status'}, status=status.HTTP_400_BAD_REQUEST)
-        review_status = str(request.data.get('review_status') or item.review_status).strip()
+        review_status = str(request.data.get('review_status') or item.review_status or 'approved').strip()
         if review_status not in dict(CommunityCreation.REVIEW_STATUS_CHOICES):
             return Response({'error': 'Unsupported review_status'}, status=status.HTTP_400_BAD_REQUEST)
         reason = str(request.data.get('reason') or '').strip()
+        moderation_status = str(request.data.get('moderation_status') or '').strip() or None
+        if moderation_status and moderation_status not in dict(CommunityCreation.MODERATION_STATUS_CHOICES):
+            return Response({'error': 'Unsupported moderation_status'}, status=status.HTTP_400_BAD_REQUEST)
 
-        item.moderation_status = moderation_status
-        item.review_status = review_status
-        item.takedown_reason = reason
-        item.takedown_at = timezone.now() if moderation_status in {'hidden', 'removed'} else None
-        item.save(update_fields=['moderation_status', 'review_status', 'takedown_reason', 'takedown_at'])
+        item, rejected_asset = apply_community_moderation(
+            item,
+            review_status=review_status,
+            reason=reason,
+            handled_by=user,
+            moderation_status=moderation_status,
+        )
+        item_metadata = item.metadata if isinstance(item.metadata, dict) else {}
 
         report_id = request.data.get('report_id')
         if report_id:
             report = ContentReport.objects.filter(pk=report_id, organization=org).first()
             if report:
-                report.status = 'resolved' if moderation_status in {'hidden', 'removed'} else 'rejected'
+                report.status = 'resolved' if review_status == 'rejected' or item.moderation_status in {'hidden', 'removed'} else 'rejected'
                 report.handled_by = user
                 report.handled_at = timezone.now()
                 report.resolution_note = reason
@@ -249,6 +264,16 @@ class CommunityModerationView(APIView):
             organization=org,
             target_type='community_creation',
             target_id=str(item.id),
-            metadata={'moderation_status': moderation_status, 'review_status': review_status, 'reason': reason, 'report_id': report_id},
+            metadata={
+                'moderation_status': item.moderation_status,
+                'review_status': review_status,
+                'reason': reason,
+                'report_id': report_id,
+                'rejected_asset_id': rejected_asset.id if rejected_asset else item_metadata.get('rejected_asset_id'),
+                'source': 'community_api',
+            },
         )
-        return Response(CommunityCreationSerializer(item).data)
+        payload = CommunityCreationSerializer(item).data
+        if rejected_asset:
+            payload['rejected_asset_id'] = rejected_asset.id
+        return Response(payload)
