@@ -47,7 +47,7 @@ class StructuredApiErrorTests(APITestCase):
         )
         self.assertEqual(response.status_code, 402)
         self.assertEqual(response.data['code'], 'PROJECT_LIMIT_REACHED')
-        self.assertIn('升级订阅', response.data['message'])
+        self.assertIn('升级订阅', response.data['action'])
         self.assertEqual(response.data['error'], response.data['message'])
 
     @override_settings(DEBUG=True)

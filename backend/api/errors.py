@@ -108,6 +108,24 @@ ERROR_CATALOG: dict[str, ErrorSpec] = {
     ),
 }
 
+ERROR_STATUS_CODES: dict[str, int] = {
+    'VALIDATION_ERROR': status.HTTP_400_BAD_REQUEST,
+    'AUTH_REQUIRED': status.HTTP_401_UNAUTHORIZED,
+    'PERMISSION_DENIED': status.HTTP_403_FORBIDDEN,
+    'POLICY_CONSENT_REQUIRED': status.HTTP_403_FORBIDDEN,
+    'GENERATION_SUSPENDED': status.HTTP_403_FORBIDDEN,
+    'NOT_FOUND': status.HTTP_404_NOT_FOUND,
+    'PAYMENT_REQUIRED': status.HTTP_402_PAYMENT_REQUIRED,
+    'GENERATION_BUDGET_EXCEEDED': status.HTTP_402_PAYMENT_REQUIRED,
+    'GENERATION_CREDITS_INSUFFICIENT': status.HTTP_402_PAYMENT_REQUIRED,
+    'PROJECT_LIMIT_REACHED': status.HTTP_402_PAYMENT_REQUIRED,
+    'RATE_LIMITED': status.HTTP_429_TOO_MANY_REQUESTS,
+    'GENERATION_QUEUE_FULL': status.HTTP_429_TOO_MANY_REQUESTS,
+    'GENERATION_RUNNING_LIMIT': status.HTTP_429_TOO_MANY_REQUESTS,
+    'GENERATION_QUEUED_LIMIT': status.HTTP_429_TOO_MANY_REQUESTS,
+    'SERVER_ERROR': status.HTTP_500_INTERNAL_SERVER_ERROR,
+}
+
 
 class AppAPIException(APIException):
     """Structured API exception with stable code and user-facing copy."""
@@ -134,6 +152,10 @@ class AppAPIException(APIException):
         resolved_code = code or self.default_code
         if status_code is not None:
             self.status_code = status_code
+        else:
+            mapped_status = ERROR_STATUS_CODES.get(str(resolved_code).upper())
+            if mapped_status is not None:
+                self.status_code = mapped_status
         if retryable is not None:
             self.retryable = retryable
         elif spec:

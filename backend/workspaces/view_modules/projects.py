@@ -17,6 +17,7 @@ from api.access import (
     get_project_for_member,
     require_role,
 )
+from api.audit import record_audit_log
 from api.errors import api_error_response
 from api.entitlements import effective_limits_for_scope
 from api.models import (
