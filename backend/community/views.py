@@ -88,6 +88,9 @@ class CommunityCreationView(APIView):
         metadata.setdefault('ai_generated', ai_generated)
         metadata.setdefault('manual_review_status', 'auto_approved')
         metadata.setdefault('ops_review_status', 'auto_approved')
+        creator_note = str(request.data.get('creator_note') or metadata.get('creator_note') or '').strip()[:500]
+        if creator_note:
+            metadata['creator_note'] = creator_note
         if source_task:
             metadata.setdefault('source_task_id', source_task.id)
             metadata.setdefault('provider', source_task.result.get('data', {}).get('provider') if isinstance(source_task.result, dict) else '')

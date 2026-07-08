@@ -30,7 +30,7 @@ import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from '
 import { taskTypeLabels, type CreationContent, type StoryboardOutput } from './features/generation';
 import { ContentPackagePanel, buildContentPackage, buildContentPackageRequest } from './features/content-package';
 import type { ContentPackage } from './features/generation';
-import { CommunityPage } from './features/community';
+import { TemplateLibraryPage } from './features/community';
 import { ProfilePage } from './features/profile';
 import { DashboardPage, useDashboardSnapshot, useWorkspaceScope } from './features/dashboard';
 import { AiConfigPage } from './features/ai-config';
@@ -258,6 +258,7 @@ export default function App() {
   const routeProfileUsername = profileUsernameFromPath(location.pathname);
   const isAdminLoginRoute = location.pathname.startsWith('/admin-login');
   const isLegalRoute = location.pathname.startsWith('/legal/');
+  const isTemplateLibraryRoute = location.pathname.startsWith('/templates');
   const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
   const activeTab = routeSynced ? activeSection : routeSection;
   const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
@@ -293,6 +294,10 @@ export default function App() {
 
   const setActiveTab = useCallback((tab: AppSection) => {
     setActiveSection(tab);
+    if (tab === 'community') {
+      window.open(pathForSection(tab), '_blank', 'noopener,noreferrer');
+      return;
+    }
     navigate(pathForSection(tab));
   }, [navigate, setActiveSection]);
 
@@ -915,26 +920,27 @@ export default function App() {
     setActiveTab(result.tab);
   }, [selectProjectScope, setActiveTab, setRightPanelOpen, triggerToast, username]);
 
-  const handlePublishAsset = useCallback(async (asset: AssetRecord) => {
+  const handlePublishAsset = useCallback(async (asset: AssetRecord, creatorNote?: string) => {
     const ok = await publishAssetToCommunity({
       asset,
       workspaceScope,
       username,
       triggerToast,
+      creatorNote,
     });
     if (ok) {
-      setActiveTab('community');
+      navigate('/templates');
     }
     return ok;
-  }, [workspaceScope, username, triggerToast, setActiveTab]);
+  }, [workspaceScope, username, triggerToast, navigate]);
 
   const handleOpenTemplateLibrary = useCallback(() => {
-    setActiveTab('community');
-  }, [setActiveTab]);
+    window.open('/templates', '_blank', 'noopener,noreferrer');
+  }, []);
 
   const handleOpenAssetsLibrary = useCallback(() => {
-    setActiveTab('assets');
-  }, [setActiveTab]);
+    navigate('/assets');
+  }, [navigate]);
 
   const handleShareToCommunity = useCallback(async (
     type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video',
@@ -1196,6 +1202,22 @@ export default function App() {
           triggerToast={triggerToast}
         />
       </div>
+    );
+  }
+
+  if (isTemplateLibraryRoute) {
+    return (
+      <>
+        <Toast message={feedbackMsg} onAction={handleErrorAction} onDismiss={dismissToast} />
+        <TemplateLibraryPage
+          workspaceScope={workspaceScope}
+          username={username}
+          triggerToast={triggerToast}
+          onBack={() => navigate('/dashboard')}
+          onOpenProfile={handleOpenProfile}
+          onOpenAssetsLibrary={handleOpenAssetsLibrary}
+        />
+      </>
     );
   }
 
@@ -1589,16 +1611,6 @@ export default function App() {
                 onOpenBilling={() => setActiveTab('billing')}
               />
             </div>
-
-            {activeTab === 'community' && (
-              <CommunityPage
-                workspaceScope={workspaceScope}
-                username={username}
-                triggerToast={triggerToast}
-                onOpenProfile={handleOpenProfile}
-                onOpenAssetsLibrary={handleOpenAssetsLibrary}
-              />
-            )}
 
             {activeTab === 'profile' && (
               <ProfilePage

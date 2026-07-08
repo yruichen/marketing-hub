@@ -59,7 +59,6 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
 
     if (initial) {
       await onSave({
-        title: title.trim(),
         asset_type: assetType,
         source_url: sourceUrl.trim(),
         tags,
@@ -93,7 +92,7 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
         onSubmit={handleSubmit}
       >
         <header className="assets-form__header">
-          <h3 className="assets-form__title">{initial ? '编辑资产' : '新建资产'}</h3>
+          <h3 className="assets-form__title">{initial ? '编辑标签与链接' : '新建资产'}</h3>
           <button type="button" onClick={onClose} className="assets-form__close" aria-label="关闭">
             <X className="h-4 w-4" />
           </button>
@@ -101,14 +100,15 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
 
         <div className="assets-form__body">
           <label className="assets-form__field">
-            <span className="assets-form__label">标题 *</span>
+            <span className="assets-form__label">标题 {initial ? '（不可修改）' : '*'}</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="assets-form__input"
-              required
+              required={!initial}
+              readOnly={!!initial}
               maxLength={255}
-              autoFocus
+              autoFocus={!initial}
             />
           </label>
 
@@ -171,7 +171,7 @@ export function AssetFormDialog({ open, initial, onClose, onSave }: AssetFormDia
           <button type="button" onClick={onClose} className="assets-form__btn">取消</button>
           <button
             type="submit"
-            disabled={submitting || !title.trim() || (!initial && !rightsConfirmed)}
+            disabled={submitting || (!initial && (!title.trim() || !rightsConfirmed))}
             className="assets-form__btn assets-form__btn--primary"
           >
             {submitting ? '保存中…' : initial ? '保存修改' : '创建'}
