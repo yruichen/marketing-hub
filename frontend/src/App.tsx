@@ -1610,6 +1610,7 @@ export default function App() {
                 username={routeProfileUsername}
                 currentUsername={username}
                 triggerToast={triggerToast}
+                onOpenProfile={handleOpenProfile}
               />
             )}
 

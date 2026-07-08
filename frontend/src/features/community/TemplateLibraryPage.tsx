@@ -72,10 +72,14 @@ export function TemplateLibraryPage({
     setSearchParams({}, { replace: true });
   };
 
-  const onToggleFollow = (creator: string) => {
+  const onToggleFollow = async (creator: string) => {
     const wasFollowing = isFollowing(creator);
-    toggleFollow(creator);
-    triggerToast(wasFollowing ? `已取消关注 @${creator}` : `已关注 @${creator}`, 'info');
+    const ok = await toggleFollow(creator);
+    if (ok) {
+      triggerToast(wasFollowing ? `已取消关注 @${creator}` : `已关注 @${creator}`, 'info');
+    } else {
+      triggerToast('关注操作失败，请稍后重试', 'error');
+    }
   };
 
   return (

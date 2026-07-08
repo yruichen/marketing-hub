@@ -6,7 +6,7 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, EnterpriseContactRequest, GenerationTask, Membership, Organization, PolicyDocument, ProInvite, Project, UsageEvent, UserConsent, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft, hash_pro_invite_code
+from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, EnterpriseContactRequest, GenerationTask, Membership, Organization, PolicyDocument, ProInvite, Project, UsageEvent, UserConsent, UserFollow, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft, hash_pro_invite_code
 from api.audit import record_audit_log
 from api.redaction import redact_text
 
@@ -344,6 +344,48 @@ class CreatorProfileTests(APITestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_profile_follow_and_relation_lists(self):
+        self.client.login(username='viewer-user', password='123')
+        response = self.client.get('/api/profiles/profile-user/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['social']['follower_count'], 0)
+        self.assertFalse(response.data['social']['is_following'])
+
+        response = self.client.post('/api/profiles/profile-user/follow/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['social']['is_following'])
+        self.assertEqual(response.data['social']['follower_count'], 1)
+
+        response = self.client.get('/api/profiles/profile-user/followers/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['username'], 'viewer-user')
+
+        response = self.client.get('/api/profiles/viewer-user/following/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['results'][0]['username'], 'profile-user')
+
+        response = self.client.get('/api/profiles/me/following/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['results'][0]['username'], 'profile-user')
+
+        response = self.client.delete('/api/profiles/profile-user/follow/')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['social']['is_following'])
+        self.assertEqual(UserFollow.objects.count(), 0)
+
+        response = self.client.post('/api/profiles/viewer-user/follow/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_private_profile_hides_relation_lists(self):
+        profile = UserProfile.objects.get(user=self.user)
+        profile.profile_visibility = 'private'
+        profile.save(update_fields=['profile_visibility'])
+
+        self.client.login(username='viewer-user', password='123')
+        response = self.client.get('/api/profiles/profile-user/followers/')
+        self.assertEqual(response.status_code, 403)
 
 
 class WorkspaceUpgradeTests(APITestCase):

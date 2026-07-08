@@ -32,9 +32,30 @@ export interface CreatorProfileStats {
   latest_published_at: string | null;
 }
 
+export interface CreatorProfileSocial {
+  follower_count: number;
+  following_count: number;
+  is_following: boolean;
+}
+
+export interface CreatorProfileUserSummary {
+  username: string;
+  display_name: string;
+  headline: string;
+  avatar_url: string;
+}
+
+export interface CreatorProfileRelationResponse {
+  username: string;
+  relation: 'followers' | 'following';
+  count: number;
+  results: CreatorProfileUserSummary[];
+}
+
 export interface CreatorProfileResponse {
   profile: CreatorProfile;
   stats: CreatorProfileStats;
+  social: CreatorProfileSocial;
   featured_creations: CommunityItem[];
   creations: CommunityItem[];
   is_owner: boolean;
@@ -128,6 +149,34 @@ export function useProfile(username?: string | null) {
     }
   }, []);
 
+  const toggleFollow = useCallback(async (targetUsername: string, follow: boolean) => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await apiFetch(`/profiles/${encodeURIComponent(targetUsername)}/follow/`, {
+        method: follow ? 'POST' : 'DELETE',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw await parseApiErrorResponse(response, `/profiles/${encodeURIComponent(targetUsername)}/follow/`);
+      }
+      setData(payload as CreatorProfileResponse);
+      return payload as CreatorProfileResponse;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  const fetchRelations = useCallback(async (relation: 'followers' | 'following', targetUsername: string) => {
+    const relationPath = `/profiles/${encodeURIComponent(targetUsername)}/${relation}/`;
+    const response = await apiFetch(relationPath);
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw await parseApiErrorResponse(response, relationPath);
+    }
+    return payload as CreatorProfileRelationResponse;
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchProfile();
@@ -144,5 +193,7 @@ export function useProfile(username?: string | null) {
     fetchProfile,
     saveProfile,
     updateProfileCreation,
+    toggleFollow,
+    fetchRelations,
   };
 }
