@@ -3,6 +3,8 @@ from rest_framework.schemas import get_schema_view
 
 from api.admin_console import (
     AdminAuditLogListView,
+    AdminCommunityCreationListView,
+    AdminCommunityModerationView,
     AdminCreditGrantView,
     AdminEnterpriseRequestListView,
     AdminInviteListCreateView,
@@ -18,9 +20,11 @@ from api.admin_console import (
     AdminUserDetailView,
     AdminUserListView,
 )
+from api.health import HealthView
 from api.legal import PolicyDocumentListView, UserConsentView
 
 urlpatterns = [
+    path('health/', HealthView.as_view(), name='health'),
     path('schema/', get_schema_view(title='Marketing Hub API', version='1.0.0'), name='openapi_schema'),
     path('legal/policies/', PolicyDocumentListView.as_view(), name='legal_policies'),
     path('legal/consents/', UserConsentView.as_view(), name='legal_consents'),
@@ -39,6 +43,8 @@ urlpatterns = [
     path('admin-console/tasks/', AdminTaskListView.as_view(), name='admin_console_tasks'),
     path('admin-console/audit-logs/', AdminAuditLogListView.as_view(), name='admin_console_audit_logs'),
     path('admin-console/security-events/', AdminSecurityEventListView.as_view(), name='admin_console_security_events'),
+    path('admin-console/community-creations/', AdminCommunityCreationListView.as_view(), name='admin_console_community_creations'),
+    path('admin-console/community-creations/<int:pk>/moderate/', AdminCommunityModerationView.as_view(), name='admin_console_community_moderate'),
     path('', include('accounts.urls')),
     path('', include('workspaces.urls')),
     path('', include('generation.urls')),

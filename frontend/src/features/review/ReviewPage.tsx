@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import type { ContentPackage } from '../generation/types';
 
@@ -16,6 +17,19 @@ export function ReviewPage({
   setContentPackage,
   triggerToast,
 }: ReviewPageProps) {
+  const autoConfirmedKey = useRef<string>('');
+
+  useEffect(() => {
+    const key = `${contentPackage.title}::${contentPackage.body}`;
+    if (autoConfirmedKey.current === key) return;
+    autoConfirmedKey.current = key;
+    setContentVersion('最终稿');
+    setContentPackage((prev) => ({ ...prev, version: '最终稿' }));
+    triggerToast('内容已自动确认通过', 'success');
+  }, [contentPackage.title, contentPackage.body, setContentPackage, setContentVersion, triggerToast]);
+
+  const isApproved = contentVersion === '最终稿';
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">
@@ -23,21 +37,15 @@ export function ReviewPage({
         <div className="border border-[var(--editorial-stroke)] p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black">{contentPackage.title}</span>
-            <span className="text-[9px] border border-[var(--editorial-stroke)] px-2 py-0.5">待确认</span>
+            <span className="text-[9px] border border-[var(--editorial-stroke)] px-2 py-0.5">
+              {isApproved ? '已自动确认' : '确认中'}
+            </span>
           </div>
           <p className="text-xs text-[var(--editorial-text-gray)] leading-6">{contentPackage.body}</p>
-          <button
-            type="button"
-            onClick={() => {
-              setContentVersion('最终稿');
-              setContentPackage((prev) => ({ ...prev, version: '最终稿' }));
-              triggerToast('已标记为最终稿', 'success');
-            }}
-            className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            通过审阅
-          </button>
+          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
+            <CheckCircle2 className="h-3.5 w-3.5 text-[var(--neoGreen)]" />
+            人工确认默认通过，可直接保存或发布
+          </div>
         </div>
       </section>
       <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-5 shadow-editorial-sm">

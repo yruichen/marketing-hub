@@ -114,6 +114,36 @@ type AdminEnterpriseRequest = {
   created_at: string;
 };
 
+type AdminCommunityCreation = {
+  id: number;
+  title: string;
+  username: string;
+  creation_type: string;
+  creation_type_display: string;
+  organization: string | null;
+  organization_name: string;
+  project: string | null;
+  project_name: string;
+  visibility: string;
+  review_status: string;
+  moderation_status: string;
+  reported_count: number;
+  ai_generated: boolean;
+  takedown_reason: string;
+  rejected_asset_id?: number | null;
+  content_preview: string;
+  created_at: string;
+  published_at: string | null;
+};
+
+type AdminCommunityCounts = {
+  total: number;
+  approved: number;
+  rejected: number;
+  reported: number;
+  hidden: number;
+};
+
 type AdminConsolePageProps = {
   isStaff: boolean;
   username?: string;
@@ -129,6 +159,7 @@ const tabs = [
   { id: 'invites', label: '邀请码' },
   { id: 'pro-invites', label: 'Pro 邀请码' },
   { id: 'enterprise', label: '企业需求' },
+  { id: 'moderation', label: '内容审核' },
   { id: 'security', label: '安全事件' },
   { id: 'logs', label: '审计日志' },
 ] as const;
@@ -178,6 +209,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
   const [invites, setInvites] = useState<AdminInvite[]>([]);
   const [proInvites, setProInvites] = useState<AdminInvite[]>([]);
   const [enterpriseRequests, setEnterpriseRequests] = useState<AdminEnterpriseRequest[]>([]);
+  const [communityCreations, setCommunityCreations] = useState<AdminCommunityCreation[]>([]);
+  const [communityCounts, setCommunityCounts] = useState<AdminCommunityCounts | null>(null);
+  const [reviewStatusFilter, setReviewStatusFilter] = useState('');
+  const [moderationStatusFilter, setModerationStatusFilter] = useState('');
+  const [reportedOnly, setReportedOnly] = useState(false);
+  const [moderationReasons, setModerationReasons] = useState<Record<number, string>>({});
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [emailFilter, setEmailFilter] = useState('');
@@ -198,6 +235,19 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
   const [editingProInviteId, setEditingProInviteId] = useState<number | null>(null);
   const [editingProInviteLabel, setEditingProInviteLabel] = useState('');
   const [editingProInviteMaxUses, setEditingProInviteMaxUses] = useState('1');
+
+  const loadCommunityCreations = async () => {
+    const params = new URLSearchParams();
+    if (reviewStatusFilter) params.set('review_status', reviewStatusFilter);
+    if (moderationStatusFilter) params.set('moderation_status', moderationStatusFilter);
+    if (reportedOnly) params.set('reported_only', 'true');
+    if (query.trim()) params.set('search', query.trim());
+    const response = await apiFetch(`/admin-console/community-creations/?${params.toString()}`);
+    const data = await response.json();
+    if (!response.ok) throw await parseApiErrorResponse(response, '/admin-console/community-creations/');
+    setCommunityCreations(data.results || []);
+    setCommunityCounts(data.counts || null);
+  };
 
   const loadData = async () => {
     if (!isStaff) return;
@@ -224,6 +274,7 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
       setInvites((await inviteRes.json()).results || []);
       setProInvites((await proInviteRes.json()).results || []);
       setEnterpriseRequests((await enterpriseRes.json()).results || []);
+      await loadCommunityCreations();
     } catch (err) {
       triggerToast(buildErrorToast(err, '运营后台数据加载失败'));
     } finally {
@@ -238,6 +289,39 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStaff]);
+
+  useEffect(() => {
+    if (!isStaff || activeTab !== 'moderation') return;
+    const timer = window.setTimeout(() => {
+      void loadCommunityCreations().catch((err) => {
+        triggerToast(buildErrorToast(err, '内容审核列表加载失败'));
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isStaff, reviewStatusFilter, moderationStatusFilter, reportedOnly, query]);
+
+  const moderateCommunityCreation = async (item: AdminCommunityCreation, review_status: 'approved' | 'rejected') => {
+    const reason = moderationReasons[item.id]?.trim() || (review_status === 'rejected' ? '平台审核驳回' : '');
+    try {
+      const response = await apiFetch(`/admin-console/community-creations/${item.id}/moderate/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          review_status,
+          reason,
+          moderation_status: review_status === 'approved' ? 'visible' : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/community-creations/${item.id}/moderate/`);
+      setCommunityCreations((items) => items.map((entry) => (entry.id === item.id ? data : entry)));
+      triggerToast(review_status === 'rejected' ? `已驳回并归档到项目资产 #${data.rejected_asset_id || '—'}` : '已恢复通过并重新展示', review_status === 'rejected' ? 'info' : 'success');
+      void loadCommunityCreations();
+      void loadData();
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '内容审核操作失败'));
+    }
+  };
 
   const filteredUsers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -786,6 +870,93 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === 'moderation' && (
+        <div className="mt-4 grid gap-4">
+          <section className="grid gap-3 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4 shadow-[4px_4px_0_var(--editorial-stroke)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="flex items-center gap-2 text-lg font-black"><ShieldCheck className="h-5 w-5" />社区内容审核</h3>
+                <p className="mt-1 text-xs text-[var(--editorial-text-gray)]">公开发布默认通过。ROOT 可在此驳回作品：社区隐藏，原记录保留，并归档到所属项目资产库。</p>
+              </div>
+              {communityCounts ? (
+                <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase">
+                  <span className="border border-[var(--editorial-stroke)] px-2 py-1">总计 {communityCounts.total}</span>
+                  <span className="border border-emerald-600 px-2 py-1 text-emerald-700">通过 {communityCounts.approved}</span>
+                  <span className="border border-red-600 px-2 py-1 text-red-700">驳回 {communityCounts.rejected}</span>
+                  <span className="border border-amber-600 px-2 py-1 text-amber-700">被举报 {communityCounts.reported}</span>
+                  <span className="border border-[var(--editorial-stroke)] px-2 py-1">隐藏 {communityCounts.hidden}</span>
+                </div>
+              ) : null}
+            </div>
+            <div className="grid gap-2 md:grid-cols-[160px_160px_auto_minmax(0,1fr)]">
+              <select value={reviewStatusFilter} onChange={(event) => setReviewStatusFilter(event.target.value)} className="border border-[var(--editorial-stroke)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-black outline-none">
+                <option value="">全部审核状态</option>
+                <option value="approved">approved</option>
+                <option value="rejected">rejected</option>
+                <option value="pending">pending</option>
+                <option value="flagged">flagged</option>
+              </select>
+              <select value={moderationStatusFilter} onChange={(event) => setModerationStatusFilter(event.target.value)} className="border border-[var(--editorial-stroke)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-black outline-none">
+                <option value="">全部展示状态</option>
+                <option value="visible">visible</option>
+                <option value="hidden">hidden</option>
+                <option value="removed">removed</option>
+              </select>
+              <label className="inline-flex items-center gap-2 border border-[var(--editorial-stroke)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-black">
+                <input type="checkbox" checked={reportedOnly} onChange={(event) => setReportedOnly(event.target.checked)} />
+                仅看被举报
+              </label>
+              <span className="self-center text-xs text-[var(--editorial-text-gray)]">可使用顶部搜索框按标题、作者、组织筛选。</span>
+            </div>
+          </section>
+
+          <section className="grid gap-3">
+            {communityCreations.length === 0 ? (
+              <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-6 text-sm text-[var(--editorial-text-gray)]">当前筛选条件下没有社区作品。</div>
+            ) : communityCreations.map((item) => (
+              <article key={item.id} className="grid gap-4 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-base font-black">{item.title}</h4>
+                    <StatusPill status={item.review_status} />
+                    <StatusPill status={item.moderation_status} />
+                    {item.reported_count > 0 ? <span className="border border-red-600 px-2 py-0.5 text-[10px] font-black text-red-700">举报 {item.reported_count}</span> : null}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--editorial-text-gray)]">{item.content_preview || '（无正文预览）'}</p>
+                  <div className="mt-3 grid gap-1 text-[11px] text-[var(--editorial-text-gray)]">
+                    <span>作者 {item.username} · {item.creation_type_display} · {item.visibility}</span>
+                    <span>组织 {item.organization_name || item.organization || '—'} · 项目 {item.project_name || item.project || '—'}</span>
+                    <span>发布 {formatDate(item.published_at)} · 创建 {formatDate(item.created_at)}</span>
+                    {item.rejected_asset_id ? <span>已归档资产 #{item.rejected_asset_id}</span> : null}
+                    {item.takedown_reason ? <span>原因：{item.takedown_reason}</span> : null}
+                  </div>
+                </div>
+                <div className="grid gap-2 self-start border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-3">
+                  <label className="grid gap-1 text-[10px] font-black uppercase">
+                    审核备注
+                    <textarea
+                      value={moderationReasons[item.id] || ''}
+                      onChange={(event) => setModerationReasons((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                      rows={3}
+                      className="border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-3 py-2 text-xs outline-none"
+                      placeholder="驳回原因，会写入项目资产 metadata"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => void moderateCommunityCreation(item, 'rejected')} className="inline-flex items-center gap-1 border border-red-600 px-3 py-2 text-xs font-black text-red-700">
+                      <Ban className="h-3.5 w-3.5" />驳回并归档
+                    </button>
+                    <button type="button" onClick={() => void moderateCommunityCreation(item, 'approved')} className="inline-flex items-center gap-1 border border-emerald-600 px-3 py-2 text-xs font-black text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />恢复通过
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </section>
         </div>
       )}
 

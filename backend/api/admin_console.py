@@ -15,6 +15,7 @@ from accounts.views import _send_password_reset_email, _send_verification_email
 from api.audit import record_audit_log
 from api.models import (
     AuditLog,
+    CommunityCreation,
     CreditGrant,
     CreditLedgerEntry,
     EnterpriseContactRequest,
@@ -29,6 +30,8 @@ from api.models import (
     hash_pro_invite_code,
     hash_signup_invite_code,
 )
+
+from community.moderation import apply_community_moderation
 
 
 PRO_INVITE_RANDOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -767,3 +770,122 @@ class AdminEnterpriseRequestListView(APIView):
             _enterprise_request_payload(request_obj)
             for request_obj in EnterpriseContactRequest.objects.select_related('user', 'organization').order_by('-created_at')[:80]
         ]})
+
+
+def _community_creation_admin_payload(item: CommunityCreation) -> dict:
+    metadata = item.metadata if isinstance(item.metadata, dict) else {}
+    content_dict = item.get_content_dict()
+    preview = ''
+    if isinstance(content_dict, dict):
+        if isinstance(content_dict.get('paragraphs'), list):
+            preview = ' '.join(str(part) for part in content_dict['paragraphs'][:2])
+        elif content_dict.get('body'):
+            preview = str(content_dict.get('body'))
+        elif content_dict.get('title'):
+            preview = str(content_dict.get('title'))
+    return {
+        'id': item.id,
+        'title': item.title,
+        'username': item.username,
+        'creation_type': item.creation_type,
+        'creation_type_display': item.get_creation_type_display(),
+        'organization': item.organization.slug if item.organization_id else None,
+        'organization_name': item.organization.name if item.organization_id else '',
+        'project': item.project.slug if item.project_id else None,
+        'project_name': item.project.name if item.project_id else '',
+        'visibility': item.visibility,
+        'review_status': item.review_status,
+        'moderation_status': item.moderation_status,
+        'reported_count': item.reported_count,
+        'ai_generated': item.ai_generated,
+        'takedown_reason': item.takedown_reason,
+        'rejected_asset_id': metadata.get('rejected_asset_id'),
+        'content_preview': preview[:240],
+        'created_at': item.created_at.isoformat(),
+        'published_at': item.published_at.isoformat() if item.published_at else None,
+    }
+
+
+class AdminCommunityCreationListView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def get(self, request):
+        review_status = (request.query_params.get('review_status') or '').strip()
+        moderation_status = (request.query_params.get('moderation_status') or '').strip()
+        reported_only = (request.query_params.get('reported_only') or '').strip().lower() in {'1', 'true', 'yes'}
+        search = (request.query_params.get('search') or '').strip()
+
+        query = CommunityCreation.objects.select_related('organization', 'project').order_by('-created_at')
+        if review_status:
+            query = query.filter(review_status=review_status)
+        if moderation_status:
+            query = query.filter(moderation_status=moderation_status)
+        if reported_only:
+            query = query.filter(reported_count__gt=0)
+        if search:
+            query = query.filter(
+                Q(title__icontains=search)
+                | Q(username__icontains=search)
+                | Q(organization__name__icontains=search)
+                | Q(organization__slug__icontains=search)
+            )
+
+        items = query[:100]
+        return Response({
+            'results': [_community_creation_admin_payload(item) for item in items],
+            'counts': {
+                'total': CommunityCreation.objects.count(),
+                'approved': CommunityCreation.objects.filter(review_status='approved').count(),
+                'rejected': CommunityCreation.objects.filter(review_status='rejected').count(),
+                'reported': CommunityCreation.objects.filter(reported_count__gt=0).count(),
+                'hidden': CommunityCreation.objects.filter(moderation_status='hidden').count(),
+            },
+        })
+
+
+class AdminCommunityModerationView(APIView):
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
+
+    def post(self, request, pk: int):
+        item = CommunityCreation.objects.select_related('organization', 'project', 'campaign').filter(pk=pk).first()
+        if not item:
+            return Response({'error': 'Creation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        review_status = str(request.data.get('review_status') or item.review_status or 'approved').strip()
+        if review_status not in dict(CommunityCreation.REVIEW_STATUS_CHOICES):
+            return Response({'error': 'Unsupported review_status'}, status=status.HTTP_400_BAD_REQUEST)
+        reason = str(request.data.get('reason') or '').strip()
+        moderation_status = str(request.data.get('moderation_status') or '').strip() or None
+        if moderation_status and moderation_status not in dict(CommunityCreation.MODERATION_STATUS_CHOICES):
+            return Response({'error': 'Unsupported moderation_status'}, status=status.HTTP_400_BAD_REQUEST)
+
+        item, rejected_asset = apply_community_moderation(
+            item,
+            review_status=review_status,
+            reason=reason,
+            handled_by=request.user,
+            moderation_status=moderation_status,
+        )
+        item_metadata = item.metadata if isinstance(item.metadata, dict) else {}
+
+        record_audit_log(
+            action='content_moderation',
+            actor=request.user,
+            organization=item.organization,
+            target_type='community_creation',
+            target_id=str(item.id),
+            ip_address=_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),
+            metadata={
+                'moderation_status': item.moderation_status,
+                'review_status': review_status,
+                'reason': reason,
+                'rejected_asset_id': rejected_asset.id if rejected_asset else item_metadata.get('rejected_asset_id'),
+                'source': 'admin_console',
+            },
+        )
+        payload = _community_creation_admin_payload(item)
+        if rejected_asset:
+            payload['rejected_asset_id'] = rejected_asset.id
+        return Response(payload)
+

@@ -128,6 +128,41 @@ class AdminConsoleSeparationTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.data['profile']['subscription_plan'], 'free')
 
+    def test_admin_can_list_and_reject_community_creation(self):
+        self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
+        publisher = User.objects.create_user(username='pub-user', password='123', email='pub@example.com')
+        Membership.objects.create(user=publisher, organization=self.organization, role='creator')
+        project = Project.objects.create(organization=self.organization, name='Pub Project', slug='pub-project')
+        creation = CommunityCreation.objects.create(
+            organization=self.organization,
+            project=project,
+            username=publisher.username,
+            creation_type='copy',
+            title='Admin reject me',
+            content='{"paragraphs":["hello"]}',
+            visibility='public',
+            review_status='approved',
+            ai_generated=True,
+        )
+
+        response = self.client.get('/api/admin-console/community-creations/')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(any(item['id'] == creation.id for item in response.data['results']))
+
+        response = self.client.post(
+            f'/api/admin-console/community-creations/{creation.id}/moderate/',
+            {'review_status': 'rejected', 'reason': 'Root moderation test'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data['review_status'], 'rejected')
+        self.assertEqual(response.data['moderation_status'], 'hidden')
+        self.assertTrue(CommunityCreation.objects.filter(pk=creation.id).exists())
+        self.assertTrue(Asset.objects.filter(metadata__community_creation_id=creation.id).exists())
+        self.assertTrue(
+            AuditLog.objects.filter(action='content_moderation', metadata__source='admin_console', target_id=str(creation.id)).exists()
+        )
+
 
 class CreatorProfileTests(APITestCase):
     def setUp(self):
@@ -1153,6 +1188,7 @@ class LegalLaunchReadinessTests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, 201, response.content)
         creation_id = response.data['id']
+        self.assertEqual(CommunityCreation.objects.get(pk=creation_id).review_status, 'approved')
 
         response = self.client.post(f'/api/community/creations/{creation_id}/report/', {
             'reason': 'false_advertising',
@@ -1166,12 +1202,18 @@ class LegalLaunchReadinessTests(APITestCase):
         self.client.login(username='legal-ops', password='123')
         response = self.client.post(f'/api/community/creations/{creation_id}/moderate/', {
             'organization': self.organization.slug,
-            'moderation_status': 'hidden',
-            'review_status': 'flagged',
+            'review_status': 'rejected',
             'reason': 'Pending legal review',
         }, format='json')
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.data['moderation_status'], 'hidden')
+        self.assertEqual(response.data['review_status'], 'rejected')
+        self.assertTrue(CommunityCreation.objects.filter(pk=creation_id).exists())
+        rejected_asset = Asset.objects.filter(metadata__community_creation_id=creation_id).first()
+        self.assertIsNotNone(rejected_asset)
+        self.assertEqual(rejected_asset.project_id, self.project.id)
+        self.assertEqual(rejected_asset.metadata['source'], 'moderation_rejected')
+        self.assertEqual(response.data['rejected_asset_id'], rejected_asset.id)
         self.assertTrue(AuditLog.objects.filter(action='content_moderation', target_id=str(creation_id)).exists())
 
 

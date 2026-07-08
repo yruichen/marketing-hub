@@ -228,7 +228,7 @@ export function ContentPackagePanel({
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => onCopy(contentPackage.body)} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">复制正文</button>
-              <button type="button" onClick={() => setActiveTab('review')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">加入审阅</button>
+              <button type="button" onClick={() => setActiveTab('review')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">进入审阅（自动通过）</button>
               <button type="button" onClick={() => setActiveTab('projects')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">保存到项目</button>
             </div>
           </div>
