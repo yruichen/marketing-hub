@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, Copy, Download, ExternalLink, FileText, GitBranch, Pencil, Play, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Download, ExternalLink, FileText, GitBranch, Pencil, Play, Share2, Trash2 } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
 import { assetPreviewState, assetSourceLabel, assetTaskType, assetWorkflowLabel, getAssetSummary } from './assetContent';
@@ -9,6 +9,7 @@ interface AssetCardProps {
   onPreview: (asset: AssetRecord) => void;
   onEdit?: (asset: AssetRecord) => void;
   onDelete?: (asset: AssetRecord) => void;
+  onPublish?: (asset: AssetRecord) => void;
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (assetId: number) => void;
@@ -21,7 +22,7 @@ interface AssetCardProps {
  *   - 复制：写 clipboard.toast；下载：触发 <a download>
  *   - selectMode：显示复选框，点击切换选中状态
  */
-export function AssetCard({ asset, onPreview, onEdit, onDelete, selectMode, selected = false, onToggleSelect }: AssetCardProps) {
+export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selectMode, selected = false, onToggleSelect }: AssetCardProps) {
   const [copiedField, setCopiedField] = useState<'url' | 'title' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
@@ -185,6 +186,11 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete, selectMode, sele
         >
           <Download className="h-3.5 w-3.5" />
         </button>
+        {onPublish ? (
+          <button type="button" onClick={() => onPublish(asset)} title="发布到模板库" aria-label="发布到模板库" className="asset-card__action--publish">
+            <Share2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {onDelete ? (
           <button
             type="button"

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, Download, ExternalLink, X } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, Share2, X } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
 import { assetSourceLabel, assetTaskType, assetWorkflowLabel, formatAssetPreviewText } from './assetContent';
@@ -8,6 +8,8 @@ import { assetSourceLabel, assetTaskType, assetWorkflowLabel, formatAssetPreview
 interface AssetPreviewModalProps {
   asset: AssetRecord;
   onClose: () => void;
+  onPublish?: (asset: AssetRecord) => void | Promise<void>;
+  publishing?: boolean;
 }
 
 const formatDate = (iso: string) => {
@@ -23,7 +25,7 @@ const formatDate = (iso: string) => {
  * 多色配色与 AssetCard 一致（用同一份 assetVisuals 矩阵）。
  * 点击遮罩 / Esc / X 关闭。
  */
-function AssetPreviewModalInner({ asset, onClose }: AssetPreviewModalProps) {
+function AssetPreviewModalInner({ asset, onClose, onPublish, publishing = false }: AssetPreviewModalProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState<'title' | 'url' | null>(null);
   const palette = getAssetPalette(asset);
@@ -91,6 +93,18 @@ function AssetPreviewModalInner({ asset, onClose }: AssetPreviewModalProps) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {onPublish ? (
+              <button
+                type="button"
+                onClick={() => void onPublish(asset)}
+                disabled={publishing}
+                className="assets-preview__publish"
+                title="发布到模板库"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                {publishing ? '发布中…' : '发布到模板库'}
+              </button>
+            ) : null}
             {asset.source_url ? (
               <a
                 href={asset.source_url}

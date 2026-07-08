@@ -1326,6 +1326,59 @@
   box-shadow: inset 4px 0 0 var(--danger-accent), var(--shadow-panel);
 }
 
+.template-market--page {
+  gap: 16px;
+  padding-right: 4px;
+}
+
+.template-market__hero--compact {
+  flex-shrink: 0;
+}
+
+.template-market__scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 12px;
+}
+
+.template-market__jump-cta {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  margin-top: 6px;
+  padding: 0 20px;
+  border: 2px solid var(--brand-accent-strong);
+  border-radius: 999px;
+  background: var(--brand-accent);
+  color: #10130f;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.template-market__jump-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-panel);
+}
+
+.template-market__grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 20px;
+}
+
+.template-market--page .template-card {
+  min-height: 360px;
+}
+
 .template-market__hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);

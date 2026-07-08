@@ -103,6 +103,55 @@
   background: var(--surface-hover);
 }
 
+.assets-library__template-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 2px solid var(--brand-accent-strong);
+  border-radius: 999px;
+  background: var(--brand-accent);
+  color: #10130f;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.assets-library__template-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-panel);
+}
+
+.asset-card__action--publish {
+  color: var(--info-accent);
+}
+
+.assets-preview__publish {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 2px solid var(--brand-accent-strong);
+  border-radius: 999px;
+  background: var(--brand-accent);
+  color: #10130f;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.assets-preview__publish:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* 筛选条 */
 .assets-filter {
   display: flex;

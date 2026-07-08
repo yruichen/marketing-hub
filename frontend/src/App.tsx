@@ -25,6 +25,7 @@ import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
 import { ProjectManager } from './features/projects';
 import { AssetsLibrary } from './features/assets';
+import { publishAssetToCommunity } from './features/assets/publishAssetToCommunity';
 import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from './features/generation';
 import { taskTypeLabels, type CreationContent, type StoryboardOutput } from './features/generation';
 import { ContentPackagePanel, buildContentPackage, buildContentPackageRequest } from './features/content-package';
@@ -47,7 +48,7 @@ import {
   type PageContext,
 } from './features/assistant';
 import { useUiStore, type AppSection } from './shared/stores/uiStore';
-import type { CampaignRecord, ProjectRecord, GenerationTaskRecord, BillingPlanResponse } from './types/workspace';
+import type { AssetRecord, CampaignRecord, ProjectRecord, GenerationTaskRecord, BillingPlanResponse } from './types/workspace';
 
 const WorkflowBuilder = lazy(() =>
   import('./features/workflows').then((module) => ({ default: module.WorkflowBuilder })),
@@ -914,6 +915,27 @@ export default function App() {
     setActiveTab(result.tab);
   }, [selectProjectScope, setActiveTab, setRightPanelOpen, triggerToast, username]);
 
+  const handlePublishAsset = useCallback(async (asset: AssetRecord) => {
+    const ok = await publishAssetToCommunity({
+      asset,
+      workspaceScope,
+      username,
+      triggerToast,
+    });
+    if (ok) {
+      setActiveTab('community');
+    }
+    return ok;
+  }, [workspaceScope, username, triggerToast, setActiveTab]);
+
+  const handleOpenTemplateLibrary = useCallback(() => {
+    setActiveTab('community');
+  }, [setActiveTab]);
+
+  const handleOpenAssetsLibrary = useCallback(() => {
+    setActiveTab('assets');
+  }, [setActiveTab]);
+
   const handleShareToCommunity = useCallback(async (
     type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video',
     title: string,
@@ -935,6 +957,7 @@ export default function App() {
           content,
           image_url: imageUrl,
           audio_url: audioUrl,
+          source_task_id: latestTask?.status === 'succeeded' ? latestTask.id : undefined,
           visibility: 'public',
           responsibility_confirmed: true,
           ai_generated: true,
@@ -950,7 +973,7 @@ export default function App() {
     } catch (err) {
       triggerToast(buildErrorToast(err, '分享失败', '无法连接服务器，请稍后重试'));
     }
-  }, [username, workspaceScope, triggerToast, fetchDashboard]);
+  }, [username, workspaceScope, triggerToast, fetchDashboard, latestTask]);
 
   const handleRetryTask = useCallback(async (task: GenerationTaskRecord) => {
     if (retryingTaskId) return;
@@ -1397,12 +1420,16 @@ export default function App() {
                 activeProjectId={workspaceScope?.project.id}
                 onSelectScope={handleSelectProjectScope}
                 triggerToast={triggerToast}
-                onOpenAssetsLibrary={() => setActiveTab('assets')}
+                onOpenAssetsLibrary={handleOpenAssetsLibrary}
               />
             )}
 
             {activeTab === 'assets' && workspaceScope?.organization && (
-              <AssetsLibrary organizationSlug={workspaceScope.organization.slug} />
+              <AssetsLibrary
+                organizationSlug={workspaceScope.organization.slug}
+                onOpenTemplateLibrary={handleOpenTemplateLibrary}
+                onPublishAsset={handlePublishAsset}
+              />
             )}
 
             {activeTab === 'builder' && (
@@ -1569,6 +1596,7 @@ export default function App() {
                 username={username}
                 triggerToast={triggerToast}
                 onOpenProfile={handleOpenProfile}
+                onOpenAssetsLibrary={handleOpenAssetsLibrary}
               />
             )}
 
