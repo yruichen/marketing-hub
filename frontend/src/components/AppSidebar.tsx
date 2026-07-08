@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { AppSection } from '../shared/stores/uiStore';
-import { NAV_SECTIONS } from '../app/navigation';
-import { LogOut, Moon, UserCircle } from 'lucide-react';
+import { NAV_SECTIONS, TEMPLATE_LIBRARY_ENTRY } from '../app/navigation';
+import { ArrowUpRight, LogOut, Moon, UserCircle } from 'lucide-react';
 
 const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
 
@@ -14,6 +14,7 @@ type AppSidebarProps = {
   isSuperuser?: boolean;
   collapsed?: boolean;
   onOpenProfile?: () => void;
+  onOpenTemplateLibrary?: () => void;
   onLogout: () => void;
   className?: string;
 };
@@ -27,9 +28,11 @@ export function AppSidebar({
   isSuperuser = false,
   collapsed = false,
   onOpenProfile,
+  onOpenTemplateLibrary,
   onLogout,
   className = '',
 }: AppSidebarProps) {
+  const TemplateLibraryIcon = TEMPLATE_LIBRARY_ENTRY.icon;
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -60,6 +63,25 @@ export function AppSidebar({
             </div>
           )}
         </div>
+
+        {onOpenTemplateLibrary ? (
+          <button
+            type="button"
+            onClick={onOpenTemplateLibrary}
+            title={collapsed ? TEMPLATE_LIBRARY_ENTRY.label : TEMPLATE_LIBRARY_ENTRY.hint}
+            className={`app-sidebar-template-entry group relative w-full text-left text-[11px] transition-all cursor-pointer flex items-center border rounded-lg border-[var(--border-subtle)] bg-[var(--surface-panel)]/88 text-[var(--editorial-text)] shadow-[var(--shadow-panel)] hover:border-[#ff2442]/45 hover:bg-[var(--surface-hover)] ${
+              collapsed ? 'h-10 justify-center px-0 py-0' : 'gap-2 px-2.5 py-2.5'
+            }`}
+          >
+            <TemplateLibraryIcon className="h-3.5 w-3.5 shrink-0 text-[#ff2442]" aria-hidden="true" />
+            {!collapsed && (
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-2 font-black">
+                <span className="truncate">{TEMPLATE_LIBRARY_ENTRY.label}</span>
+                <ArrowUpRight className="h-3 w-3 shrink-0 text-[var(--editorial-text-gray)] group-hover:text-[#ff2442]" aria-hidden="true" />
+              </span>
+            )}
+          </button>
+        ) : null}
 
         <nav ref={navRef} className={`app-sidebar-nav flex flex-col font-mono flex-1 min-h-0 overflow-y-auto ${collapsed ? 'gap-2 pr-0' : 'gap-4 pr-1'}`}>
           {NAV_SECTIONS.map((section) => (

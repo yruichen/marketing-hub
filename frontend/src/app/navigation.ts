@@ -122,12 +122,6 @@ export const NAV_SECTIONS: NavSection[] = [
     title: '系统',
     items: [
       {
-        id: 'community',
-        label: '模板库',
-        hint: '独立页面 · 瀑布流浏览团队模板',
-        icon: Library,
-      },
-      {
         id: 'profile',
         label: '个人主页',
         hint: '创作者资料与作品墙',
@@ -148,6 +142,13 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+/** 侧栏 Logo 下方独立入口：新标签页打开，不占工作台 Tab */
+export const TEMPLATE_LIBRARY_ENTRY = {
+  label: '模板库',
+  hint: '新标签页打开 · 瀑布流浏览团队模板',
+  icon: Library,
+} as const;
 
 /** 主工作区占满视口、避免页面级滚动的 Tab */
 export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [

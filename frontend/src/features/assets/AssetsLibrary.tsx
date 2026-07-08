@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpRight, Check, FolderOpen, Move, Plus, RefreshCw, Share2, X } from 'lucide-react';
+import { Check, FolderOpen, Move, Plus, RefreshCw, Share2, X } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
@@ -24,7 +24,6 @@ type DialogState =
 
 export function AssetsLibrary({
   organizationSlug,
-  onOpenTemplateLibrary,
   onPublishAsset,
 }: AssetsLibraryProps) {
   const [filter, setFilter] = useState<AssetFilterState>(DEFAULT_FILTER);
@@ -157,17 +156,6 @@ export function AssetsLibrary({
           <div><strong>{previewCounts?.records_only ?? 0}</strong><span>仅记录</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {onOpenTemplateLibrary ? (
-            <button
-              type="button"
-              onClick={onOpenTemplateLibrary}
-              className="assets-library__template-cta"
-              title="前往模板库浏览已发布模板"
-            >
-              <span>前往模板库</span>
-              <ArrowUpRight className="h-4 w-4" />
-            </button>
-          ) : null}
           <button type="button" onClick={refresh} className="assets-library__refresh" title="刷新" aria-label="刷新">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -180,6 +168,7 @@ export function AssetsLibrary({
         </div>
       </header>
 
+      <div className="assets-library__scroll">
       <AssetFilter filter={filter} onChange={handleFilterChange}
         typeCounts={typeCounts} sourceCounts={sourceCounts} previewCounts={previewCounts} total={total} />
 
@@ -231,6 +220,7 @@ export function AssetsLibrary({
       )}
 
       <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
+      </div>
 
       {previewAsset ? (
         <AssetPreviewModal

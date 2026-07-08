@@ -10,6 +10,17 @@
   font-family: var(--mono-font);
   min-height: 0;
   height: 100%;
+  overflow: hidden;
+}
+
+.assets-library__scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .assets-library__header {
