@@ -164,7 +164,7 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selec
         ) : null}
         <div className="asset-card__actions">
         {onEdit ? (
-          <button type="button" onClick={() => onEdit(asset)} title="编辑" aria-label="编辑">
+          <button type="button" onClick={() => onEdit(asset)} title="编辑标签与链接" aria-label="编辑标签与链接">
             <Pencil className="h-3.5 w-3.5" />
           </button>
         ) : null}

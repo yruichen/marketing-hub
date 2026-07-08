@@ -68,6 +68,7 @@ export interface PublishAssetOptions {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
   triggerToast: TriggerToastFn;
+  creatorNote?: string;
 }
 
 export async function publishAssetToCommunity({
@@ -75,6 +76,7 @@ export async function publishAssetToCommunity({
   workspaceScope,
   username,
   triggerToast,
+  creatorNote = '',
 }: PublishAssetOptions): Promise<boolean> {
   const payload = buildCommunityPayloadFromAsset(asset);
   if (!payload) {
@@ -82,9 +84,8 @@ export async function publishAssetToCommunity({
     return false;
   }
 
-  if (!window.confirm(`将「${asset.title}」发布到模板库（社区公开）？`)) {
-    return false;
-  }
+  const metadata: Record<string, unknown> = {};
+  if (creatorNote) metadata.creator_note = creatorNote;
 
   try {
     const res = await apiFetch('/community/creations/', {
@@ -103,6 +104,7 @@ export async function publishAssetToCommunity({
         tags: payload.tags,
         source_asset_id: payload.source_asset_id,
         source_task_id: payload.source_task_id,
+        metadata,
         visibility: 'public',
         responsibility_confirmed: true,
         ai_generated: true,

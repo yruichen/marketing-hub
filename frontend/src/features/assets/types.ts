@@ -76,5 +76,5 @@ export interface AssetsLibraryProps {
   organizationSlug: string;
   onOpenProject?: (projectId: number) => void;
   onOpenTemplateLibrary?: () => void;
-  onPublishAsset?: (asset: AssetRecord) => Promise<boolean>;
+  onPublishAsset?: (asset: AssetRecord, creatorNote?: string) => Promise<boolean>;
 }

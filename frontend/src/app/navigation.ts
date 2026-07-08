@@ -124,7 +124,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         id: 'community',
         label: '模板库',
-        hint: '社区公开模板与灵感',
+        hint: '独立页面 · 瀑布流浏览团队模板',
         icon: Library,
       },
       {
@@ -160,7 +160,6 @@ export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [
   'projects',
   'builder',
   'assets',
-  'community',
   'config',
 ];
 

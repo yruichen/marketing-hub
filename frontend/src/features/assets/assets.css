@@ -152,6 +152,110 @@
   cursor: wait;
 }
 
+.publish-template-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #10130f 45%, transparent);
+  padding: 20px;
+}
+
+.publish-template-dialog {
+  width: min(480px, 100%);
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+}
+
+.publish-template-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.publish-template-dialog header button {
+  border: 0;
+  background: transparent;
+  color: var(--editorial-text-gray);
+  cursor: pointer;
+}
+
+.publish-template-dialog__eyebrow {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--editorial-text-gray);
+}
+
+.publish-template-dialog h3 {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.publish-template-dialog__hint {
+  margin: 12px 0 0;
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.publish-template-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.publish-template-dialog__field textarea {
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface-elevated);
+  padding: 12px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.publish-template-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.publish-template-dialog footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.publish-template-dialog footer button.is-primary {
+  border-color: var(--brand-accent-strong);
+  background: var(--brand-accent);
+  color: #10130f;
+}
+
 /* 筛选条 */
 .assets-filter {
   display: flex;

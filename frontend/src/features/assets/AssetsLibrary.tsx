@@ -9,6 +9,7 @@ import { useAssets } from './useAssets';
 import { useAssetGroups } from './useAssetGroups';
 import type { AssetFilterState, AssetsLibraryProps } from './types';
 import type { AssetRecord } from '../../types/workspace';
+import { PublishTemplateDialog } from './PublishTemplateDialog';
 import { apiFetch } from '../../hooks/useApi';
 import './assets.css';
 
@@ -82,15 +83,23 @@ export function AssetsLibrary({
 
   const [publishingId, setPublishingId] = useState<number | null>(null);
 
-  const handlePublish = useCallback(async (asset: AssetRecord) => {
+  const [publishTarget, setPublishTarget] = useState<AssetRecord | null>(null);
+
+  const handlePublish = useCallback((asset: AssetRecord) => {
     if (!onPublishAsset) return;
-    setPublishingId(asset.id);
+    setPublishTarget(asset);
+  }, [onPublishAsset]);
+
+  const confirmPublish = useCallback(async (creatorNote: string) => {
+    if (!onPublishAsset || !publishTarget) return;
+    setPublishingId(publishTarget.id);
     try {
-      await onPublishAsset(asset);
+      const ok = await onPublishAsset(publishTarget, creatorNote);
+      if (ok) setPublishTarget(null);
     } finally {
       setPublishingId(null);
     }
-  }, [onPublishAsset]);
+  }, [onPublishAsset, publishTarget]);
 
   const handleBatchPublish = async () => {
     if (!onPublishAsset || selectedIds.length === 0) return;
@@ -236,6 +245,15 @@ export function AssetsLibrary({
         <AssetFormDialog open initial={dialog.mode === 'edit' ? dialog.asset : null} onClose={() => setDialog({ mode: 'closed' })} onSave={handleSaveDialog} />
       ) : null}
 
+      {publishTarget ? (
+        <PublishTemplateDialog
+          open
+          assetTitle={publishTarget.title}
+          loading={publishingId === publishTarget.id}
+          onClose={() => setPublishTarget(null)}
+          onConfirm={(note) => void confirmPublish(note)}
+        />
+      ) : null}
       {showMoveDialog && (
         <MoveToFolderDialog
           selectedCount={selectedIds.length}
