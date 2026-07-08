@@ -7,6 +7,8 @@ import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, ImageOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 import {
   DEFAULT_IMAGE_STYLE_SKILL_ID,
   IMAGE_STYLE_SKILLS,
@@ -20,7 +22,8 @@ interface ImagePanelProps {
   agentLogs: string[];
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   fetchDashboard: () => Promise<void>;
   onShare: (type: 'image', title: string, content: CreationContent, imageUrl?: string) => Promise<void>;
   onCopy: (text: string) => Promise<void>;
@@ -35,6 +38,7 @@ export function ImagePanel({
   setAgentLogs,
   setLatestTask,
   triggerToast,
+  onErrorAction,
   fetchDashboard,
   onShare,
   onCopy,
@@ -156,7 +160,7 @@ export function ImagePanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
-        <TaskStatusCard state={taskUiState} onRetry={handleGenerateImage} retryDisabled={isRunning} />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateImage} retryDisabled={isRunning} onErrorAction={onErrorAction} />
       </div>
 
       {/* Right Output Preview */}

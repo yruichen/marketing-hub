@@ -18,7 +18,8 @@ import {
   UserCircle,
   XCircle,
 } from 'lucide-react';
-import { apiFetch, ensureCsrfToken } from './hooks/useApi';
+import { apiFetch, ensureCsrfToken, buildErrorToast, formatErrorForToast, parseApiErrorResponse, type ErrorActionId, type ToastMessage } from './hooks/useApi';
+import Toast from './components/Toast';
 import { pathForSection, sectionFromPath } from './app/routes';
 import { FULL_HEIGHT_WORKSPACE_TABS, TAB_META } from './app/navigation';
 import { AppSidebar } from './components/AppSidebar';
@@ -283,7 +284,7 @@ export default function App() {
 
   const [loading, setLoading] = useState(false);
   const [apiLive, setApiLive] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<ToastMessage | null>(null);
   const [latestTask, setLatestTask] = useState<GenerationTaskRecord | null>(null);
   const [retryingTaskId, setRetryingTaskId] = useState<number | null>(null);
   const [agentLogs, setAgentLogs] = useState<string[]>([]);
@@ -417,15 +418,38 @@ export default function App() {
     setStoredDarkMode(darkMode);
   }, [darkMode, setStoredDarkMode]);
 
-  const triggerToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
-    setFeedbackMsg({ text, type });
-    setTimeout(() => setFeedbackMsg(null), 3000);
+  const triggerToast = useCallback((input: string | ToastMessage, type: ToastMessage['type'] = 'success') => {
+    const message: ToastMessage = typeof input === 'string'
+      ? { text: input, type }
+      : { ...input, type: input.type || type };
+    setFeedbackMsg(message);
+    const duration = message.actions?.length ? 8000 : 3000;
+    window.setTimeout(() => setFeedbackMsg(null), duration);
   }, []);
 
+  const dismissToast = useCallback(() => setFeedbackMsg(null), []);
+
   const refreshAuthUser = useCallback(async () => {
-    const response = await apiFetch('/auth/me/');
-    const data = await response.json() as AuthMeResponse;
-    if (!response.ok || !data.authenticated || !data.username) {
+    try {
+      const response = await apiFetch('/auth/me/');
+      const data = await response.json() as AuthMeResponse;
+      if (!response.ok || !data.authenticated || !data.username) {
+        localStorage.removeItem('mh_token');
+        localStorage.removeItem('mh_username');
+        setToken(null);
+        setUsername(null);
+        setAuthUser(null);
+        setAuthStatus('anonymous');
+        return null;
+      }
+      localStorage.setItem('mh_token', 'session');
+      localStorage.setItem('mh_username', data.username);
+      setToken('session');
+      setUsername(data.username);
+      setAuthUser(data);
+      setAuthStatus('authenticated');
+      return data;
+    } catch {
       localStorage.removeItem('mh_token');
       localStorage.removeItem('mh_username');
       setToken(null);
@@ -434,13 +458,6 @@ export default function App() {
       setAuthStatus('anonymous');
       return null;
     }
-    localStorage.setItem('mh_token', 'session');
-    localStorage.setItem('mh_username', data.username);
-    setToken('session');
-    setUsername(data.username);
-    setAuthUser(data);
-    setAuthStatus('authenticated');
-    return data;
   }, []);
 
   useEffect(() => {
@@ -576,6 +593,33 @@ export default function App() {
     }
   }, [refreshAuthUser, triggerToast]);
 
+  const handleErrorAction = useCallback((actionId: ErrorActionId) => {
+    dismissToast();
+    switch (actionId) {
+      case 'open_billing':
+        setActiveTab('billing');
+        break;
+      case 'open_ai_config':
+        setActiveTab('config');
+        break;
+      case 'open_projects':
+        setActiveTab('projects');
+        break;
+      case 'open_dashboard':
+        setActiveTab('dashboard');
+        setRightPanelOpen(true);
+        break;
+      case 'accept_policies':
+        void acceptCurrentPolicies();
+        break;
+      case 'refresh_page':
+        window.location.reload();
+        break;
+      default:
+        break;
+    }
+  }, [acceptCurrentPolicies, dismissToast, setActiveTab, setRightPanelOpen]);
+
   const completeOnboarding = useCallback(async () => {
     if (onboardingSubmitting) return;
     setOnboardingSubmitting(true);
@@ -612,8 +656,7 @@ export default function App() {
         }),
       });
       if (!projectResponse.ok) {
-        const data = await projectResponse.json().catch(() => ({}));
-        throw new Error(data.error || data.detail || `品牌记忆保存失败 (${projectResponse.status})`);
+        throw await parseApiErrorResponse(projectResponse, `/projects/${scope.project.id}/`);
       }
       const updatedProject: ProjectRecord = await projectResponse.json();
 
@@ -664,8 +707,7 @@ export default function App() {
         body: JSON.stringify(payload),
       });
       if (!packageResponse.ok) {
-        const data = await packageResponse.json().catch(() => ({}));
-        throw new Error(data.error || data.detail || `内容包生成失败 (${packageResponse.status})`);
+        throw await parseApiErrorResponse(packageResponse, '/generate/content-package/');
       }
       const packageData: { content_package: ContentPackage; logs?: string[] } = await packageResponse.json();
 
@@ -679,7 +721,7 @@ export default function App() {
       await fetchDashboard();
       triggerToast('品牌记忆已保存，并生成第一份内容包', 'success');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '首次引导保存失败';
+      const message = formatErrorForToast(err, '首次引导保存失败，请稍后重试');
       setOnboardingError(message);
       setAgentLogs((prev) => [...prev, message]);
       triggerToast(message, 'error');
@@ -713,7 +755,11 @@ export default function App() {
         setToken(sessionMarker);
         setAuthStatus('checking');
         const me = await refreshAuthUser();
-        const nextUsername = me?.username || data.username;
+        if (!me) {
+          setAuthError('登录已通过验证，但会话未能保持。请确认服务器已设置 SESSION_COOKIE_SECURE=false（HTTP 部署），然后重试。');
+          return;
+        }
+        const nextUsername = me.username || values.username;
         localStorage.setItem('mh_username', nextUsername);
         setUsername(nextUsername);
         setActiveSection('brainstorm');
@@ -780,12 +826,12 @@ export default function App() {
         body: JSON.stringify({ username: username || DEMO_USERNAME, code }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Invite redeem failed');
+      if (!res.ok) throw await parseApiErrorResponse(res, '/billing/redeem-pro-invite/');
       setBillingPlans(data as BillingPlanResponse);
       await fetchWorkspaceBootstrap();
       triggerToast('Pro 邀请码兑换成功', 'success');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : '邀请码兑换失败', 'error');
+      triggerToast(buildErrorToast(err, '邀请码兑换失败', '请检查邀请码后重试'));
     } finally {
       setLoading(false);
     }
@@ -807,11 +853,11 @@ export default function App() {
         body: JSON.stringify({ username: username || DEMO_USERNAME, ...payload }),
       });
       const data: BillingPlanResponse = await res.json();
-      if (!res.ok) throw new Error((data as { error?: string }).error || 'Enterprise request failed');
+      if (!res.ok) throw await parseApiErrorResponse(res, '/billing/enterprise-requests/');
       setBillingPlans(data);
       triggerToast('企业定制需求已提交', 'success');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : '企业定制提交失败', 'error');
+      triggerToast(buildErrorToast(err, '企业定制提交失败', '请稍后重试'));
     } finally {
       setLoading(false);
     }
@@ -898,15 +944,11 @@ export default function App() {
         triggerToast('已成功分享到手绘工坊社区！', 'success');
         await fetchDashboard();
       } else {
-        const data = await res.json().catch(() => ({}));
-        if (data.requires_consent) {
-          triggerToast('请先同意当前服务条款和隐私政策，再发布社区内容。', 'error');
-        } else {
-          triggerToast(data.error || '作品分享失败', 'error');
-        }
+        const err = await parseApiErrorResponse(res, '/community/creations/');
+        triggerToast(buildErrorToast(err, '作品分享失败'));
       }
-    } catch {
-      triggerToast('分享失败，无法连接服务器', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '分享失败', '无法连接服务器，请稍后重试'));
     }
   }, [username, workspaceScope, triggerToast, fetchDashboard]);
 
@@ -929,7 +971,7 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || data.detail || `任务重试失败 (${response.status})`);
+        throw await parseApiErrorResponse(response, `/tasks/${task.id}/`);
       }
       const retriedTask = data as GenerationTaskRecord;
       setLatestTask(retriedTask);
@@ -940,7 +982,7 @@ export default function App() {
         retriedTask.status === 'failed' ? 'error' : 'success',
       );
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : '任务重试失败', 'error');
+      triggerToast(buildErrorToast(err, '任务重试失败', '请稍后重试'));
     } finally {
       setRetryingTaskId(null);
     }
@@ -1121,11 +1163,9 @@ export default function App() {
   if (authUser.admin_mode) {
     return (
       <div className="h-screen overflow-hidden bg-[var(--surface-canvas)] p-4 text-[var(--editorial-text)]">
-        {feedbackMsg && (
-          <div className={`fixed right-6 top-6 z-50 rounded-xl border border-[var(--border-default)] bg-[var(--surface-elevated)] px-5 py-4 font-mono text-xs font-semibold shadow-[var(--shadow-panel)] toast-${feedbackMsg.type}`}>
-            <span>{feedbackMsg.text}</span>
-          </div>
-        )}
+        {feedbackMsg ? (
+          <Toast message={feedbackMsg} onAction={handleErrorAction} onDismiss={dismissToast} />
+        ) : null}
         <AdminConsolePage
           isStaff={!!authUser.is_superuser}
           username={authUser.username || username || 'admin'}
@@ -1142,11 +1182,7 @@ export default function App() {
     <div className="h-screen bg-[var(--surface-canvas)] text-[var(--editorial-text)] relative overflow-hidden transition-colors duration-250 font-sans">
 
       {/* Dynamic toast alerts */}
-      {feedbackMsg && (
-        <div className={`fixed top-6 right-6 z-50 rounded-xl px-5 py-4 border border-[var(--border-default)] shadow-[var(--shadow-panel)] bg-[var(--surface-elevated)] animate-in slide-in-from-top duration-200 font-mono text-xs font-semibold toast-${feedbackMsg.type}`}>
-          <span>{feedbackMsg.text}</span>
-        </div>
-      )}
+      <Toast message={feedbackMsg} onAction={handleErrorAction} onDismiss={dismissToast} />
 
       {authUser.policy_consents?.requires_consent ? (
         <div className="fixed left-1/2 top-4 z-[70] flex w-[min(720px,calc(100vw-24px))] -translate-x-1/2 items-center justify-between gap-3 border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] px-4 py-3 shadow-[6px_6px_0_var(--editorial-stroke)] font-mono text-xs">
@@ -1379,6 +1415,7 @@ export default function App() {
                   triggerToast={triggerToast}
                   featureEntitlements={billingPlans?.feature_entitlements}
                   onOpenBilling={() => setActiveTab('billing')}
+                  onErrorAction={handleErrorAction}
                 />
               </Suspense>
             )}
@@ -1412,6 +1449,7 @@ export default function App() {
                   await fetchDashboard();
                 }}
                 onRetryTask={handleRetryTask}
+                onErrorAction={handleErrorAction}
                 retryingTaskId={retryingTaskId}
               />
             )}
@@ -1448,6 +1486,7 @@ export default function App() {
                 setAgentLogs={setAgentLogs}
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
+                onErrorAction={handleErrorAction}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
                 onCopy={handleCopyClipboard}
@@ -1464,6 +1503,7 @@ export default function App() {
                 setAgentLogs={setAgentLogs}
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
+                onErrorAction={handleErrorAction}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
                 onCopy={handleCopyClipboard}
@@ -1480,6 +1520,7 @@ export default function App() {
                 setAgentLogs={setAgentLogs}
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
+                onErrorAction={handleErrorAction}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
                 onStoryboardChange={setLatestStoryboardOutput}
@@ -1496,6 +1537,7 @@ export default function App() {
                 setAgentLogs={setAgentLogs}
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
+                onErrorAction={handleErrorAction}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onShare={handleShareToCommunity}
               />
@@ -1511,6 +1553,7 @@ export default function App() {
                 setAgentLogs={setAgentLogs}
                 setLatestTask={setLatestTask}
                 triggerToast={triggerToast}
+                onErrorAction={handleErrorAction}
                 fetchDashboard={async () => { await fetchDashboard(); }}
                 onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
                 onShare={handleShareToCommunity}
@@ -1571,6 +1614,7 @@ export default function App() {
                 onWorkspaceRefresh={async () => { await fetchWorkspaceBootstrap(); }}
                 featureEntitlements={billingPlans?.feature_entitlements}
                 onOpenBilling={() => setActiveTab('billing')}
+                canManagePlatformConfig={!!(authUser?.is_staff || authUser?.is_superuser)}
               />
             )}
           </div>
@@ -1584,6 +1628,7 @@ export default function App() {
                 setActiveTab={setActiveTab}
                 onClose={() => setRightPanelOpen(false)}
                 onRetryTask={handleRetryTask}
+                onErrorAction={handleErrorAction}
                 retryingTaskId={retryingTaskId}
               />
             </div>

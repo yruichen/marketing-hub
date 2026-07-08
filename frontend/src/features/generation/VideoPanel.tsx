@@ -19,6 +19,8 @@ import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, StoryboardOutput, VideoOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { FeatureEntitlements, GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 
 interface VideoPanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -28,7 +30,8 @@ interface VideoPanelProps {
   agentLogs: string[];
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   fetchDashboard: () => Promise<void>;
   onWorkspaceRefresh?: () => Promise<void>;
   onShare: (type: 'video', title: string, content: CreationContent) => Promise<void>;
@@ -104,6 +107,7 @@ export function VideoPanel({
   setAgentLogs,
   setLatestTask,
   triggerToast,
+  onErrorAction,
   fetchDashboard,
   onWorkspaceRefresh,
   onShare,
@@ -537,7 +541,7 @@ export function VideoPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
-        <TaskStatusCard state={taskUiState} onRetry={handleGenerateVideo} retryDisabled={isRunning || !canRenderVideo} />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateVideo} retryDisabled={isRunning || !canRenderVideo} onErrorAction={onErrorAction} />
       </div>
 
       <div className="generation-workspace__results">

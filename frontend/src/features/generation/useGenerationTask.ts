@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { useState } from 'react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, parseApiErrorResponse } from '../../hooks/useApi';
+import { buildErrorToast, resolveErrorActionsFromRaw } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 import type { GenerationTaskRecord } from '../../types/workspace';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { VideoOutput } from './types';
@@ -21,7 +23,7 @@ interface SubmitOptions {
   setLoading: (loading: boolean) => void;
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
   workspaceScope: WorkspaceScope | null;
   username: string | null;
   fetchDashboard: () => Promise<void>;
@@ -50,7 +52,7 @@ export function useGenerationTask({
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const res = await apiFetch(`/tasks/${taskId}/`);
       if (!res.ok) {
-        throw new Error('Task polling failed');
+        throw await parseApiErrorResponse(res, `/tasks/${taskId}/`);
       }
       const task: GenerationTaskRecord = await res.json();
       setLatestTask(task);
@@ -70,7 +72,7 @@ export function useGenerationTask({
     }
     const res = await apiFetch(`/tasks/${taskId}/`);
     if (!res.ok) {
-      throw new Error('Task polling failed');
+      throw await parseApiErrorResponse(res, `/tasks/${taskId}/`);
     }
     const task: GenerationTaskRecord = await res.json();
     setLatestTask(task);
@@ -116,14 +118,15 @@ export function useGenerationTask({
         }),
       });
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        const errorInfo = explainGenerationError(errBody.error || errBody.detail || `任务提交失败 (${res.status})`, res.status);
+        const err = await parseApiErrorResponse(res, '/tasks/');
+        const errorInfo = explainGenerationError(err, err.status);
         setTaskUiState({
           phase: 'failed',
           task: null,
           title: errorInfo.message,
           message: errorInfo.detail,
           recoveryActions: errorInfo.recoveryActions,
+          actions: errorInfo.actions,
         });
         throw new Error(errorInfo.message);
       }
@@ -151,6 +154,7 @@ export function useGenerationTask({
           title: errorInfo.message,
           message: errorInfo.detail,
           recoveryActions: errorInfo.recoveryActions,
+          actions: errorInfo.actions,
         });
         throw new Error(errorInfo.message);
       }
@@ -195,8 +199,9 @@ export function useGenerationTask({
             title: errorInfo.message,
             message: errorInfo.detail,
             recoveryActions: errorInfo.recoveryActions,
+            actions: errorInfo.actions,
           });
-      triggerToast(errorInfo.message, 'error');
+      triggerToast(buildErrorToast(err, undefined, errorInfo.message));
     } finally {
       setLoading(false);
     }
@@ -242,6 +247,7 @@ export function useGenerationTask({
           title: errorInfo.message,
           message: errorInfo.detail,
           recoveryActions: errorInfo.recoveryActions,
+          actions: errorInfo.actions,
         });
         throw new Error(errorInfo.message);
       }
@@ -291,6 +297,7 @@ export function useGenerationTask({
           title: errorInfo.message,
           message: errorInfo.detail,
           recoveryActions: errorInfo.recoveryActions,
+          actions: errorInfo.actions,
         });
         throw new Error(errorInfo.message);
       }
@@ -320,6 +327,9 @@ export function useGenerationTask({
         message: result.is_demo_fallback ? '已返回演示视频，未调用真实视频模型。' : successProgress.message,
         detail: result.is_demo_fallback ? '请在 AI 设置检查 Agnes 视频模型配置。' : successProgress.detail,
         recoveryActions: result.is_demo_fallback ? ['前往 AI 设置检查 API Key', '确认视频模型名称', '重新运行视频任务'] : undefined,
+        actions: result.is_demo_fallback
+          ? resolveErrorActionsFromRaw('前往 AI 设置检查 API Key')
+          : undefined,
       });
       triggerToast(
         result.is_demo_fallback ? '演示视频已返回（非真实 API）' : '视频已生成，可在下方直接播放',
@@ -335,8 +345,9 @@ export function useGenerationTask({
             title: errorInfo.message,
             message: errorInfo.detail,
             recoveryActions: errorInfo.recoveryActions,
+            actions: errorInfo.actions,
           });
-      triggerToast(errorInfo.message, 'error');
+      triggerToast(buildErrorToast(err, undefined, errorInfo.message));
     } finally {
       setLoading(false);
     }

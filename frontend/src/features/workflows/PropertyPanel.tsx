@@ -1,7 +1,9 @@
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import { ErrorRecoveryActions } from '../../shared/ui/ErrorRecoveryActions';
 import type { GenerationTaskRecord, WorkflowNode, WorkflowEdge, WorkflowRunRecord } from '../../types/workspace';
 import { statusLabels } from './constants';
 import { nodeStatusDotClass } from './utils';
-import { classifyWorkflowFailure } from './workflowRecovery';
+import { classifyWorkflowFailure, workflowFailureAppActions } from './workflowRecovery';
 import { workflowRunProgressLabel } from './workflowRunState';
 
 interface PropertyPanelProps {
@@ -16,6 +18,7 @@ interface PropertyPanelProps {
   onSelectNode: (id: string) => void;
   onCopyNodeDiagnostics: (id: string) => void;
   onRecoverFromNode: (id: string) => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
 }
 
 function executionOrder(nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowNode[] {
@@ -89,6 +92,7 @@ export function PropertyPanel({
   onSelectNode,
   onCopyNodeDiagnostics,
   onRecoverFromNode,
+  onErrorAction,
 }: PropertyPanelProps) {
   const orderedNodes = executionOrder(nodes, edges);
   const succeededCount = nodes.filter((n) => n.status === 'succeeded').length;
@@ -218,6 +222,15 @@ export function PropertyPanel({
               <div key={item.id} className="border border-rose-300/60 bg-rose-50/50 dark:bg-rose-950/20 px-2.5 py-2 text-[10px] leading-relaxed">
                 {(() => {
                   const recovery = classifyWorkflowFailure(item.message);
+                  const appActions = workflowFailureAppActions(recovery.kind);
+                  const primaryAppAction = appActions.find((action) => action.primary) || appActions[0];
+                  const handlePrimaryAction = () => {
+                    if (primaryAppAction && onErrorAction) {
+                      onErrorAction(primaryAppAction.id);
+                      return;
+                    }
+                    if (item.nodeId) onSelectNode(item.nodeId);
+                  };
                   return (
                     <>
                       <div className="flex items-start justify-between gap-2">
@@ -229,12 +242,20 @@ export function PropertyPanel({
                       </div>
                       <p className="mt-1 text-rose-700/90">{recovery.explanation}</p>
                       <p className="mt-1 text-rose-600/80 whitespace-pre-wrap break-words line-clamp-3">{item.message}</p>
+                      {appActions.length > 0 && (
+                        <ErrorRecoveryActions
+                          actions={appActions}
+                          onAction={onErrorAction}
+                          compact
+                          className="mt-2"
+                        />
+                      )}
                       <div className="mt-2 grid grid-cols-1 gap-1.5">
                         <button
                           type="button"
                           className="border border-rose-300 bg-white/50 px-2 py-1 text-left text-[9px] font-black text-rose-700 hover:bg-white disabled:opacity-40"
-                          disabled={!item.nodeId}
-                          onClick={() => item.nodeId && onSelectNode(item.nodeId)}
+                          disabled={!primaryAppAction && !item.nodeId}
+                          onClick={handlePrimaryAction}
                         >
                           {recovery.primaryAction}
                         </button>

@@ -24,6 +24,8 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
+import { formatErrorForToast } from '../../hooks/useApi';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type { CommunityItem } from '../community';
 import { useProfile, type CreatorProfile, type CreatorSocialLink } from './useProfile';
 import './profile.css';
@@ -31,7 +33,7 @@ import './profile.css';
 type ProfilePageProps = {
   username?: string | null;
   currentUsername: string | null;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
 };
 
 type CreationFilter = 'all' | CommunityItem['creation_type'];
@@ -168,7 +170,7 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
       setDrawerOpen(false);
       triggerToast('个人主页已更新', 'success');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '资料保存失败';
+      const message = formatErrorForToast(err, '资料保存失败，请稍后重试');
       setError(message);
       triggerToast(message, 'error');
     }
@@ -182,8 +184,7 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
       });
       triggerToast(featured ? '已加入精选作品' : '已从精选移除', 'success');
     } catch (err) {
-      const message = err instanceof Error ? err.message : '作品展示设置失败';
-      triggerToast(message, 'error');
+      triggerToast(formatErrorForToast(err, '作品展示设置失败，请稍后重试'), 'error');
     }
   }
 

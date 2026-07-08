@@ -5,6 +5,7 @@ import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
 import type { DashboardSnapshot } from '../dashboard/types';
 import type { AppSection } from '../../shared/stores/uiStore';
+import type { ErrorActionId } from '../../shared/api/errorActions';
 
 interface ContextPanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -14,6 +15,7 @@ interface ContextPanelProps {
   setActiveTab: (tab: AppSection) => void;
   onClose: () => void;
   onRetryTask: (task: GenerationTaskRecord) => void | Promise<void>;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   retryingTaskId?: number | null;
 }
 
@@ -25,6 +27,7 @@ export function ContextPanel({
   setActiveTab,
   onClose,
   onRetryTask,
+  onErrorAction,
   retryingTaskId = null,
 }: ContextPanelProps) {
   const taskList = [
@@ -78,6 +81,7 @@ export function ContextPanel({
           compact
           retryingTaskId={retryingTaskId}
           onRetryTask={onRetryTask}
+          onErrorAction={onErrorAction}
           onOpenTasks={() => setActiveTab('dashboard')}
           emptyAction={() => setActiveTab('content')}
         />

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, buildErrorToast, parseApiErrorResponse } from '../../hooks/useApi';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type { CommunityItem } from './types';
 
 const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
@@ -8,7 +9,7 @@ import type { WorkspaceScope } from '../dashboard/types';
 interface UseCommunityOptions {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onLikeUpdate?: (id: number, likes: number) => void;
 }
 
@@ -65,10 +66,11 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
         )));
         triggerToast('举报已提交，运营会复核处理', 'success');
       } else {
-        triggerToast('举报提交失败', 'error');
+        const err = await parseApiErrorResponse(res, `/community/creations/${id}/report/`);
+        triggerToast(buildErrorToast(err, '举报提交失败'));
       }
-    } catch {
-      triggerToast('举报提交失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '举报提交失败', '无法连接服务器，请稍后重试'));
     }
   }, [triggerToast]);
 
@@ -89,8 +91,8 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
         setIsRagActive(true);
         triggerToast('品牌灵感已完成对齐', 'success');
       }
-    } catch {
-      triggerToast('灵感搜索请求失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '灵感搜索请求失败'));
     } finally {
       setLoading(false);
     }
@@ -128,10 +130,11 @@ export function useCommunity({ workspaceScope, username, triggerToast, onLikeUpd
         await fetchCommunity();
         onSuccess?.();
       } else {
-        triggerToast('作品分享失败', 'error');
+        const err = await parseApiErrorResponse(res, '/community/creations/');
+        triggerToast(buildErrorToast(err, '作品分享失败'));
       }
-    } catch {
-      triggerToast('分享失败，无法连接服务器', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '分享失败', '无法连接服务器，请稍后重试'));
     }
   }, [workspaceScope, username, triggerToast, fetchCommunity]);
 

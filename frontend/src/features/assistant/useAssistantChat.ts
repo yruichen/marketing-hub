@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { apiStream } from '../../hooks/useApi';
+import { apiStream, formatErrorForToast, parseApiErrorResponse } from '../../hooks/useApi';
 import { clientTools } from './clientTools';
 import type { AssistantSseEvent, ChatMessage, PageContext } from './types';
 
@@ -142,20 +142,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         });
 
         if (!res.ok || !res.body) {
-          // Surface the backend's body (DRF throttle messages, upstream
-          // 4xx, etc.) so the user gets actionable text instead of
-          // just "HTTP 429".
-          let detail = '';
-          try {
-            detail = (await res.text()).slice(0, 200);
-          } catch {
-            /* body not readable */
-          }
-          throw new Error(
-            res.status === 429
-              ? `请求过于频繁（429）${detail ? `：${detail}` : ''}`
-              : `HTTP ${res.status}${detail ? `：${detail}` : ''}`,
-          );
+          throw await parseApiErrorResponse(res, '/assistant/chat');
         }
 
         const reader = res.body.getReader();
@@ -207,7 +194,7 @@ export function useAssistantChat(): UseAssistantChatResult {
                   commit();
                 } catch (err) {
                   liveToolCalls[liveToolCalls.length - 1].result = {
-                    error: err instanceof Error ? err.message : 'client tool failed',
+                    error: formatErrorForToast(err, '客户端工具执行失败'),
                   };
                   liveToolCalls[liveToolCalls.length - 1].status = 'error';
                   commit();
@@ -244,7 +231,7 @@ export function useAssistantChat(): UseAssistantChatResult {
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : '未知错误';
+        const message = formatErrorForToast(err, '助手暂时无法回复，请稍后重试');
         setError(message);
       } finally {
         window.clearInterval(statusTimer);

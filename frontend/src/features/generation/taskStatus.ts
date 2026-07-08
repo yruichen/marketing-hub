@@ -1,4 +1,6 @@
 import type { GenerationTaskRecord } from '../../types/workspace';
+import { resolveErrorActions, type ErrorAction } from '../../shared/api/errorActions';
+import { buildUserFacingError, getUserFacingError } from '../../shared/api/errors';
 import { taskTypeLabels } from './types';
 
 export type GenerationTaskPhase =
@@ -17,6 +19,7 @@ export interface GenerationTaskUiState {
   message: string;
   detail?: string;
   recoveryActions?: string[];
+  actions?: ErrorAction[];
   startedAt?: number;
 }
 
@@ -56,63 +59,20 @@ export function phaseFromTaskStatus(status: GenerationTaskRecord['status']): Gen
 }
 
 export function explainGenerationError(raw: unknown, status?: number) {
-  const text = raw instanceof Error ? raw.message : String(raw || '生成任务失败');
-  const lowered = text.toLowerCase();
-
-  if (
-    lowered.includes('legal policies require consent')
-    || lowered.includes('requires consent')
-    || lowered.includes('policy consent')
-    || lowered.includes('consent')
-    || lowered.includes('条款')
-    || lowered.includes('隐私政策')
-  ) {
-    return {
-      message: '需要先同意最新条款。',
-      detail: '当前账号还没有完成服务条款、隐私政策或 AI 使用规则确认。',
-      recoveryActions: ['点击页面顶部的「同意并继续」', '确认后重新提交生成任务', '如果没有看到提示，请刷新页面后再试'],
-    };
-  }
-  if (status === 401 || status === 403 || lowered.includes('permission') || lowered.includes('csrf')) {
-    return {
-      message: '登录状态或项目权限异常。',
-      detail: '当前账号可能没有访问这个项目，或登录会话已经过期。',
-      recoveryActions: ['重新登录后再试', '确认当前项目属于你的工作区', '让管理员检查你的成员角色'],
-    };
-  }
-  if (status === 402 || lowered.includes('quota') || lowered.includes('credit') || lowered.includes('额度')) {
-    return {
-      message: '当前额度不足，任务没有继续执行。',
-      detail: '系统已阻止继续消耗模型额度。',
-      recoveryActions: ['查看计费页余额', '联系管理员发放测试额度', '切换到自有 API Key'],
-    };
-  }
-  if (status === 429 || lowered.includes('rate') || lowered.includes('too many')) {
-    return {
-      message: '请求过于频繁，系统正在保护任务队列。',
-      detail: '短时间内提交了太多生成请求。',
-      recoveryActions: ['稍后重试', '等待当前任务完成', '减少连续点击提交'],
-    };
-  }
-  if (lowered.includes('timeout') || lowered.includes('abort') || lowered.includes('超时')) {
-    return {
-      message: '模型响应超时。',
-      detail: '输入可能过长，或当前模型服务拥堵。',
-      recoveryActions: ['缩短输入内容', '稍后重试', '在 AI 设置里切换模型'],
-    };
-  }
-  if (lowered.includes('provider') || lowered.includes('api key') || lowered.includes('401') || lowered.includes('403')) {
-    return {
-      message: '模型服务配置可能不可用。',
-      detail: 'Provider、API Key 或模型名称需要管理员检查。',
-      recoveryActions: ['前往 AI 设置检查密钥', '换一个模型后重试', '联系管理员查看后台错误'],
-    };
-  }
+  const body = raw instanceof Error
+    ? { message: raw.message }
+    : (typeof raw === 'string' ? { message: raw } : raw);
+  const facing = status
+    ? buildUserFacingError({ status, body, fallbackMessage: '生成任务失败。' })
+    : getUserFacingError(raw, { title: '生成任务失败', message: '生成任务失败。' });
+  const actions = resolveErrorActions(facing, raw);
 
   return {
-    message: '生成任务失败。',
-    detail: text,
-    recoveryActions: ['检查输入是否完整', '稍后重试', '如果重复失败，请联系管理员查看任务日志'],
+    message: facing.title === '操作失败' ? facing.message : (facing.title || facing.message),
+    detail: facing.action || facing.detail || facing.message,
+    recoveryActions: facing.recoveryActions || ['检查输入是否完整', '稍后重试', '如果重复失败，请联系管理员查看任务日志'],
+    actions,
+    code: facing.code,
   };
 }
 

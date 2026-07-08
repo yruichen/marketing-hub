@@ -8,15 +8,17 @@ from typing import Any
 from django.conf import settings
 from django.db.models import Sum
 from django.utils import timezone
-from rest_framework.exceptions import APIException, Throttled, ValidationError
+from rest_framework.exceptions import Throttled, ValidationError
 
+from api.errors import AppAPIException, ERROR_CATALOG
 from api.models import CreditLedgerEntry, GenerationTask, Organization, UsageEvent
 
 
-class PaymentRequired(APIException):
+class PaymentRequired(AppAPIException):
     status_code = 402
-    default_detail = 'Generation budget exceeded.'
-    default_code = 'payment_required'
+    default_code = 'GENERATION_BUDGET_EXCEEDED'
+    default_detail = ERROR_CATALOG['GENERATION_BUDGET_EXCEEDED'].message
+    default_action = ERROR_CATALOG['GENERATION_BUDGET_EXCEEDED'].action
 
 
 @dataclass(frozen=True)
@@ -114,11 +116,11 @@ def assert_generation_allowed(
     estimated = estimated_cost_cents if estimated_cost_cents is not None else TASK_ESTIMATED_COST_CENTS.get(task_type, 2)
     daily_cap = int(getattr(settings, 'GENERATION_DAILY_BUDGET_CENTS_DEFAULT', 5000))
     if daily_cap >= 0 and _daily_usage_cents(organization) + estimated > daily_cap:
-        raise PaymentRequired('Daily generation budget exceeded.')
+        raise PaymentRequired(code='GENERATION_BUDGET_EXCEEDED')
 
     if getattr(settings, 'GENERATION_REQUIRE_CREDIT_BALANCE', False):
         if _credit_balance_cents(organization) < estimated:
-            raise PaymentRequired('Insufficient generation credits.')
+            raise PaymentRequired(code='GENERATION_CREDITS_INSUFFICIENT')
 
     return BudgetDecision(allowed=True)
 

@@ -1,4 +1,5 @@
 import type { BrandContext, CampaignRecord, FolderRecord, OrganizationRecord, ProjectRecord, WorkspaceDraftRecord } from '../../types/workspace';
+import type { TriggerToastFn } from '../../shared/types/toast';
 
 export type ViewMode = 'icon' | 'list' | 'board';
 export type ProjectSortKey = 'recent' | 'name' | 'campaigns' | 'assets' | 'cost';
@@ -18,11 +19,12 @@ export interface ProjectForm {
   status_tag: string;
 }
 
+
 export interface ProjectManagerProps {
   organization: OrganizationRecord | null;
   activeProjectId?: number;
   onSelectScope: (project: ProjectRecord, campaign?: CampaignRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onOpenAssetsLibrary?: () => void;
 }
 

@@ -1,3 +1,5 @@
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import { ErrorRecoveryActions } from '../../shared/ui/ErrorRecoveryActions';
 import type { GenerationTaskUiState } from './taskStatus';
 import { expectedTaskDuration } from './taskStatus';
 
@@ -5,6 +7,7 @@ interface TaskStatusCardProps {
   state: GenerationTaskUiState;
   onRetry?: () => void;
   retryDisabled?: boolean;
+  onErrorAction?: (actionId: ErrorActionId) => void;
 }
 
 const phaseLabels: Record<GenerationTaskUiState['phase'], string> = {
@@ -24,7 +27,7 @@ function toneClass(phase: GenerationTaskUiState['phase']) {
   return 'border-[var(--border-subtle)] bg-[var(--surface-panel)] text-[var(--editorial-text)]';
 }
 
-export function TaskStatusCard({ state, onRetry, retryDisabled = false }: TaskStatusCardProps) {
+export function TaskStatusCard({ state, onRetry, retryDisabled = false, onErrorAction }: TaskStatusCardProps) {
   if (state.phase === 'idle' && !state.task) return null;
 
   const task = state.task;
@@ -65,7 +68,13 @@ export function TaskStatusCard({ state, onRetry, retryDisabled = false }: TaskSt
         </div>
       )}
 
-      {state.recoveryActions?.length ? (
+      {state.actions?.length ? (
+        <ErrorRecoveryActions
+          actions={state.actions}
+          onAction={onErrorAction}
+          className="mt-2 border-t border-current/15 pt-2"
+        />
+      ) : state.recoveryActions?.length ? (
         <div className="mt-2 border-t border-current/15 pt-2">
           <div className="font-black uppercase tracking-[0.14em] text-[9px]">建议处理</div>
           <ul className="mt-1 space-y-1 leading-5 text-[var(--editorial-text-muted)]">

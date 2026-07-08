@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, buildErrorToast, parseApiErrorResponse } from '../../hooks/useApi';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type { ContentPackage } from '../generation/types';
 import type { OnboardingState } from '../onboarding/types';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -74,7 +75,7 @@ export function buildContentPackageRequest(inputs: ContentPackageInputs & { user
 interface UseContentPackageOptions {
   setLoading: (loading: boolean) => void;
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onApplied: (pkg: ContentPackage) => void;
 }
 
@@ -93,15 +94,14 @@ export function useContentPackageActions({
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || data.error || `生成失败 (${res.status})`);
+        throw await parseApiErrorResponse(res, '/generate/content-package/');
       }
       const data: { content_package: ContentPackage; logs?: string[] } = await res.json();
       onApplied(data.content_package);
       setAgentLogs(data.logs?.length ? data.logs : ['已完成内容包生成。', '可继续改写、保存到资产库或加入审阅。']);
       triggerToast('内容包已生成', 'success');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : '内容包生成失败', 'error');
+      triggerToast(buildErrorToast(err, '内容包生成失败'));
       setAgentLogs((prev) => [...prev, '内容包生成失败，请稍后重试。']);
     } finally {
       setLoading(false);
@@ -117,15 +117,14 @@ export function useContentPackageActions({
         body: JSON.stringify({ ...payload, rewrite_mode: mode }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || data.error || `改写失败 (${res.status})`);
+        throw await parseApiErrorResponse(res, '/generate/content-package/');
       }
       const data: { content_package: ContentPackage; logs?: string[] } = await res.json();
       onApplied(data.content_package);
       setAgentLogs(data.logs?.length ? data.logs : ['已完成快捷改写。']);
       triggerToast('已完成快捷改写', 'success');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : '改写失败', 'error');
+      triggerToast(buildErrorToast(err, '改写失败'));
     } finally {
       setLoading(false);
     }

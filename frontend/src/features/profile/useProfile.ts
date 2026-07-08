@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, formatErrorForToast, parseApiErrorResponse } from '../../hooks/useApi';
 import type { CommunityItem } from '../community';
 
 export interface CreatorSocialLink {
@@ -76,7 +76,8 @@ export function useProfile(username?: string | null) {
       const response = await apiFetch(path);
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        setError(payload?.error || '个人主页加载失败');
+        const err = await parseApiErrorResponse(response, path);
+        setError(formatErrorForToast(err, '个人主页加载失败'));
         setData(null);
         return;
       }
@@ -99,8 +100,7 @@ export function useProfile(username?: string | null) {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        const details = payload?.errors ? Object.values(payload.errors).join(' / ') : payload?.error;
-        throw new Error(details || '资料保存失败');
+        throw await parseApiErrorResponse(response, '/profiles/me/');
       }
       setData(payload as CreatorProfileResponse);
       return payload as CreatorProfileResponse;
@@ -119,7 +119,7 @@ export function useProfile(username?: string | null) {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error || '作品展示设置失败');
+        throw await parseApiErrorResponse(response, `/profiles/me/creations/${id}/`);
       }
       setData(payload as CreatorProfileResponse);
       return payload as CreatorProfileResponse;

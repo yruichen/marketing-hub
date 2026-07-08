@@ -7,6 +7,8 @@ import { SaveControlBar } from './SaveControlBar';
 import type { CreationContent, StoryboardOutput } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 
 interface StoryboardPanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -16,7 +18,8 @@ interface StoryboardPanelProps {
   agentLogs: string[];
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   fetchDashboard: () => Promise<void>;
   onShare: (type: 'storyboard', title: string, content: CreationContent) => Promise<void>;
   onStoryboardChange?: (storyboard: StoryboardOutput) => void;
@@ -31,6 +34,7 @@ export function StoryboardPanel({
   setAgentLogs,
   setLatestTask,
   triggerToast,
+  onErrorAction,
   fetchDashboard,
   onShare,
   onStoryboardChange,
@@ -162,7 +166,7 @@ export function StoryboardPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
-        <TaskStatusCard state={taskUiState} onRetry={handleGenerateStoryboard} retryDisabled={isRunning} />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateStoryboard} retryDisabled={isRunning} onErrorAction={onErrorAction} />
       </div>
 
       <div className="generation-workspace__results">

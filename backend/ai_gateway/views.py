@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Q
 from django.http import StreamingHttpResponse
 from django.middleware.csrf import get_token
@@ -257,7 +258,7 @@ class AIConfigView(APIView):
         billing_mode = billing_mode if billing_mode in {'platform', 'byok'} else 'platform'
         if billing_mode == 'platform' and not (request.user.is_staff or request.user.is_superuser):
             return Response(
-                {'detail': 'Platform AI configuration requires staff access.'},
+                {'detail': '平台密钥仅运维人员可配置，请使用「自有 API Key」保存组织密钥。'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         organization = org if billing_mode == 'byok' else None
@@ -284,7 +285,18 @@ class AIConfigView(APIView):
             },
         )
         if api_key and not looks_like_masked_api_key(api_key):
-            config.set_api_key(api_key)
+            try:
+                config.set_api_key(api_key)
+            except ImproperlyConfigured:
+                return Response(
+                    {
+                        'detail': (
+                            '服务端未配置 FIELD_ENCRYPTION_KEY，无法加密保存 API Key。'
+                            '请在 backend/.env 中设置后重启 backend。'
+                        ),
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
             config.save(update_fields=[
                 'api_key',
                 'api_key_encrypted',
@@ -354,7 +366,7 @@ class AIConfigModelsView(APIView):
         billing_mode = request.data.get('billing_mode', 'platform')
         if billing_mode == 'platform' and not (request.user.is_staff or request.user.is_superuser):
             return Response(
-                {'detail': 'Platform AI configuration requires staff access.'},
+                {'detail': '平台密钥仅运维人员可配置，请使用「自有 API Key」保存组织密钥。'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         organization = org if billing_mode == 'byok' else None
