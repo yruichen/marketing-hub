@@ -10,14 +10,16 @@ import {
 } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { FeatureEntitlements } from '../../types/workspace';
+import type { TriggerToastFn } from '../../shared/types/toast';
 
 interface AiConfigPageProps {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onWorkspaceRefresh?: () => Promise<void>;
   featureEntitlements?: Partial<FeatureEntitlements>;
   onOpenBilling?: () => void;
+  canManagePlatformConfig?: boolean;
 }
 
 export function AiConfigPage({
@@ -27,6 +29,7 @@ export function AiConfigPage({
   onWorkspaceRefresh: _onWorkspaceRefresh,
   featureEntitlements,
   onOpenBilling,
+  canManagePlatformConfig = false,
 }: AiConfigPageProps) {
   void _onWorkspaceRefresh;
   const {
@@ -42,7 +45,7 @@ export function AiConfigPage({
     fetchConfigs,
     handleFetchModels,
     handleSaveConfig,
-  } = useAiConfig({ workspaceScope, username, triggerToast });
+  } = useAiConfig({ workspaceScope, username, triggerToast, canManagePlatformConfig });
 
   useEffect(() => {
     void fetchConfigs();
@@ -159,32 +162,39 @@ export function AiConfigPage({
           </label>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          {[
-            { id: 'byok', label: '自有 API Key', hint: '输入后可立即获取模型' },
-            { id: 'platform', label: '平台密钥', hint: '使用服务端已配置密钥' },
-          ].map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              onClick={() => {
-                if (mode.id === 'byok' && !canUseByok) {
-                  openProGate();
-                  return;
-                }
-                setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id });
-              }}
-              className={`rounded-2xl border px-3 py-3 text-left transition-all ${
-                activeConfigForm.billing_mode === mode.id
-                  ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)] text-[var(--editorial-text)]'
-                  : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
-              }`}
-            >
-              <span className="block text-[11px] font-black">{mode.label}</span>
-              <span className="mt-1 block text-[9px] font-bold">{mode.hint}</span>
-            </button>
-          ))}
-        </div>
+        {canManagePlatformConfig ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {[
+              { id: 'byok', label: '自有 API Key', hint: '输入后可立即获取模型' },
+              { id: 'platform', label: '平台密钥', hint: '使用服务端已配置密钥' },
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => {
+                  if (mode.id === 'byok' && !canUseByok) {
+                    openProGate();
+                    return;
+                  }
+                  setActiveConfigForm({ ...activeConfigForm, billing_mode: mode.id as 'byok' | 'platform' });
+                }}
+                className={`rounded-2xl border px-3 py-3 text-left transition-all ${
+                  activeConfigForm.billing_mode === mode.id
+                    ? 'border-[var(--brand-accent-strong)] bg-[var(--brand-accent-soft)] text-[var(--editorial-text)]'
+                    : 'border-[var(--border-subtle)] bg-[var(--surface-elevated)] text-[var(--editorial-text-gray)] hover:text-[var(--editorial-text)]'
+                }`}
+              >
+                <span className="block text-[11px] font-black">{mode.label}</span>
+                <span className="mt-1 block text-[9px] font-bold">{mode.hint}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-3 text-[10px] leading-5 text-[var(--editorial-text-gray)]">
+            <span className="font-black text-[var(--editorial-text)]">自有 API Key（BYOK）</span>
+            <span className="mt-1 block">组织管理员在此保存本组织的密钥；平台级密钥仅运维人员可在后台配置。</span>
+          </div>
+        )}
 
         <div className="mt-5 space-y-4">
           <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--editorial-text-gray)]">

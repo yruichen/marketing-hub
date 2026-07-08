@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PanelLeft } from 'lucide-react';
-import { apiPost } from '../../hooks/useApi';
+import { apiPost, buildErrorToast } from '../../hooks/useApi';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type {
   OrganizationRecord,
   ProjectRecord,
@@ -20,7 +21,7 @@ interface BrainstormPageProps {
   project: Pick<ProjectRecord, 'id' | 'name' | 'slug'> | null;
   campaign: Pick<CampaignRecord, 'id' | 'name'> | null;
   username: string;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onComplete: (draftId: number) => void;
   onToggleSidebar: () => void;
 }
@@ -98,8 +99,8 @@ export function BrainstormPage({
       setPhase('handoff');
       await new Promise((resolve) => setTimeout(resolve, 1180));
       onComplete(response.draft.id);
-    } catch {
-      triggerToast('Brainstorm failed. Please try again.', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '创意脑暴失败', '请稍后重试'));
       setPhase('idle');
       apiDoneRef.current = false;
     }

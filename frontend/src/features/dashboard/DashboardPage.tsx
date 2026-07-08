@@ -14,6 +14,8 @@ import {
   Workflow,
 } from 'lucide-react';
 import type { AppSection } from '../../shared/stores/uiStore';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import { TaskCenter } from '../generation';
 import { taskTypeLabels } from '../generation/types';
 import type { DashboardSnapshot } from './types';
@@ -24,9 +26,10 @@ interface DashboardPageProps {
   snapshot: DashboardSnapshot | null;
   latestTask: GenerationTaskRecord | null;
   setActiveTab: (tab: AppSection) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onRefresh: () => void;
   onRetryTask: (task: GenerationTaskRecord) => void | Promise<void>;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   retryingTaskId?: number | null;
 }
 
@@ -158,6 +161,7 @@ export function DashboardPage({
   triggerToast,
   onRefresh,
   onRetryTask,
+  onErrorAction,
   retryingTaskId = null,
 }: DashboardPageProps) {
   const metrics = snapshot?.metrics;
@@ -419,6 +423,7 @@ export function DashboardPage({
               limit={6}
               retryingTaskId={retryingTaskId}
               onRetryTask={onRetryTask}
+              onErrorAction={onErrorAction}
               emptyAction={() => setActiveTab('brainstorm')}
             />
           </div>

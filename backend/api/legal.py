@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.audit import record_audit_log
+from api.errors import api_error_response
 from api.models import PolicyDocument, UserConsent
 
 REQUIRED_POLICY_TYPES = ('terms', 'privacy')
@@ -88,13 +89,15 @@ def record_user_consent(request, user, doc: PolicyDocument, source: str) -> User
 def require_current_policy_consent(user, policy_types: tuple[str, ...] | list[str] = REQUIRED_POLICY_TYPES):
     missing = missing_policy_consents(user, policy_types)
     if missing:
-        return Response(
-            {
-                'error': 'Current legal policies require consent before this action.',
+        return api_error_response(
+            code='POLICY_CONSENT_REQUIRED',
+            message='需要先同意最新服务条款和隐私政策，才能继续操作。',
+            action='点击页面顶部的「同意并继续」后重试。',
+            status_code=status.HTTP_403_FORBIDDEN,
+            extra={
                 'requires_consent': True,
                 'missing_policies': missing,
             },
-            status=status.HTTP_403_FORBIDDEN,
         )
     return None
 

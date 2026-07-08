@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkflowNode } from '../../types/workspace';
-import { classifyWorkflowFailure, downstreamNodeIds, formatNodeDiagnosticSnapshot } from './workflowRecovery';
+import { classifyWorkflowFailure, downstreamNodeIds, formatNodeDiagnosticSnapshot, workflowFailureAppActions } from './workflowRecovery';
 
 const nodes: WorkflowNode[] = [
   { id: 'context-1', type: 'context', label: '读取品牌记忆', x: 0, y: 0, status: 'succeeded', config: {}, output: { summary: 'brand' } },
@@ -16,7 +16,8 @@ describe('workflow recovery helpers', () => {
   it('classifies common failure messages', () => {
     expect(classifyWorkflowFailure('Missing required tone').kind).toBe('missing_input');
     expect(classifyWorkflowFailure('provider gateway timeout').kind).toBe('model_timeout');
-    expect(classifyWorkflowFailure('schema mismatch').kind).toBe('schema_mismatch');
+    expect(classifyWorkflowFailure('openai service unavailable').kind).toBe('provider');
+    expect(workflowFailureAppActions('quota')[0]?.id).toBe('open_billing');
   });
 
   it('walks downstream nodes for rerun impact', () => {

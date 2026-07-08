@@ -33,6 +33,7 @@ if ENV_FILE.exists():
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() == 'true'
+API_ERROR_DEBUG = os.getenv('API_ERROR_DEBUG', 'false').lower() == 'true'
 
 DEFAULT_DEV_SECRET_KEY = 'django-insecure-64c=ffjblcq2efnos%&#tzx)(+_i9(@e(oksx1%e0dd9vnl9g4'
 
@@ -76,6 +77,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'api.error_middleware.ErrorResponseNormalizationMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -269,4 +271,5 @@ REST_FRAMEWORK = {
         'login': os.getenv('DRF_THROTTLE_LOGIN', '10/min'),
     },
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'api.exception_handler.api_exception_handler',
 }

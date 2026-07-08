@@ -19,6 +19,14 @@ fi
 # shellcheck disable=SC1091
 set -a && . ./.env && set +a
 
+if [ ! -f backend/.env ]; then
+  echo "==> ERROR: missing backend/.env (copy backend/.env.example and set secrets)"
+  exit 1
+fi
+if ! grep -qE '^FIELD_ENCRYPTION_KEY=.+$' backend/.env; then
+  echo "==> WARNING: backend/.env has no FIELD_ENCRYPTION_KEY — BYOK key save will fail (HTTP 500/503)"
+fi
+
 echo "==> Building images"
 docker compose "${COMPOSE_FILES[@]}" build
 

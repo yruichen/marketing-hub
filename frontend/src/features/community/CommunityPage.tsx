@@ -2,12 +2,13 @@ import { useEffect } from 'react';
 import { ArrowRight, Heart, Mic, Search, Sparkles, Video, Wand2 } from 'lucide-react';
 import { useCommunity } from './useCommunity';
 import type { CommunityItem } from './types';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type { WorkspaceScope } from '../dashboard/types';
 
 interface CommunityPageProps {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   onLikeUpdate?: (id: number, likes: number) => void;
   onOpenProfile?: (username: string) => void;
 }

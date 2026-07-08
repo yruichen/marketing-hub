@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AssetRecord } from '../../types/workspace';
-import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
+import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, buildErrorToast } from '../../hooks/useApi';
 import type {
   BrandContext,
   CampaignRecord,
@@ -123,8 +123,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           setSelectedIds([]);
           setInspectorOpen(false);
         }
-      } catch {
-        triggerToast('项目列表加载失败', 'error');
+      } catch (err) {
+        triggerToast(buildErrorToast(err, '项目列表加载失败'));
       } finally {
         setLoading(false);
       }
@@ -157,8 +157,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         setSelectedIds([detail.id]);
         setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(detail.brand_context || {}) });
         setInspectorOpen(openInspector);
-      } catch {
-        triggerToast('项目详情加载失败', 'error');
+      } catch (err) {
+        triggerToast(buildErrorToast(err, '项目详情加载失败'));
       } finally {
         setLoading(false);
       }
@@ -192,8 +192,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       });
       setFolders((prev) => [...prev, folder]);
       triggerToast('文件夹已创建', 'success');
-    } catch {
-      triggerToast('文件夹创建失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '文件夹创建失败'));
     } finally {
       setLoading(false);
     }
@@ -205,8 +205,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       setFolders((prev) => prev.filter((f) => f.id !== folder.id));
       setDeletedFolders((prev) => [...prev, folder]);
       triggerToast('文件夹已移至回收站', 'info');
-    } catch {
-      triggerToast('文件夹删除失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '文件夹删除失败'));
     }
   };
 
@@ -216,8 +216,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       setTrashFolders((prev) => prev.filter((f) => f.id !== folder.id));
       setFolders((prev) => [...prev, folder]);
       triggerToast('文件夹已恢复', 'success');
-    } catch {
-      triggerToast('文件夹恢复失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '文件夹恢复失败'));
     }
   };
 
@@ -263,8 +263,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       });
       await fetchProjects(project.id);
       await loadProject(project.id, true);
-    } catch {
-      triggerToast('项目创建失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '项目创建失败'));
     } finally {
       setLoading(false);
     }
@@ -282,8 +282,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       setProjects((prev) => prev.map((item) => (item.id === project.id ? { ...item, ...project } : item)));
       setDraftContext({ ...EMPTY_BRAND_CONTEXT, ...(project.brand_context || {}) });
       triggerToast('品牌记忆已保存', 'success');
-    } catch {
-      triggerToast('品牌记忆保存失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '品牌记忆保存失败'));
     } finally {
       setBrandContextSaving(false);
     }
@@ -295,8 +295,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       const project = await apiPatch<ProjectRecord>(`/projects/${selectedProject.id}/`, patch);
       setSelectedProject({ ...selectedProject, ...project });
       await fetchProjects(selectedProject.id);
-    } catch {
-      triggerToast('项目元数据更新失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '项目元数据更新失败'));
     }
   };
 
@@ -313,8 +313,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         campaigns: [campaign, ...selectedProject.campaigns],
       });
       triggerToast('活动已创建', 'success');
-    } catch {
-      triggerToast('活动创建失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '活动创建失败'));
     }
   };
 
@@ -328,8 +328,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       }
       await fetchProjects();
       triggerToast('项目已移至回收站', 'info');
-    } catch {
-      triggerToast('项目删除失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '项目删除失败'));
     }
   };
 
@@ -338,8 +338,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       await apiPost(`/projects/${project.id}/restore/`, {});
       await fetchProjects(selectedProject?.id);
       triggerToast('项目已从回收站恢复', 'success');
-    } catch {
-      triggerToast('项目恢复失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '项目恢复失败'));
     }
   };
 
@@ -352,8 +352,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       });
       await fetchProjects(project.id);
       triggerToast('项目已移动到目标文件夹', 'success');
-    } catch {
-      triggerToast('项目移动失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '项目移动失败'));
     }
   };
 

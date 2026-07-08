@@ -1,4 +1,6 @@
+import type { ErrorActionId } from '../../shared/api/errorActions';
 import type { BrandContext, CampaignRecord, FeatureEntitlements, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
+import type { TriggerToastFn } from '../../shared/types/toast';
 import type { NodeType, LegacyNodeType } from './constants';
 import { ioSchema, defaultNodeConfig, nodeTypeLabels } from './constants';
 
@@ -8,14 +10,16 @@ export interface ProjectDetail extends ProjectRecord {
   assets: Array<{ id: number; asset_type: string; title: string; created_at: string }>;
 }
 
+
 export interface WorkflowBuilderProps {
   project: Pick<ProjectRecord, 'id' | 'name' | 'slug'> | null;
   campaign: Pick<CampaignRecord, 'id' | 'name'> | null;
   organizationSlug?: string;
   username: string;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   featureEntitlements?: Partial<FeatureEntitlements>;
   onOpenBilling?: () => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
 }
 
 export type WorkflowSnapshot = {

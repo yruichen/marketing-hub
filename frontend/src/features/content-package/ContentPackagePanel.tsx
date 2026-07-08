@@ -8,6 +8,7 @@ import { channelChoices, useCaseChoices, templateChoices } from '../onboarding/t
 import type { OnboardingState } from '../onboarding/types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { AppSection } from '../../shared/stores/uiStore';
+import type { TriggerToastFn } from '../../shared/types/toast';
 
 interface ContentPackagePanelProps {
   onboarding: OnboardingState;
@@ -19,7 +20,7 @@ interface ContentPackagePanelProps {
   loading: boolean;
   setLoading: (loading: boolean) => void;
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
   setActiveTab: (tab: AppSection) => void;
   onCopy: (text: string) => Promise<void>;
   onApplyContentPackage: (pkg: ContentPackage) => void;

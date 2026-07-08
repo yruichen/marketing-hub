@@ -1,15 +1,23 @@
 import { useState, useCallback } from 'react';
+import { parseApiErrorResponse } from '../shared/api/errors';
+import type { ToastMessage } from '../shared/types/toast';
+
+export {
+  ApiError,
+  formatErrorForToast,
+  formatContextualErrorForToast,
+  getUserFacingError,
+  logApiError,
+  parseApiErrorResponse,
+} from '../shared/api/errors';
+export { buildErrorToast, resolveErrorActions, type ErrorAction, type ErrorActionId } from '../shared/api/errorActions';
+export type { ToastMessage } from '../shared/types/toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 export { API_BASE_URL };
 
 export type Tab = 'dashboard' | 'projects' | 'builder' | 'copy' | 'image' | 'storyboard' | 'audio' | 'community' | 'config';
-
-export interface ToastMessage {
-  text: string;
-  type: 'success' | 'info' | 'error';
-}
 
 let cachedCsrfToken: string | null = null;
 
@@ -43,6 +51,9 @@ export function getCsrfToken(): string | null {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || 'GET').toUpperCase();
   const headers = new Headers(init.headers || {});
+  if (import.meta.env.DEV) {
+    headers.set('X-MH-Debug-Errors', '1');
+  }
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
@@ -81,12 +92,18 @@ export async function apiStream(path: string, init: RequestInit = {}): Promise<R
 export function useToast() {
   const [feedbackMsg, setFeedbackMsg] = useState<ToastMessage | null>(null);
 
-  const triggerToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
-    setFeedbackMsg({ text, type });
-    setTimeout(() => setFeedbackMsg(null), 3000);
+  const triggerToast = useCallback((input: string | ToastMessage, type: ToastMessage['type'] = 'success') => {
+    const message: ToastMessage = typeof input === 'string'
+      ? { text: input, type }
+      : { ...input, type: input.type || type };
+    setFeedbackMsg(message);
+    const duration = message.actions?.length ? 8000 : 3000;
+    setTimeout(() => setFeedbackMsg(null), duration);
   }, []);
 
-  return { feedbackMsg, triggerToast };
+  const dismissToast = useCallback(() => setFeedbackMsg(null), []);
+
+  return { feedbackMsg, triggerToast, dismissToast };
 }
 
 export function useCopyClipboard(triggerToast: (text: string, type: 'success' | 'info' | 'error') => void) {
@@ -125,8 +142,7 @@ async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await apiFetch(path);
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`GET ${path} failed (${response.status}): ${body.slice(0, 200) || 'no details'}`);
+    throw await parseApiErrorResponse(response, path);
   }
   return response.json() as Promise<T>;
 }
@@ -139,8 +155,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
       signal,
     });
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      throw new Error(`POST ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+      throw await parseApiErrorResponse(response, path);
     }
     return response.json() as Promise<T>;
   });
@@ -154,8 +169,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
       signal,
     });
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      throw new Error(`PATCH ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+      throw await parseApiErrorResponse(response, path);
     }
     return response.json() as Promise<T>;
   });
@@ -168,8 +182,7 @@ export async function apiDelete(path: string): Promise<void> {
       signal,
     });
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      throw new Error(`DELETE ${path} failed (${response.status}): ${errBody.slice(0, 200) || 'no details'}`);
+      throw await parseApiErrorResponse(response, path);
     }
   });
 }

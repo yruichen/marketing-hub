@@ -1,5 +1,7 @@
 import { AlertTriangle, CheckCircle2, Clock3, Loader2, RotateCcw } from 'lucide-react';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import { ErrorRecoveryActions } from '../../shared/ui/ErrorRecoveryActions';
 import { explainGenerationError, taskProgressMessage } from './taskStatus';
 import { taskTypeLabels } from './types';
 
@@ -10,6 +12,7 @@ interface TaskCenterProps {
   retryingTaskId?: number | null;
   onRetryTask?: (task: GenerationTaskRecord) => void | Promise<void>;
   onOpenTasks?: () => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   emptyAction?: () => void;
 }
 
@@ -63,6 +66,7 @@ export function TaskCenter({
   retryingTaskId = null,
   onRetryTask,
   onOpenTasks,
+  onErrorAction,
   emptyAction,
 }: TaskCenterProps) {
   const visibleTasks = uniqueTasks(tasks).slice(0, limit);
@@ -124,15 +128,24 @@ export function TaskCenter({
               ) : null}
             </div>
 
-            {!compact && errorInfo?.recoveryActions?.length ? (
-              <div className="mt-2 border-t border-current/15 pt-2">
-                <p className="text-[9px] font-black uppercase tracking-[0.14em]">建议处理</p>
-                <ul className="mt-1 space-y-1 text-[10px] leading-4 text-[var(--editorial-text-muted)]">
-                  {errorInfo.recoveryActions.map((action) => (
-                    <li key={action}>- {action}</li>
-                  ))}
-                </ul>
-              </div>
+            {!compact && errorInfo && (errorInfo.actions?.length || errorInfo.recoveryActions?.length) ? (
+              errorInfo.actions?.length ? (
+                <ErrorRecoveryActions
+                  actions={errorInfo.actions}
+                  onAction={onErrorAction}
+                  compact
+                  className="mt-2 border-t border-current/15 pt-2"
+                />
+              ) : (
+                <div className="mt-2 border-t border-current/15 pt-2">
+                  <p className="text-[9px] font-black uppercase tracking-[0.14em]">建议处理</p>
+                  <ul className="mt-1 space-y-1 text-[10px] leading-4 text-[var(--editorial-text-muted)]">
+                    {errorInfo.recoveryActions?.map((action) => (
+                      <li key={action}>- {action}</li>
+                    ))}
+                  </ul>
+                </div>
+              )
             ) : null}
 
             {!compact ? (

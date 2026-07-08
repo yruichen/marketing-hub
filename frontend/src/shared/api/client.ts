@@ -1,13 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../hooks/useApi';
 
-export class ApiError extends Error {
-  status: number;
-
-  constructor(path: string, status: number) {
-    super(`${path} failed with ${status}`);
-    this.status = status;
-  }
-}
+export { ApiError, formatErrorForToast, formatContextualErrorForToast, getUserFacingError, logApiError } from './errors';
 
 export const apiClient = {
   get: <T>(path: string) => apiGet<T>(path),

@@ -17,7 +17,7 @@ from api.access import (
     get_project_for_member,
     require_role,
 )
-from api.audit import record_audit_log
+from api.errors import api_error_response
 from api.entitlements import effective_limits_for_scope
 from api.models import (
     Asset,
@@ -185,9 +185,12 @@ class ProjectCollectionView(APIView):
         plan = effective_limits_for_scope(request.user, org)
         active_project_count = Project.objects.filter(organization=org, is_archived=False).count()
         if active_project_count >= plan['project_limit']:
-            return Response(
-                {'error': f'当前方案最多可创建 {plan["project_limit"]} 个项目，请升级订阅或归档旧项目。'},
-                status=status.HTTP_402_PAYMENT_REQUIRED,
+            return api_error_response(
+                code='PROJECT_LIMIT_REACHED',
+                message=f'当前方案最多可创建 {plan["project_limit"]} 个项目。',
+                action='请升级订阅，或归档不再使用的项目。',
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                request=request,
             )
 
         name = request.data.get('name', 'Untitled Project').strip()

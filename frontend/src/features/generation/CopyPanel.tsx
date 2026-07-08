@@ -7,6 +7,8 @@ import { SaveControlBar } from './SaveControlBar';
 import type { CopyOutput, CreationContent } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 
 interface CopyPanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -16,7 +18,8 @@ interface CopyPanelProps {
   agentLogs: string[];
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   fetchDashboard: () => Promise<void>;
   onShare: (type: 'copy', title: string, content: CreationContent) => Promise<void>;
   onCopy: (text: string) => Promise<void>;
@@ -31,6 +34,7 @@ export function CopyPanel({
   setAgentLogs,
   setLatestTask,
   triggerToast,
+  onErrorAction,
   fetchDashboard,
   onShare,
   onCopy,
@@ -159,7 +163,7 @@ export function CopyPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
-        <TaskStatusCard state={taskUiState} onRetry={handleGenerateCopy} retryDisabled={isRunning} />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateCopy} retryDisabled={isRunning} onErrorAction={onErrorAction} />
       </div>
 
       {/* Right Output Sheet */}

@@ -15,7 +15,8 @@ import {
   Users,
   Workflow,
 } from 'lucide-react';
-import { apiFetch } from '../../hooks/useApi';
+import { apiFetch, buildErrorToast, parseApiErrorResponse } from '../../hooks/useApi';
+import type { TriggerToastFn } from '../../shared/types/toast';
 
 type AdminSummary = {
   users: { total: number; today: number; pending: number; suspended: number };
@@ -117,7 +118,7 @@ type AdminConsolePageProps = {
   isStaff: boolean;
   username?: string;
   onLogout?: () => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: TriggerToastFn;
 };
 
 const tabs = [
@@ -212,7 +213,9 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         apiFetch('/admin-console/pro-invites/'),
         apiFetch('/admin-console/enterprise-requests/'),
       ]);
-      if (![summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes, proInviteRes, enterpriseRes].every((res) => res.ok)) throw new Error('admin api failed');
+      const responses = [summaryRes, usersRes, orgsRes, auditRes, securityRes, inviteRes, proInviteRes, enterpriseRes];
+      const failed = responses.find((res) => !res.ok);
+      if (failed) throw await parseApiErrorResponse(failed, '/admin-console/');
       setSummary(await summaryRes.json());
       setUsers((await usersRes.json()).results || []);
       setOrgs((await orgsRes.json()).results || []);
@@ -221,8 +224,8 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
       setInvites((await inviteRes.json()).results || []);
       setProInvites((await proInviteRes.json()).results || []);
       setEnterpriseRequests((await enterpriseRes.json()).results || []);
-    } catch {
-      triggerToast('运营后台数据加载失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '运营后台数据加载失败'));
     } finally {
       setLoading(false);
     }
@@ -259,12 +262,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     try {
       const response = await apiFetch(`/admin-console/users/${userId}/`);
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/users/${userId}/`);
       setSelectedUser(data);
       setUsers((items) => items.map((item) => (item.id === userId ? data : item)));
       if (!userGrantOrgId && data.organizations?.[0]) setUserGrantOrgId(String(data.organizations[0].id));
-    } catch {
-      triggerToast('用户详情加载失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '用户详情加载失败'));
     }
   };
 
@@ -281,13 +284,13 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     try {
       const response = await apiFetch(`/admin-console/users/${user.id}/actions/${action}/`, { method: 'POST', body: JSON.stringify({}) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/users/${user.id}/actions/${action}/`);
       setUsers((items) => items.map((item) => (item.id === user.id ? data : item)));
       setSelectedUser(data);
       triggerToast('账号操作已记录', 'success');
       void loadData();
-    } catch {
-      triggerToast('账号操作失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '账号操作失败'));
     }
   };
 
@@ -298,13 +301,13 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         body: JSON.stringify({ subscription_plan: subscriptionPlan }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/users/${user.id}/`);
       setUsers((items) => items.map((item) => (item.id === user.id ? data : item)));
       if (selectedUser?.id === user.id) setSelectedUser(data);
       triggerToast(`用户订阅已切换为 ${subscriptionPlan.toUpperCase()}`, 'success');
       void loadData();
-    } catch {
-      triggerToast('用户订阅更新失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '用户订阅更新失败'));
     }
   };
 
@@ -316,12 +319,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         body: JSON.stringify({ organization_id: Number(userGrantOrgId), amount_cents: amount, reason: userGrantReason }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/users/${user.id}/credit-grants/`);
       setSelectedUser(data);
       triggerToast('已按用户所属组织发放额度', 'success');
       void loadData();
-    } catch {
-      triggerToast('用户资源发放失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '用户资源发放失败'));
     }
   };
 
@@ -330,12 +333,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     try {
       const response = await apiFetch(`/admin-console/organizations/${org.id}/credits/`, { method: 'POST', body: JSON.stringify({ amount_cents: amount, reason: creditReason }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/organizations/${org.id}/credits/`);
       setOrgs((items) => items.map((item) => (item.id === org.id ? data : item)));
       triggerToast(`已给 ${org.name} 发放 $${creditAmount}`, 'success');
       void loadData();
-    } catch {
-      triggerToast('额度发放失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '额度发放失败'));
     }
   };
 
@@ -343,12 +346,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     try {
       const response = await apiFetch(`/admin-console/organizations/${org.id}/`, { method: 'PATCH', body: JSON.stringify({ subscription_plan }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/organizations/${org.id}/`);
       setOrgs((items) => items.map((item) => (item.id === org.id ? data : item)));
       triggerToast('组织套餐已更新', 'success');
       void loadData();
-    } catch {
-      triggerToast('组织套餐更新失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '组织套餐更新失败'));
     }
   };
 
@@ -356,13 +359,13 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
     try {
       const response = await apiFetch('/admin-console/invites/', { method: 'POST', body: JSON.stringify({ code: inviteCode, label: inviteLabel, max_uses: Number(inviteMaxUses || 1) }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, '/admin-console/invites/');
       setInvites((items) => [data, ...items]);
       setInviteCode('');
       triggerToast('邀请码已创建，明文不会被保存，请记录刚才输入的 code', 'success');
       void loadData();
-    } catch {
-      triggerToast('邀请码创建失败', 'error');
+    } catch (err) {
+      triggerToast(buildErrorToast(err, '邀请码创建失败'));
     }
   };
 
@@ -373,13 +376,13 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         body: JSON.stringify({ label: proInviteLabel, max_uses: Number(proInviteMaxUses || 1) }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, '/admin-console/pro-invites/');
       setProInvites((items) => [data, ...items]);
       setGeneratedProInviteCode(data.plain_code || '');
       triggerToast('Pro 邀请码已生成，请记录明文 code', 'success');
       void loadData();
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码创建失败', 'error');
+      triggerToast(buildErrorToast(err, 'Pro 邀请码创建失败'));
     }
   };
 
@@ -400,12 +403,12 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/pro-invites/${invite.id}/`);
       setProInvites((items) => items.map((item) => (item.id === invite.id ? data : item)));
       setEditingProInviteId(null);
       triggerToast('Pro 邀请码已更新', 'success');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码更新失败', 'error');
+      triggerToast(buildErrorToast(err, 'Pro 邀请码更新失败'));
     }
   };
 
@@ -418,11 +421,11 @@ export function AdminConsolePage({ isStaff, username, onLogout, triggerToast }: 
         return;
       }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'failed');
+      if (!response.ok) throw await parseApiErrorResponse(response, `/admin-console/pro-invites/${invite.id}/`);
       setProInvites((items) => items.map((item) => (item.id === invite.id ? data : item)));
       triggerToast('邀请码已有兑换记录，已改为停用', 'info');
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Pro 邀请码删除失败', 'error');
+      triggerToast(buildErrorToast(err, 'Pro 邀请码删除失败'));
     }
   };
 

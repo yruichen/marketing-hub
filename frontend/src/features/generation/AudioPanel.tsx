@@ -7,6 +7,8 @@ import { SaveControlBar } from './SaveControlBar';
 import type { AudioOutput, CreationContent } from './types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { GenerationTaskRecord } from '../../types/workspace';
+import type { ErrorActionId } from '../../shared/api/errorActions';
+import type { ToastMessage } from '../../shared/types/toast';
 
 interface AudioPanelProps {
   workspaceScope: WorkspaceScope | null;
@@ -16,7 +18,8 @@ interface AudioPanelProps {
   agentLogs: string[];
   setAgentLogs: React.Dispatch<React.SetStateAction<string[]>>;
   setLatestTask: (task: GenerationTaskRecord) => void;
-  triggerToast: (text: string, type?: 'success' | 'info' | 'error') => void;
+  triggerToast: (input: string | ToastMessage, type?: 'success' | 'info' | 'error') => void;
+  onErrorAction?: (actionId: ErrorActionId) => void;
   fetchDashboard: () => Promise<void>;
   onShare: (type: 'audio', title: string, content: CreationContent, imageUrl?: string, audioUrl?: string) => Promise<void>;
 }
@@ -30,6 +33,7 @@ export function AudioPanel({
   setAgentLogs,
   setLatestTask,
   triggerToast,
+  onErrorAction,
   fetchDashboard,
   onShare,
 }: AudioPanelProps) {
@@ -153,7 +157,7 @@ export function AudioPanel({
         </div>
 
         <AgentTerminal logs={agentLogs} className="shrink-0" />
-        <TaskStatusCard state={taskUiState} onRetry={handleGenerateAudio} retryDisabled={isRunning} />
+        <TaskStatusCard state={taskUiState} onRetry={handleGenerateAudio} retryDisabled={isRunning} onErrorAction={onErrorAction} />
       </div>
 
       <div className="generation-workspace__results">

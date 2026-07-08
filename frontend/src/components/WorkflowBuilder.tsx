@@ -5,7 +5,7 @@ import {
   type Connection, type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { apiFetch, apiGet, apiPatch, apiPost, useCopyClipboard } from '../hooks/useApi';
+import { apiFetch, apiGet, apiPatch, apiPost, buildErrorToast, parseApiErrorResponse, useCopyClipboard } from '../hooks/useApi';
 import type {
   BrandContext, GenerationTaskRecord,
   WorkflowEdge, WorkflowNode, WorkflowRunRecord, WorkspaceDraftRecord,
@@ -55,6 +55,7 @@ export function WorkflowBuilder({
   triggerToast,
   featureEntitlements,
   onOpenBilling,
+  onErrorAction,
 }: WorkflowBuilderProps) {
   const { fitView, getViewport, screenToFlowPosition } = useReactFlow();
 
@@ -269,7 +270,7 @@ export function WorkflowBuilder({
         const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
         setLastTasks(restored.filter(Boolean) as GenerationTaskRecord[]);
       }
-    } catch (err) { triggerToast(`工作流草稿加载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
+    } catch (err) { triggerToast(buildErrorToast(err, '工作流草稿加载失败')); }
     finally { setLoadingState('idle'); }
   }, [campaign?.id, fitView, project, triggerToast, setRfNodes, setRfEdges]);
 
@@ -421,7 +422,7 @@ export function WorkflowBuilder({
           setRfEdges(liveDraft.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
         }).catch(() => undefined);
       }
-      triggerToast(`工作流执行失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error');
+      triggerToast(buildErrorToast(err, '工作流执行失败'));
     }
     finally {
       if (pollTimer) clearInterval(pollTimer);
@@ -471,8 +472,7 @@ export function WorkflowBuilder({
         body: JSON.stringify({ username, feedback: feedbackText }),
       });
       if (!response.ok) {
-        const errBody = await response.text().catch(() => '');
-        throw new Error(errBody.slice(0, 200) || `HTTP ${response.status}`);
+        throw await parseApiErrorResponse(response, `/drafts/${saved.id}/nodes/${node.id}/retry/`);
       }
       const data = await response.json() as {
         draft: WorkspaceDraftRecord;
@@ -493,7 +493,7 @@ export function WorkflowBuilder({
         },
       }));
       triggerToast(node.status === 'failed' ? '失败节点已恢复并向后重跑' : '已从该节点向后重跑', 'success');
-    } catch (err) { triggerToast(`节点恢复失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'); }
+    } catch (err) { triggerToast(buildErrorToast(err, '节点恢复失败')); }
     finally { setLoadingState('idle'); }
   };
 
@@ -532,8 +532,7 @@ export function WorkflowBuilder({
         body: JSON.stringify({ username, feedback: trimmed }),
       });
       if (!retryResponse.ok) {
-        const errBody = await retryResponse.text().catch(() => '');
-        throw new Error(errBody.slice(0, 200) || `HTTP ${retryResponse.status}`);
+        throw await parseApiErrorResponse(retryResponse, `/drafts/${saved.id}/nodes/${nodeId}/retry/`);
       }
       const data = await retryResponse.json() as {
         draft: WorkspaceDraftRecord;
@@ -555,7 +554,7 @@ export function WorkflowBuilder({
       }));
       triggerToast('AI 修改已应用，并已从该节点向后重跑', 'success');
     } catch (err) {
-      triggerToast(`AI 修改失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error');
+      triggerToast(buildErrorToast(err, 'AI 修改失败'));
     } finally {
       setAiEditLoading(false);
       if (runAfter) setLoadingState('idle');
@@ -965,7 +964,7 @@ export function WorkflowBuilder({
           onCopySelection={copySelection}
           onPasteSelection={pasteSelection}
           onFitView={() => fitView({ padding: 0.18, duration: 180 })}
-          onSave={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error'))}
+          onSave={() => persistDraft(nodes, edges, false).catch((err) => triggerToast(buildErrorToast(err, '保存失败')))}
           onTidyLayout={tidyLayout}
           onRunWorkflow={runWorkflow}
           onCreateReadOnlyShare={createReadOnlyShare}
@@ -1028,6 +1027,7 @@ export function WorkflowBuilder({
               onSelectNode={selectNode}
               onCopyNodeDiagnostics={copyNodeDiagnostics}
               onRecoverFromNode={(id) => { void recoverFromNode(id); }}
+              onErrorAction={onErrorAction}
             />
           )}
         </div>

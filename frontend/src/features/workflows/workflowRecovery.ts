@@ -1,3 +1,4 @@
+import type { ErrorAction } from '../../shared/api/errorActions';
 import type { WorkflowEdge, WorkflowNode } from '../../types/workspace';
 import { schemaText } from './utils';
 
@@ -12,7 +13,7 @@ export interface FailureRecovery {
 }
 
 const FAILURE_PATTERNS: Array<{ kind: FailureKind; patterns: RegExp[] }> = [
-  { kind: 'missing_input', patterns: [/missing|required|blank|empty|缺少|必填|为空/i] },
+  { kind: 'missing_input', patterns: [/\bmissing\b|\brequired\s+(field|input|tone|param)|\bblank\b|\bempty\b|缺少|必填|为空/i] },
   { kind: 'schema_mismatch', patterns: [/schema|contract|compatible|mismatch|不能被当前步骤使用|输出不匹配|类型/i] },
   { kind: 'model_timeout', patterns: [/timeout|timed out|超时|deadline/i] },
   { kind: 'quota', patterns: [/quota|credit|billing|limit|余额|额度|扣费/i] },
@@ -46,21 +47,21 @@ const RECOVERY_COPY: Record<FailureKind, FailureRecovery> = {
     kind: 'quota',
     title: '额度或限制不足',
     explanation: '本次生成可能触发额度、频率或计费限制。',
-    primaryAction: '联系管理员检查额度',
+    primaryAction: '查看订阅与额度',
     secondaryAction: '降低高成本节点后重试',
   },
   provider: {
     kind: 'provider',
     title: '模型服务异常',
     explanation: '外部模型或网关返回异常，通常可以稍后重试或切换模型配置。',
-    primaryAction: '稍后重试节点',
+    primaryAction: '打开 AI 设置',
     secondaryAction: '切换模型后向后重跑',
   },
   permission: {
     kind: 'permission',
     title: '权限不足',
     explanation: '当前账号没有执行这个恢复操作或访问相关资源的权限。',
-    primaryAction: '联系管理员调整权限',
+    primaryAction: '返回首页',
     secondaryAction: '复制错误信息给管理员',
   },
   unknown: {
@@ -75,6 +76,16 @@ const RECOVERY_COPY: Record<FailureKind, FailureRecovery> = {
 export function classifyWorkflowFailure(message = ''): FailureRecovery {
   const match = FAILURE_PATTERNS.find((item) => item.patterns.some((pattern) => pattern.test(message)));
   return RECOVERY_COPY[match?.kind || 'unknown'];
+}
+
+const KIND_APP_ACTIONS: Partial<Record<FailureKind, ErrorAction[]>> = {
+  quota: [{ id: 'open_billing', label: '查看订阅方案', primary: true, section: 'billing' }],
+  provider: [{ id: 'open_ai_config', label: '打开 AI 设置', primary: true, section: 'config' }],
+  permission: [{ id: 'open_dashboard', label: '返回首页', primary: true, section: 'dashboard' }],
+};
+
+export function workflowFailureAppActions(kind: FailureKind): ErrorAction[] {
+  return KIND_APP_ACTIONS[kind] || [];
 }
 
 export function upstreamNodeIds(nodeId: string, edges: WorkflowEdge[]) {

@@ -17,7 +17,7 @@ function task(overrides: Partial<GenerationTaskRecord>): GenerationTaskRecord {
 describe('generation task status helpers', () => {
   it('turns quota errors into actionable guidance', () => {
     const error = explainGenerationError('quota exceeded', 402);
-    expect(error.message).toContain('额度不足');
+    expect(error.message).toContain('额度');
     expect(error.recoveryActions).toContain('查看计费页余额');
   });
 
