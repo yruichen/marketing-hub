@@ -1,5 +1,8 @@
+import { useCallback, useState } from 'react';
 import { X } from 'lucide-react';
-import type { BrandContext, CampaignRecord, FolderRecord, ProjectRecord } from '../../types/workspace';
+import type { AssetRecord, BrandContext, CampaignRecord, FolderRecord, ProjectRecord } from '../../types/workspace';
+import { apiGet } from '../../hooks/useApi';
+import { PublishTemplateDialog } from '../assets/PublishTemplateDialog';
 import {
   InspectorProjectMeta,
   InspectorCampaigns,
@@ -29,6 +32,9 @@ interface InspectorProps {
   onDelete: () => void;
   onClose: () => void;
   onOpenAssetsLibrary: () => void;
+  onPublishAsset?: (asset: AssetRecord, creatorNote?: string, projectSlug?: string) => Promise<boolean>;
+  projectSlug?: string;
+  onAssetsChanged?: () => void;
 }
 
 /**
@@ -53,7 +59,34 @@ export function Inspector({
   onDelete,
   onClose,
   onOpenAssetsLibrary,
+  onPublishAsset,
+  projectSlug,
+  onAssetsChanged,
 }: InspectorProps) {
+  const [publishTarget, setPublishTarget] = useState<{ id: number; title: string } | null>(null);
+  const [publishingAssetId, setPublishingAssetId] = useState<number | null>(null);
+
+  const handlePublishClick = useCallback((assetId: number) => {
+    const asset = selectedProject?.assets.find((item) => item.id === assetId);
+    if (!asset) return;
+    setPublishTarget({ id: asset.id, title: asset.title });
+  }, [selectedProject?.assets]);
+
+  const confirmPublish = useCallback(async (creatorNote: string) => {
+    if (!onPublishAsset || !publishTarget) return;
+    setPublishingAssetId(publishTarget.id);
+    try {
+      const fullAsset = await apiGet<AssetRecord>(`/workspace/assets/${publishTarget.id}/`);
+      const ok = await onPublishAsset(fullAsset, creatorNote, projectSlug);
+      if (ok) {
+        setPublishTarget(null);
+        onAssetsChanged?.();
+      }
+    } finally {
+      setPublishingAssetId(null);
+    }
+  }, [onPublishAsset, publishTarget, projectSlug, onAssetsChanged]);
+
   return (
     <aside className={`desktop-inspector ${open ? 'desktop-inspector--open' : ''}`}>
       <div className="desktop-inspector__header">
@@ -125,8 +158,13 @@ export function Inspector({
               title="资产"
               badge={selectedProject.assets.length}
             >
-              <div className="max-h-[240px] overflow-y-auto">
-                <InspectorAssets assets={selectedProject.assets} onOpenLibrary={onOpenAssetsLibrary} />
+              <div className="max-h-[320px] overflow-y-auto">
+                <InspectorAssets
+                  assets={selectedProject.assets}
+                  onOpenLibrary={onOpenAssetsLibrary}
+                  onPublishAsset={onPublishAsset ? handlePublishClick : undefined}
+                  publishingAssetId={publishingAssetId}
+                />
               </div>
             </CollapsibleSection>
           </>
@@ -137,6 +175,16 @@ export function Inspector({
           </div>
         )}
       </div>
+
+      {publishTarget ? (
+        <PublishTemplateDialog
+          open
+          assetTitle={publishTarget.title}
+          loading={publishingAssetId === publishTarget.id}
+          onClose={() => setPublishTarget(null)}
+          onConfirm={(note) => void confirmPublish(note)}
+        />
+      ) : null}
     </aside>
   );
 }

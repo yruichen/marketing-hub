@@ -1,3 +1,4 @@
+import { Share2 } from 'lucide-react';
 import type { BrandContext, CampaignRecord, ProjectRecord } from '../../types/workspace';
 import { BrandMemoryEditor } from '../brand-memory';
 import { PLATFORM_CHOICES, STATUS_CHOICES, STATUS_LABELS } from './types';
@@ -139,35 +140,51 @@ export function InspectorCampaigns({ campaigns, onSelectCampaign }: InspectorCam
 interface InspectorAssetsProps {
   assets: Array<{ id: number; asset_type: string; title: string; created_at: string }>;
   onOpenLibrary: () => void;
+  onPublishAsset?: (assetId: number) => void;
+  publishingAssetId?: number | null;
 }
 
-export function InspectorAssets({ assets, onOpenLibrary }: InspectorAssetsProps) {
+export function InspectorAssets({ assets, onOpenLibrary, onPublishAsset, publishingAssetId }: InspectorAssetsProps) {
   if (assets.length === 0) {
     return (
       <div className="flex flex-col gap-2">
-        <p className="text-[10px] text-[var(--editorial-text-gray)]">项目暂无资产记录</p>
+        <p className="text-[10px] text-[var(--editorial-text-gray)]">
+          还没有归入本项目的资产。请先在资产库多选产出，再点「加入项目」。
+        </p>
         <button type="button" onClick={onOpenLibrary} className="text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline self-start">
-          → 打开资产库查看
+          → 打开资产库选择
         </button>
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1">
-      {assets.slice(0, 5).map((asset) => (
-        <div key={asset.id} className="border-b border-dashed border-[var(--editorial-stroke)]/30 pb-1.5 text-[10px]">
-          <span className="font-black uppercase">{asset.asset_type}</span>
-          <span className="mx-1.5 text-[var(--editorial-text-gray)]">/</span>
-          <span>{asset.title}</span>
+    <div className="flex flex-col gap-2">
+      <p className="text-[9px] text-[var(--editorial-text-gray)]">
+        整理完成后，可将项目内资产发布到模板库供团队复用。
+      </p>
+      {assets.map((asset) => (
+        <div key={asset.id} className="flex items-start gap-2 border-b border-dashed border-[var(--editorial-stroke)]/30 pb-2 text-[10px]">
+          <div className="min-w-0 flex-1">
+            <span className="font-black uppercase">{asset.asset_type}</span>
+            <span className="mx-1.5 text-[var(--editorial-text-gray)]">/</span>
+            <span>{asset.title}</span>
+          </div>
+          {onPublishAsset ? (
+            <button
+              type="button"
+              onClick={() => onPublishAsset(asset.id)}
+              disabled={publishingAssetId === asset.id}
+              className="shrink-0 inline-flex items-center gap-1 border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-[9px] font-black text-black disabled:opacity-50"
+              title="发布到模板库"
+            >
+              <Share2 className="h-3 w-3" />
+              {publishingAssetId === asset.id ? '发布中' : '发布'}
+            </button>
+          ) : null}
         </div>
       ))}
-      {assets.length > 5 ? (
-        <p className="text-[9px] text-[var(--editorial-text-gray)] mt-1">
-          还有 {assets.length - 5} 个资产…
-        </p>
-      ) : null}
       <button type="button" onClick={onOpenLibrary} className="text-[10px] text-[var(--editorial-accent-blue)] font-bold hover:underline self-start mt-1">
-        → 打开资产库（{assets.length}）
+        → 从资产库继续添加
       </button>
     </div>
   );

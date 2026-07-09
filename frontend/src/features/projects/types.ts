@@ -1,4 +1,4 @@
-import type { BrandContext, CampaignRecord, FolderRecord, OrganizationRecord, ProjectRecord, WorkspaceDraftRecord } from '../../types/workspace';
+import type { AssetRecord, BrandContext, CampaignRecord, FolderRecord, OrganizationRecord, ProjectRecord, WorkspaceDraftRecord } from '../../types/workspace';
 import type { TriggerToastFn } from '../../shared/types/toast';
 
 export type ViewMode = 'icon' | 'list' | 'board';
@@ -26,6 +26,8 @@ export interface ProjectManagerProps {
   onSelectScope: (project: ProjectRecord, campaign?: CampaignRecord) => void;
   triggerToast: TriggerToastFn;
   onOpenAssetsLibrary?: () => void;
+  onOpenTemplateLibrary?: () => void;
+  onPublishAsset?: (asset: AssetRecord, creatorNote?: string, projectSlug?: string) => Promise<boolean>;
 }
 
 export const PLATFORM_CHOICES = ['小红书', '抖音', '微信公众号', '视频号', 'B站'];

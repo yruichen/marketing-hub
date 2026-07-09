@@ -218,6 +218,14 @@ class WorkspaceAssetDetailView(APIView):
     def _get(self, pk, org):
         return Asset.objects.filter(pk=pk, organization=org).first()
 
+    def get(self, request, pk):
+        user, org, _, _ = get_scope(request)
+        require_role(user, org, 'viewer')
+        asset = self._get(pk, org)
+        if not asset:
+            return Response({'detail': 'Asset not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(serialize_asset(asset))
+
     def patch(self, request, pk):
         user, org, _, _ = get_scope(request)
         require_role(user, org, 'creator')

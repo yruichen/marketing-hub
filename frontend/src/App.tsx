@@ -916,13 +916,14 @@ export default function App() {
     setActiveTab(result.tab);
   }, [selectProjectScope, setActiveTab, setRightPanelOpen, triggerToast, username]);
 
-  const handlePublishAsset = useCallback(async (asset: AssetRecord, creatorNote?: string) => {
+  const handlePublishAsset = useCallback(async (asset: AssetRecord, creatorNote?: string, projectSlug?: string) => {
     const ok = await publishAssetToCommunity({
       asset,
       workspaceScope,
       username,
       triggerToast,
       creatorNote,
+      projectSlug,
     });
     return ok;
   }, [workspaceScope, username, triggerToast]);
@@ -934,6 +935,12 @@ export default function App() {
   const handleOpenAssetsLibrary = useCallback(() => {
     navigate('/assets');
   }, [navigate]);
+
+  const handleOpenProjectFromAssets = useCallback((projectId: number) => {
+    setActiveTab('projects');
+    window.dispatchEvent(new CustomEvent('mh:open-project', { detail: { projectId, openInspector: true } }));
+    triggerToast('资产已加入项目，可在右侧检查器中查看并发布到模板库', 'success');
+  }, [setActiveTab, triggerToast]);
 
   const handleShareToCommunity = useCallback(async (
     type: 'copy' | 'image' | 'storyboard' | 'audio' | 'video',
@@ -1437,13 +1444,16 @@ export default function App() {
                 onSelectScope={handleSelectProjectScope}
                 triggerToast={triggerToast}
                 onOpenAssetsLibrary={handleOpenAssetsLibrary}
+                onOpenTemplateLibrary={handleOpenTemplateLibrary}
+                onPublishAsset={handlePublishAsset}
               />
             )}
 
             {activeTab === 'assets' && workspaceScope?.organization && (
               <AssetsLibrary
                 organizationSlug={workspaceScope.organization.slug}
-                onPublishAsset={handlePublishAsset}
+                onOpenProject={handleOpenProjectFromAssets}
+                onOpenTemplateLibrary={handleOpenTemplateLibrary}
               />
             )}
 
