@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AssetRecord } from '../../types/workspace';
+import { ArrowRight, Library } from 'lucide-react';
 import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, buildErrorToast } from '../../hooks/useApi';
 import type {
   BrandContext,
@@ -10,12 +10,6 @@ import type {
 } from '../../types/workspace';
 import { DesktopSidebar } from './DesktopSidebar';
 import { DesktopCanvas } from './DesktopCanvas';
-import { AssetFilter } from '../assets/AssetFilter';
-import { AssetGroup } from '../assets/AssetGroup';
-import { AssetFormDialog } from '../assets/AssetFormDialog';
-import { AssetPreviewModal } from '../assets/AssetPreviewModal';
-import { useAssetGroups } from '../assets/useAssetGroups';
-import type { AssetFilterState } from '../assets/types';
 import { Inspector } from './Inspector';
 import { ContextMenu } from './ContextMenu';
 import { buildProjectContextItems } from './contextMenuItems';
@@ -43,7 +37,7 @@ interface ContextMenuState {
 
 const ALL_FILTER = '全部';
 
-export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast, onOpenAssetsLibrary }: ProjectManagerProps) {
+export function ProjectManager({ organization, activeProjectId, onSelectScope, triggerToast, onOpenAssetsLibrary, onOpenTemplateLibrary, onPublishAsset }: ProjectManagerProps) {
   const queryClient = useQueryClient();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [folders, setFolders] = useState<FolderRecord[]>([]);
@@ -72,7 +66,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [brandContextSaving, setBrandContextSaving] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
-  const [selectedFolderInfo, setSelectedFolderInfo] = useState<null | {id: number; name: string; path: string}>(null);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [trashProjects, setTrashProjects] = useState<ProjectRecord[]>([]);
   const [trashFolders, setTrashFolders] = useState<FolderRecord[]>([]);
@@ -178,6 +171,16 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
     window.addEventListener('mh:assets-updated', onAssetsUpdated);
     return () => window.removeEventListener('mh:assets-updated', onAssetsUpdated);
   }, [selectedProject?.id, inspectorOpen, loadProject]);
+
+  useEffect(() => {
+    const onOpenProject = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId: number; openInspector?: boolean }>).detail;
+      if (!detail?.projectId) return;
+      void loadProject(detail.projectId, detail.openInspector ?? true);
+    };
+    window.addEventListener('mh:open-project', onOpenProject);
+    return () => window.removeEventListener('mh:open-project', onOpenProject);
+  }, [loadProject]);
 
   // ===== actions =====
   const createFolder = async (name: string) => {
@@ -406,11 +409,10 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       .sort((a, b) => (a.sort_order - b.sort_order) || a.path.localeCompare(b.path, 'zh-CN'));
   }, [folders, projects]);
 
-  // When sidebar folder changes, look up folder info and load assets
+  // When sidebar folder changes, load trash if needed
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (sidebarFolderPath === '__trash__') {
-      setSelectedFolderInfo(null);
       try {
         const params = new URLSearchParams({ organization: organizationSlug, trash: 'true' });
         apiFetch(`/projects/?${params.toString()}`)
@@ -422,17 +424,8 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           .then((data) => setTrashFolders(Array.isArray(data) ? data : []))
           .catch(() => setTrashFolders([]));
       } catch { setTrashProjects([]); }
-    } else if (sidebarFolderPath && sidebarFolderPath !== ALL_FILTER) {
-      const folder = displayFolders.find((f) => f.path === sidebarFolderPath);
-      if (folder) {
-        setSelectedFolderInfo({ id: folder.id, name: folder.name, path: folder.path });
-      } else {
-        setSelectedFolderInfo(null);
-      }
-    } else {
-      setSelectedFolderInfo(null);
     }
-  }, [sidebarFolderPath, displayFolders, organizationSlug]);
+  }, [sidebarFolderPath, organizationSlug]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const sidebarScopedProjects = useMemo(() => {
@@ -516,8 +509,23 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       />
 
       <div className="desktop-canvas">
-
-
+        <div className="desktop-canvas__intro">
+          <p>
+            项目用于归类收纳资产库中选中的产出。在资产库多选后「加入项目」，再在此查看、整理并发布到模板库。
+          </p>
+          <div className="desktop-canvas__flow">
+            <button type="button" onClick={onOpenAssetsLibrary} className="desktop-canvas__flow-link">
+              资产库
+            </button>
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            <span>我的项目</span>
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            <button type="button" onClick={onOpenTemplateLibrary} className="desktop-canvas__flow-link" disabled={!onOpenTemplateLibrary}>
+              <Library className="h-3 w-3 inline mr-1" />
+              模板库
+            </button>
+          </div>
+        </div>
         {showCreateProject ? (
           <div className="desktop-create-panel">
             <CreateProjectForm
@@ -546,13 +554,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           </div>
         ) : null}
 
-        {selectedFolderInfo ? (
-          <FolderAssetsPanel
-            organizationSlug={organizationSlug}
-            folderId={selectedFolderInfo.id}
-            key={selectedFolderInfo.id}
-          />
-        ) : (
         <DesktopCanvas
           viewMode={viewMode}
           projects={filteredProjects}
@@ -571,7 +572,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
           onCheckToggle={onCheckToggle}
           onDropToFolder={(p, f) => void handleDropToFolder(p, f)}
         />
-        )}
 
       </div>
 
@@ -599,6 +599,11 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         }}
         onClose={() => setInspectorOpen(false)}
         onOpenAssetsLibrary={onOpenAssetsLibrary ?? (() => undefined)}
+        onPublishAsset={onPublishAsset}
+        projectSlug={selectedProject?.slug}
+        onAssetsChanged={() => {
+          if (selectedProject) void loadProject(selectedProject.id, inspectorOpen);
+        }}
       />
 
       {contextMenu ? (
@@ -617,65 +622,6 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
               triggerToast('项目名已复制', 'info');
             },
           })}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function FolderAssetsPanel({ organizationSlug, folderId }: { organizationSlug: string; folderId: number }) {
-  const [items, setItems] = useState<AssetRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [previewAsset, setPreviewAsset] = useState<AssetRecord | null>(null);
-  const [filter, setFilter] = useState<AssetFilterState>({ type: 'all', source: 'all', preview: 'all', search: '' });
-  const [editAsset, setEditAsset] = useState<AssetRecord | null>(null);
-
-  const loadAssets = () => {
-    const params = new URLSearchParams({ organization: organizationSlug, folder: String(folderId), page_size: '200' });
-    if (filter.type !== 'all') params.set('asset_type', filter.type);
-    setLoading(true);
-    apiFetch(`/workspace/assets/?${params.toString()}`)
-      .then((r) => r.ok ? r.json() : Promise.resolve({ items: [] }))
-      .then((data) => { setItems(Array.isArray(data) ? data : (data.items || [])); setLoading(false); })
-      .catch(() => { setItems([]); setLoading(false); });
-  };
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => { loadAssets(); }, [organizationSlug, folderId, filter.type]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  const handleEditAsset = (asset: AssetRecord) => setEditAsset(asset);
-  const handleDeleteAsset = async (asset: AssetRecord) => {
-    if (!window.confirm(`删除「${asset.title}」？此操作不可撤销。`)) return;
-    await apiDelete(`/workspace/assets/${asset.id}/`);
-    loadAssets();
-  };
-
-  const { groups } = useAssetGroups(items);
-
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      <AssetFilter filter={filter} onChange={setFilter} total={items.length} />
-      <div className="flex-1 min-h-0 overflow-y-auto mt-3">
-        {loading ? (
-          <div className="text-[11px] text-[var(--editorial-text-gray)] p-4">加载中...</div>
-        ) : items.length === 0 ? (
-          <div className="flex items-center justify-center h-40 text-[11px] text-[var(--editorial-text-gray)]">暂无资产</div>
-        ) : (
-          <div className="assets-library__groups">
-            {groups.map((group) => (
-              <AssetGroup key={group.key} group={group} onPreview={setPreviewAsset} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />
-            ))}
-          </div>
-        )}
-      </div>
-      {previewAsset ? <AssetPreviewModal asset={previewAsset} onClose={() => setPreviewAsset(null)} /> : null}
-      {editAsset ? (
-        <AssetFormDialog
-          open
-          initial={editAsset}
-          onClose={() => setEditAsset(null)}
-          onSave={(input) => apiPatch(`/workspace/assets/${editAsset.id}/`, input).then(() => { setEditAsset(null); loadAssets(); })}
         />
       ) : null}
     </div>

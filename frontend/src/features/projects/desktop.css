@@ -212,6 +212,51 @@
   overflow: hidden;
 }
 
+.desktop-canvas__intro {
+  width: min(100%, 1320px);
+  padding: 14px 16px 0;
+}
+
+.desktop-canvas__intro p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--editorial-text-gray);
+}
+
+.desktop-canvas__flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--projects-border);
+  background: color-mix(in srgb, var(--surface-panel) 88%, var(--brand-accent-soft));
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--editorial-text-gray);
+}
+
+.desktop-canvas__flow-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 900;
+  color: var(--editorial-accent-blue);
+  cursor: pointer;
+}
+
+.desktop-canvas__flow-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.desktop-canvas__flow-link:not(:disabled):hover {
+  text-decoration: underline;
+}
+
 .desktop-toolbar {
   display: flex;
   flex-direction: column;

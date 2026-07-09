@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, FolderOpen, Move, Plus, RefreshCw, Share2, X } from 'lucide-react';
+import { ArrowRight, Boxes, Check, FolderOpen, Move, Plus, RefreshCw, X } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
@@ -8,8 +8,8 @@ import { Pagination } from './Pagination';
 import { useAssets } from './useAssets';
 import { useAssetGroups } from './useAssetGroups';
 import type { AssetFilterState, AssetsLibraryProps } from './types';
-import type { AssetRecord } from '../../types/workspace';
-import { PublishTemplateDialog } from './PublishTemplateDialog';
+import type { AssetRecord, ProjectRecord } from '../../types/workspace';
+import { AddToProjectDialog } from './AddToProjectDialog';
 import { apiFetch } from '../../hooks/useApi';
 import './assets.css';
 
@@ -24,7 +24,8 @@ type DialogState =
 
 export function AssetsLibrary({
   organizationSlug,
-  onPublishAsset,
+  onOpenProject,
+  onOpenTemplateLibrary,
 }: AssetsLibraryProps) {
   const [filter, setFilter] = useState<AssetFilterState>(DEFAULT_FILTER);
   const { data, loading, error, page, setPage, refresh, createAsset, updateAsset, deleteAsset } =
@@ -34,6 +35,8 @@ export function AssetsLibrary({
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectMode, setSelectMode] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [showAddToProjectDialog, setShowAddToProjectDialog] = useState(false);
+  const [projectNames, setProjectNames] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const handler = () => refresh();
@@ -53,6 +56,26 @@ export function AssetsLibrary({
     const timeout = window.setTimeout(() => setTimestamp(Date.now()), 0);
     return () => window.clearTimeout(timeout);
   }, [items]);
+
+  useEffect(() => {
+    if (!organizationSlug) return;
+    const params = new URLSearchParams({ organization: organizationSlug });
+    apiFetch(`/projects/?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: ProjectRecord[]) => {
+        const map: Record<number, string> = {};
+        for (const project of Array.isArray(data) ? data : []) {
+          map[project.id] = project.name;
+        }
+        setProjectNames(map);
+      })
+      .catch(() => setProjectNames({}));
+  }, [organizationSlug]);
+
+  const unassignedCount = useMemo(
+    () => items.filter((asset) => !asset.project_id).length,
+    [items],
+  );
 
   const recentCount = useMemo(() => {
     const sevenDaysAgo = timestamp - 1000 * 60 * 60 * 24 * 7;
@@ -80,39 +103,6 @@ export function AssetsLibrary({
     setSelectedIds((prev) => prev.filter((id) => id !== asset.id));
   };
 
-  const [publishingId, setPublishingId] = useState<number | null>(null);
-
-  const [publishTarget, setPublishTarget] = useState<AssetRecord | null>(null);
-
-  const handlePublish = useCallback((asset: AssetRecord) => {
-    if (!onPublishAsset) return;
-    setPublishTarget(asset);
-  }, [onPublishAsset]);
-
-  const confirmPublish = useCallback(async (creatorNote: string) => {
-    if (!onPublishAsset || !publishTarget) return;
-    setPublishingId(publishTarget.id);
-    try {
-      const ok = await onPublishAsset(publishTarget, creatorNote);
-      if (ok) setPublishTarget(null);
-    } finally {
-      setPublishingId(null);
-    }
-  }, [onPublishAsset, publishTarget]);
-
-  const handleBatchPublish = async () => {
-    if (!onPublishAsset || selectedIds.length === 0) return;
-    for (const id of selectedIds) {
-      const asset = items.find((item) => item.id === id);
-      if (asset) {
-        const ok = await onPublishAsset(asset);
-        if (!ok) break;
-      }
-    }
-    setSelectedIds([]);
-    setSelectMode(false);
-  };
-
   const toggleSelect = useCallback((assetId: number) => {
     setSelectedIds((prev) => prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]);
   }, []);
@@ -120,6 +110,27 @@ export function AssetsLibrary({
   const handleSelectAll = () => {
     if (selectedIds.length === items.length) setSelectedIds([]);
     else setSelectedIds(items.map((a) => a.id));
+  };
+
+  const handleAddToProject = async (projectId: number) => {
+    try {
+      const res = await apiFetch('/workspace/assets/batch/', {
+        method: 'POST',
+        body: JSON.stringify({ ids: selectedIds, project_id: projectId }),
+      });
+      if (res.ok) {
+        setSelectedIds([]);
+        setShowAddToProjectDialog(false);
+        setSelectMode(false);
+        refresh();
+        window.dispatchEvent(new CustomEvent('mh:assets-updated', { detail: { projectId } }));
+        if (onOpenProject) {
+          onOpenProject(projectId);
+        }
+      }
+    } catch (err) {
+      console.error('Add to project failed', err);
+    }
   };
 
   const handleMoveToFolder = async (folderId: number) => {
@@ -145,15 +156,29 @@ export function AssetsLibrary({
           <span className="assets-library__eyebrow">Brand asset wall</span>
           <h2 className="assets-library__title">资产库</h2>
           <p className="assets-library__subtitle">
-            按工作流运行、生成来源整理产出；保存后可一键发布到模板库（社区），供团队复用。
+            工作流产出的文案、图片、音视频先沉淀在这里；选中后「加入项目」归类整理，再在项目中发布到模板库。
           </p>
+          <div className="assets-library__flow" aria-label="资产流转路径">
+            <span>资产库</span>
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            <span>我的项目</span>
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            <button
+              type="button"
+              className="assets-library__flow-link"
+              onClick={onOpenTemplateLibrary}
+              disabled={!onOpenTemplateLibrary}
+            >
+              模板库
+            </button>
+          </div>
         </div>
         <div className="assets-library__stats" aria-label="资产统计">
           <div><strong>{total}</strong><span>总资产</span></div>
           <div><strong>{recentCount}</strong><span>近 7 天</span></div>
           <div><strong>{sourceCounts?.workflow ?? 0}</strong><span>工作流</span></div>
           <div><strong>{previewCounts?.with_file ?? 0}</strong><span>可预览</span></div>
-          <div><strong>{previewCounts?.records_only ?? 0}</strong><span>仅记录</span></div>
+          <div><strong>{unassignedCount}</strong><span>未归类</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={refresh} className="assets-library__refresh" title="刷新" aria-label="刷新">
@@ -178,14 +203,14 @@ export function AssetsLibrary({
             {selectedIds.length === items.length ? '取消全选' : '全选'}
           </button>
           <span>{selectedIds.length} / {items.length} 个已选</span>
-          {selectedIds.length > 0 && onPublishAsset && (
-            <button type="button" onClick={() => void handleBatchPublish()} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
-              <Share2 className="h-3 w-3 inline mr-1" />发布到模板库
+          {selectedIds.length > 0 && (
+            <button type="button" onClick={() => setShowAddToProjectDialog(true)} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
+              <Boxes className="h-3 w-3 inline mr-1" />加入项目
             </button>
           )}
           {selectedIds.length > 0 && (
-            <button type="button" onClick={() => setShowMoveDialog(true)} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
-              <Move className="h-3 w-3 inline mr-1" />移动到文件夹
+            <button type="button" onClick={() => setShowMoveDialog(true)} className="border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
+              <Move className="h-3 w-3 inline mr-1" />归档到文件夹
             </button>
           )}
           <button type="button" onClick={() => { setSelectedIds([]); setSelectMode(false); }} className="ml-auto border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
@@ -210,10 +235,10 @@ export function AssetsLibrary({
               onPreview={setPreviewAsset}
               onEdit={(a) => setDialog({ mode: 'edit', asset: a })}
               onDelete={handleDelete}
-              onPublish={onPublishAsset ? handlePublish : undefined}
               selectMode={selectMode}
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
+              projectNames={projectNames}
             />
           ))}
         </div>
@@ -226,8 +251,6 @@ export function AssetsLibrary({
         <AssetPreviewModal
           asset={previewAsset}
           onClose={() => setPreviewAsset(null)}
-          onPublish={onPublishAsset ? handlePublish : undefined}
-          publishing={publishingId === previewAsset.id}
         />
       ) : null}
 
@@ -235,15 +258,14 @@ export function AssetsLibrary({
         <AssetFormDialog open initial={dialog.mode === 'edit' ? dialog.asset : null} onClose={() => setDialog({ mode: 'closed' })} onSave={handleSaveDialog} />
       ) : null}
 
-      {publishTarget ? (
-        <PublishTemplateDialog
-          open
-          assetTitle={publishTarget.title}
-          loading={publishingId === publishTarget.id}
-          onClose={() => setPublishTarget(null)}
-          onConfirm={(note) => void confirmPublish(note)}
+      {showAddToProjectDialog && (
+        <AddToProjectDialog
+          selectedCount={selectedIds.length}
+          organizationSlug={organizationSlug || ''}
+          onConfirm={(projectId) => void handleAddToProject(projectId)}
+          onClose={() => setShowAddToProjectDialog(false)}
         />
-      ) : null}
+      )}
       {showMoveDialog && (
         <MoveToFolderDialog
           selectedCount={selectedIds.length}

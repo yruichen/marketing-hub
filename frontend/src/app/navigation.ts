@@ -95,7 +95,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         id: 'projects',
         label: '我的项目',
-        hint: '品牌信息与 brief',
+        hint: '归类收纳资产库产出',
         icon: Boxes,
       },
       {
@@ -107,7 +107,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         id: 'assets',
         label: '资产库',
-        hint: '保存的生成结果',
+        hint: '生成产出，加入项目归类',
         icon: Boxes,
       },
       {
@@ -208,7 +208,7 @@ export const TAB_META: Record<
   },
   projects: {
     title: '我的项目',
-    subtitle: '管理品牌记忆、文件夹与 campaign',
+    subtitle: '归类收纳资产库中选中的产出，整理后发布到模板库',
   },
   builder: {
     title: '工作流',
@@ -216,7 +216,7 @@ export const TAB_META: Record<
   },
   assets: {
     title: '资产库',
-    subtitle: '浏览已保存的文案、图片等产出',
+    subtitle: '浏览工作流产出的文案、图片等；多选后「加入项目」归类整理',
   },
   review: {
     title: '审阅',

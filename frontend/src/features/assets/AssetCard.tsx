@@ -13,6 +13,7 @@ interface AssetCardProps {
   selectMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (assetId: number) => void;
+  projectName?: string;
 }
 
 /**
@@ -22,7 +23,7 @@ interface AssetCardProps {
  *   - 复制：写 clipboard.toast；下载：触发 <a download>
  *   - selectMode：显示复选框，点击切换选中状态
  */
-export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selectMode, selected = false, onToggleSelect }: AssetCardProps) {
+export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selectMode, selected = false, onToggleSelect, projectName }: AssetCardProps) {
   const [copiedField, setCopiedField] = useState<'url' | 'title' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
@@ -135,6 +136,15 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selec
             <span>{taskType}</span>
             <span>{dateLabel}</span>
           </div>
+          {projectName ? (
+            <div className="asset-card__project-row">
+              <span className="asset-card__project-pill">{projectName}</span>
+            </div>
+          ) : (
+            <div className="asset-card__project-row">
+              <span className="asset-card__project-pill asset-card__project-pill--unassigned">未归类</span>
+            </div>
+          )}
           <div className="asset-card__source-row">
             <span className="asset-card__source-pill">
               {asset.metadata?.source === 'workflow' ? <GitBranch className="h-3 w-3" /> : null}

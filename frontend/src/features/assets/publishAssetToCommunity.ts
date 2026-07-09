@@ -69,6 +69,9 @@ export interface PublishAssetOptions {
   username: string | null;
   triggerToast: TriggerToastFn;
   creatorNote?: string;
+  /** 从项目检查器发布时，优先使用所选项目而非当前工作区 scope */
+  projectSlug?: string;
+  campaignId?: number;
 }
 
 export async function publishAssetToCommunity({
@@ -77,6 +80,8 @@ export async function publishAssetToCommunity({
   username,
   triggerToast,
   creatorNote = '',
+  projectSlug,
+  campaignId,
 }: PublishAssetOptions): Promise<boolean> {
   const payload = buildCommunityPayloadFromAsset(asset);
   if (!payload) {
@@ -94,8 +99,8 @@ export async function publishAssetToCommunity({
       body: JSON.stringify({
         username: username || import.meta.env.VITE_DEMO_USERNAME || 'DEMO',
         organization: workspaceScope?.organization.slug,
-        project: workspaceScope?.project.slug,
-        campaign: workspaceScope?.campaign.id,
+        project: projectSlug ?? workspaceScope?.project.slug,
+        campaign: campaignId ?? workspaceScope?.campaign?.id,
         creation_type: payload.creation_type,
         title: payload.title,
         content: payload.content,
