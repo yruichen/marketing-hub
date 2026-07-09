@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Check, Copy, Download, ExternalLink, FileText, GitBranch, Pencil, Play, Share2, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Check, Copy, Download, ExternalLink, FileText, GitBranch, Pencil, Play, Share2, Trash2 } from 'lucide-react';
 import type { AssetRecord } from '../../types/workspace';
 import { getAssetPalette } from './assetVisuals';
 import { assetPreviewState, assetSourceLabel, assetTaskType, assetWorkflowLabel, getAssetSummary } from './assetContent';
@@ -14,6 +14,7 @@ interface AssetCardProps {
   selected?: boolean;
   onToggleSelect?: (assetId: number) => void;
   projectName?: string;
+  onAddToProject?: (asset: AssetRecord) => void;
 }
 
 /**
@@ -23,7 +24,7 @@ interface AssetCardProps {
  *   - 复制：写 clipboard.toast；下载：触发 <a download>
  *   - selectMode：显示复选框，点击切换选中状态
  */
-export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selectMode, selected = false, onToggleSelect, projectName }: AssetCardProps) {
+export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selectMode, selected = false, onToggleSelect, projectName, onAddToProject }: AssetCardProps) {
   const [copiedField, setCopiedField] = useState<'url' | 'title' | null>(null);
   const palette = getAssetPalette(asset);
   const Icon = palette.icon;
@@ -164,14 +165,28 @@ export function AssetCard({ asset, onPreview, onEdit, onDelete, onPublish, selec
       </button>
 
       <div className="asset-card__footer">
-        {asset.tags.length > 0 ? (
-          <div className="asset-card__tags">
-            {asset.tags.slice(0, 3).map((t) => (
-              <span key={t} className="asset-card__tag">{t}</span>
-            ))}
-            {asset.tags.length > 3 ? <span className="asset-card__tag">+{asset.tags.length - 3}</span> : null}
-          </div>
-        ) : null}
+        <div className="asset-card__footer-start">
+          {onAddToProject && !selectMode ? (
+            <button
+              type="button"
+              onClick={() => onAddToProject(asset)}
+              title="加入项目"
+              aria-label="加入项目"
+              className="asset-card__action--join-project"
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              <span>加入项目</span>
+            </button>
+          ) : null}
+          {asset.tags.length > 0 ? (
+            <div className="asset-card__tags">
+              {asset.tags.slice(0, 3).map((t) => (
+                <span key={t} className="asset-card__tag">{t}</span>
+              ))}
+              {asset.tags.length > 3 ? <span className="asset-card__tag">+{asset.tags.length - 3}</span> : null}
+            </div>
+          ) : null}
+        </div>
         <div className="asset-card__actions">
         {onEdit ? (
           <button type="button" onClick={() => onEdit(asset)} title="编辑资产" aria-label="编辑资产">
