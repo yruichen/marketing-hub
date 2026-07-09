@@ -379,7 +379,7 @@ class CreatorProfileTests(APITestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_private_profile_hides_relation_lists(self):
-        profile = UserProfile.objects.get(user=self.user)
+        profile, _ = UserProfile.objects.get_or_create(user=self.user)
         profile.profile_visibility = 'private'
         profile.save(update_fields=['profile_visibility'])
 
