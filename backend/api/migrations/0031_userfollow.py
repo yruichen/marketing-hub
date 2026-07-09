@@ -25,11 +25,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='userfollow',
-            index=models.Index(fields=['following', '-created_at'], name='api_userfol_followi_8f0a2d_idx'),
+            index=models.Index(fields=['following', '-created_at'], name='api_userfol_followi_5c1e44_idx'),
         ),
         migrations.AddIndex(
             model_name='userfollow',
-            index=models.Index(fields=['follower', '-created_at'], name='api_userfol_followe_4c1b8a_idx'),
+            index=models.Index(fields=['follower', '-created_at'], name='api_userfol_followe_a90f82_idx'),
         ),
         migrations.AddConstraint(
             model_name='userfollow',

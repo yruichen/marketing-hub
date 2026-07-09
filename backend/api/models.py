@@ -67,8 +67,8 @@ class UserFollow(models.Model):
             models.UniqueConstraint(fields=['follower', 'following'], name='unique_user_follow'),
         ]
         indexes = [
-            models.Index(fields=['following', '-created_at']),
-            models.Index(fields=['follower', '-created_at']),
+            models.Index(fields=['following', '-created_at'], name='api_userfol_followi_5c1e44_idx'),
+            models.Index(fields=['follower', '-created_at'], name='api_userfol_followe_a90f82_idx'),
         ]
         ordering = ['-created_at']
 
