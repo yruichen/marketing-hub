@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Boxes, Check, FolderOpen, Move, Plus, RefreshCw, X } from 'lucide-react';
+import { ArrowRight, Boxes, FolderOpen, Move, Plus, RefreshCw, X } from 'lucide-react';
 import { AssetFilter } from './AssetFilter';
 import { AssetGroup } from './AssetGroup';
 import { AssetPreviewModal } from './AssetPreviewModal';
@@ -107,6 +107,20 @@ export function AssetsLibrary({
     setSelectedIds((prev) => prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]);
   }, []);
 
+  const handleJoinProjectClick = () => {
+    if (selectMode && selectedIds.length > 0) {
+      setShowAddToProjectDialog(true);
+      return;
+    }
+    setSelectMode(true);
+  };
+
+  const handleQuickAddToProject = useCallback((asset: AssetRecord) => {
+    setSelectedIds([asset.id]);
+    setSelectMode(true);
+    setShowAddToProjectDialog(true);
+  }, []);
+
   const handleSelectAll = () => {
     if (selectedIds.length === items.length) setSelectedIds([]);
     else setSelectedIds(items.map((a) => a.id));
@@ -180,12 +194,22 @@ export function AssetsLibrary({
           <div><strong>{previewCounts?.with_file ?? 0}</strong><span>可预览</span></div>
           <div><strong>{unassignedCount}</strong><span>未归类</span></div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="assets-library__actions">
           <button type="button" onClick={refresh} className="assets-library__refresh" title="刷新" aria-label="刷新">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button type="button" onClick={() => setSelectMode((v) => !v)} className={`assets-library__refresh ${selectMode ? 'is-active' : ''}`} title={selectMode ? '退出选择' : '选择资产'}>
-            <Check className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={handleJoinProjectClick}
+            className={`assets-library__join-project ${selectMode ? 'is-active' : ''}`}
+            title={selectMode ? '确认将已选资产加入项目' : '选择资产并加入项目'}
+          >
+            <Boxes className="h-4 w-4" />
+            {selectMode && selectedIds.length > 0
+              ? `加入项目（${selectedIds.length}）`
+              : selectMode
+                ? '加入项目 · 请选择'
+                : '加入项目'}
           </button>
           <button type="button" onClick={() => setDialog({ mode: 'create' })} className="assets-library__new" title="新建资产">
             <Plus className="h-3.5 w-3.5" />新建资产
@@ -198,24 +222,37 @@ export function AssetsLibrary({
         typeCounts={typeCounts} sourceCounts={sourceCounts} previewCounts={previewCounts} total={total} />
 
       {selectMode && (
-        <div className="flex items-center gap-3 px-1 py-2 text-[10px] font-black text-[var(--editorial-text-gray)]">
-          <button type="button" onClick={handleSelectAll} className="border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
-            {selectedIds.length === items.length ? '取消全选' : '全选'}
-          </button>
-          <span>{selectedIds.length} / {items.length} 个已选</span>
-          {selectedIds.length > 0 && (
-            <button type="button" onClick={() => setShowAddToProjectDialog(true)} className="border border-[var(--brand-accent-strong)] bg-[var(--brand-accent)] px-2 py-1 rounded text-black hover:opacity-90">
-              <Boxes className="h-3 w-3 inline mr-1" />加入项目
+        <div className="assets-library__selection-bar" role="toolbar" aria-label="批量加入项目">
+          <div className="assets-library__selection-bar-main">
+            <span className="assets-library__selection-bar-label">选择要归入项目的资产</span>
+            <span className="assets-library__selection-bar-count">{selectedIds.length} / {items.length} 个已选</span>
+          </div>
+          <div className="assets-library__selection-bar-actions">
+            <button type="button" onClick={handleSelectAll} className="assets-library__selection-btn">
+              {selectedIds.length === items.length ? '取消全选' : '全选本页'}
             </button>
-          )}
-          {selectedIds.length > 0 && (
-            <button type="button" onClick={() => setShowMoveDialog(true)} className="border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
-              <Move className="h-3 w-3 inline mr-1" />归档到文件夹
+            <button
+              type="button"
+              onClick={() => setShowAddToProjectDialog(true)}
+              disabled={selectedIds.length === 0}
+              className="assets-library__selection-btn assets-library__selection-btn--primary"
+            >
+              <Boxes className="h-4 w-4" />
+              加入项目{selectedIds.length > 0 ? `（${selectedIds.length}）` : ''}
             </button>
-          )}
-          <button type="button" onClick={() => { setSelectedIds([]); setSelectMode(false); }} className="ml-auto border border-[var(--border-subtle)] px-2 py-1 rounded hover:bg-[var(--surface-hover)]">
-            <X className="h-3 w-3 inline mr-1" />退出
-          </button>
+            <button type="button" onClick={() => setShowMoveDialog(true)} disabled={selectedIds.length === 0} className="assets-library__selection-btn">
+              <Move className="h-3.5 w-3.5" />
+              归档到文件夹
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectedIds([]); setSelectMode(false); }}
+              className="assets-library__selection-btn assets-library__selection-btn--ghost"
+            >
+              <X className="h-3.5 w-3.5" />
+              退出
+            </button>
+          </div>
         </div>
       )}
 
@@ -239,6 +276,7 @@ export function AssetsLibrary({
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
               projectNames={projectNames}
+              onAddToProject={handleQuickAddToProject}
             />
           ))}
         </div>

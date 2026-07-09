@@ -15,13 +15,14 @@ interface AssetGroupProps {
   selectedIds?: number[];
   onToggleSelect?: (assetId: number) => void;
   projectNames?: Record<number, string>;
+  onAddToProject?: (asset: AssetRecord) => void;
 }
 
 /**
  * 单个分组：标题 + 折叠 + 卡片网格。
  * 状态本地维护（不污染 props），首次默认展开。
  */
-export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDelete, onPublish, selectMode, selectedIds, onToggleSelect, projectNames }: AssetGroupProps) {
+export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDelete, onPublish, selectMode, selectedIds, onToggleSelect, projectNames, onAddToProject }: AssetGroupProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
@@ -56,6 +57,7 @@ export function AssetGroup({ group, defaultOpen = true, onPreview, onEdit, onDel
               selected={selectedIds?.includes(asset.id) ?? false}
               onToggleSelect={onToggleSelect}
               projectName={asset.project_id ? projectNames?.[asset.project_id] : undefined}
+              onAddToProject={onAddToProject}
             />
           ))}
         </div>
