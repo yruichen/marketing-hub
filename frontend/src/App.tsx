@@ -1200,7 +1200,7 @@ export default function App() {
 
   if (isTemplateLibraryRoute) {
     return (
-      <>
+      <div className="template-library-shell h-full min-h-0 overflow-hidden">
         <Toast message={feedbackMsg} onAction={handleErrorAction} onDismiss={dismissToast} />
         <TemplateLibraryPage
           workspaceScope={workspaceScope}
@@ -1210,7 +1210,7 @@ export default function App() {
           onOpenProfile={handleOpenProfile}
           onOpenAssetsLibrary={handleOpenAssetsLibrary}
         />
-      </>
+      </div>
     );
   }
 
