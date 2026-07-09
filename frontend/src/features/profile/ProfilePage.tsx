@@ -19,7 +19,9 @@ import {
   Sparkles,
   Star,
   Tags,
+  UserPlus,
   UserRound,
+  Users,
   Video,
   Wand2,
   X,
@@ -27,15 +29,17 @@ import {
 import { formatErrorForToast } from '../../hooks/useApi';
 import type { TriggerToastFn } from '../../shared/types/toast';
 import type { CommunityItem } from '../community';
-import { useProfile, type CreatorProfile, type CreatorSocialLink } from './useProfile';
+import { useProfile, type CreatorProfile, type CreatorProfileRelationResponse, type CreatorProfileUserSummary, type CreatorSocialLink } from './useProfile';
 import './profile.css';
 
 type ProfilePageProps = {
   username?: string | null;
   currentUsername: string | null;
   triggerToast: TriggerToastFn;
+  onOpenProfile?: (username: string) => void;
 };
 
+type RelationKind = 'followers' | 'following';
 type CreationFilter = 'all' | CommunityItem['creation_type'];
 type EditorSection = 'basics' | 'visuals' | 'links' | 'display';
 
@@ -123,14 +127,18 @@ function isFeatured(item: CommunityItem) {
   return Boolean(item.metadata?.profile_featured);
 }
 
-export function ProfilePage({ username, currentUsername, triggerToast }: ProfilePageProps) {
-  const { data, loading, saving, error, setError, saveProfile, updateProfileCreation } = useProfile(username);
+export function ProfilePage({ username, currentUsername, triggerToast, onOpenProfile }: ProfilePageProps) {
+  const { data, loading, saving, error, setError, saveProfile, updateProfileCreation, toggleFollow, fetchRelations } = useProfile(username);
   const [filter, setFilter] = useState<CreationFilter>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editorSection, setEditorSection] = useState<EditorSection>('basics');
   const [form, setForm] = useState(EMPTY_PROFILE);
   const [specialtyInput, setSpecialtyInput] = useState('');
+  const [relationKind, setRelationKind] = useState<RelationKind | null>(null);
+  const [relationData, setRelationData] = useState<CreatorProfileRelationResponse | null>(null);
+  const [relationLoading, setRelationLoading] = useState(false);
   const profile = data?.profile;
+  const social = data?.social;
   const isOwner = Boolean(data?.is_owner || (!username && currentUsername && profile?.username === currentUsername));
 
   const featuredCreations = useMemo(() => data?.featured_creations ?? [], [data?.featured_creations]);
@@ -195,6 +203,48 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
     } catch {
       triggerToast('复制失败，请手动复制地址栏链接', 'error');
     }
+  }
+
+  async function handleToggleFollow() {
+    if (!profile || isOwner) return;
+    const nextFollow = !social?.is_following;
+    try {
+      await toggleFollow(profile.username, nextFollow);
+      triggerToast(nextFollow ? `已关注 @${profile.username}` : `已取消关注 @${profile.username}`, 'success');
+    } catch (err) {
+      triggerToast(formatErrorForToast(err, '关注操作失败，请稍后重试'), 'error');
+    }
+  }
+
+  async function openRelationList(kind: RelationKind) {
+    if (!profile) return;
+    setRelationKind(kind);
+    setRelationLoading(true);
+    setRelationData(null);
+    try {
+      const payload = await fetchRelations(kind, profile.username);
+      setRelationData(payload);
+    } catch (err) {
+      setRelationKind(null);
+      triggerToast(formatErrorForToast(err, '关系列表加载失败'), 'error');
+    } finally {
+      setRelationLoading(false);
+    }
+  }
+
+  function closeRelationList() {
+    setRelationKind(null);
+    setRelationData(null);
+  }
+
+  function handleOpenUserProfile(targetUsername: string) {
+    if (!targetUsername) return;
+    closeRelationList();
+    if (onOpenProfile) {
+      onOpenProfile(targetUsername);
+      return;
+    }
+    window.location.assign(`/profile/${encodeURIComponent(targetUsername)}`);
   }
 
   function updateSocialLink(index: number, key: keyof CreatorSocialLink, value: string) {
@@ -266,6 +316,17 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
                 <button type="button" className="profile-action profile-action--ghost" onClick={copyProfileLink}>
                   <LinkIcon className="h-4 w-4" />复制链接
                 </button>
+                {!isOwner ? (
+                  <button
+                    type="button"
+                    className={`profile-action ${social?.is_following ? 'profile-action--ghost' : ''}`}
+                    disabled={saving}
+                    onClick={() => void handleToggleFollow()}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    {social?.is_following ? '已关注' : '关注'}
+                  </button>
+                ) : null}
                 {isOwner ? (
                   <button type="button" className="profile-action" onClick={() => openEditor('basics')}>
                     <PenLine className="h-4 w-4" />编辑资料
@@ -276,6 +337,17 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
 
             {profile.headline ? <p className="profile-hero__headline">{profile.headline}</p> : null}
             {profile.bio ? <p className="profile-hero__bio">{profile.bio}</p> : null}
+
+            <div className="profile-hero__social">
+              <button type="button" className="profile-social-stat" onClick={() => void openRelationList('followers')}>
+                <strong>{social?.follower_count ?? 0}</strong>
+                <span>粉丝</span>
+              </button>
+              <button type="button" className="profile-social-stat" onClick={() => void openRelationList('following')}>
+                <strong>{social?.following_count ?? 0}</strong>
+                <span>关注</span>
+              </button>
+            </div>
 
             <div className="profile-hero__meta">
               {profile.location ? <span><MapPin className="h-3.5 w-3.5" />{profile.location}</span> : null}
@@ -410,6 +482,17 @@ export function ProfilePage({ username, currentUsername, triggerToast }: Profile
           onSectionChange={setEditorSection}
           onSpecialtyInputChange={setSpecialtyInput}
           onSocialLinkChange={updateSocialLink}
+        />
+      ) : null}
+
+      {relationKind ? (
+        <ProfileRelationModal
+          kind={relationKind}
+          loading={relationLoading}
+          data={relationData}
+          currentUsername={currentUsername}
+          onClose={closeRelationList}
+          onOpenProfile={handleOpenUserProfile}
         />
       ) : null}
     </div>
@@ -676,5 +759,96 @@ function FieldHint({ label, count, max, children }: { label: string; count: numb
       <span className="profile-field-head"><span>{label}</span><span>{count}/{max}</span></span>
       {children}
     </label>
+  );
+}
+
+function ProfileRelationModal({
+  kind,
+  loading,
+  data,
+  currentUsername,
+  onClose,
+  onOpenProfile,
+}: {
+  kind: RelationKind;
+  loading: boolean;
+  data: CreatorProfileRelationResponse | null;
+  currentUsername: string | null;
+  onClose: () => void;
+  onOpenProfile: (username: string) => void;
+}) {
+  const title = kind === 'followers' ? '粉丝列表' : '关注列表';
+
+  return (
+    <div className="profile-relation-modal" role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" className="profile-relation-modal__scrim" onClick={onClose} aria-label="关闭列表" />
+      <div className="profile-relation-modal__panel">
+        <header>
+          <div>
+            <p><Users className="h-3.5 w-3.5" />{kind === 'followers' ? 'Followers' : 'Following'}</p>
+            <h3>{title}</h3>
+          </div>
+          <button type="button" onClick={onClose} aria-label="关闭">
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        {loading ? (
+          <div className="profile-relation-modal__state">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>加载中...</span>
+          </div>
+        ) : null}
+
+        {!loading && data && data.results.length === 0 ? (
+          <div className="profile-relation-modal__state">
+            <UserRound className="h-7 w-7" />
+            <span>{kind === 'followers' ? '还没有粉丝' : '还没有关注任何人'}</span>
+          </div>
+        ) : null}
+
+        {!loading && data && data.results.length > 0 ? (
+          <ul className="profile-relation-list">
+            {data.results.map((item) => (
+              <ProfileRelationItem
+                key={item.username}
+                item={item}
+                isSelf={item.username === currentUsername}
+                onOpenProfile={onOpenProfile}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ProfileRelationItem({
+  item,
+  isSelf,
+  onOpenProfile,
+}: {
+  item: CreatorProfileUserSummary;
+  isSelf: boolean;
+  onOpenProfile: (username: string) => void;
+}) {
+  return (
+    <li>
+      <button type="button" className="profile-relation-item" onClick={() => onOpenProfile(item.username)}>
+        <span className="profile-relation-item__avatar">
+          {item.avatar_url ? <img src={item.avatar_url} alt={item.display_name} /> : initials(item.display_name)}
+        </span>
+        <span className="profile-relation-item__meta">
+          <strong>{item.display_name}</strong>
+          <span>@{item.username}</span>
+          {item.headline ? <em>{item.headline}</em> : null}
+        </span>
+        <span className="profile-relation-item__cta">
+          {isSelf ? '当前账号' : '查看主页'}
+          <ExternalLink className="h-3.5 w-3.5" />
+        </span>
+      </button>
+    </li>
   );
 }

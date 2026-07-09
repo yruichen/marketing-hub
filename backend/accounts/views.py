@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 from accounts.email import EmailDeliveryError, send_transactional_email
 from api.audit import record_audit_log
 from api.legal import active_policy_documents, consent_status, record_user_consent
-from api.models import Campaign, CommunityCreation, Membership, Organization, Project, SecurityEvent, UserProfile
+from api.models import Campaign, CommunityCreation, Membership, Organization, Project, SecurityEvent, UserFollow, UserProfile
 from api.permissions import CanManageOrganization
 from api.scope import get_scope
 from api.serializers import CommunityCreationSerializer, MembershipSerializer
@@ -106,6 +106,34 @@ def _profile_dict(user: User, profile: UserProfile) -> dict:
     }
 
 
+def _follow_user_summary(user: User) -> dict:
+    profile = _get_or_create_profile(user)
+    display_name = profile.display_name.strip() or user.get_full_name().strip() or user.username
+    return {
+        'username': user.username,
+        'display_name': display_name,
+        'headline': profile.headline,
+        'avatar_url': profile.avatar_url,
+    }
+
+
+def _profile_social(user: User, viewer: User) -> dict:
+    follower_count = UserFollow.objects.filter(following=user).count()
+    following_count = UserFollow.objects.filter(follower=user).count()
+    is_following = False
+    if viewer.is_authenticated and viewer.id != user.id:
+        is_following = UserFollow.objects.filter(follower=viewer, following=user).exists()
+    return {
+        'follower_count': follower_count,
+        'following_count': following_count,
+        'is_following': is_following,
+    }
+
+
+def _resolve_profile_user(username: str) -> User | None:
+    return User.objects.filter(username__iexact=username, is_active=True).first()
+
+
 def _share_organizations(left: User, right: User) -> bool:
     if not left.is_authenticated or not right.is_authenticated:
         return False
@@ -161,6 +189,7 @@ def _profile_payload(user: User, viewer: User) -> dict:
         return {
             'profile': _profile_dict(user, profile),
             'stats': _profile_stats(CommunityCreation.objects.none()),
+            'social': _profile_social(user, viewer),
             'creations': [],
             'featured_creations': [],
             'is_owner': False,
@@ -171,6 +200,7 @@ def _profile_payload(user: User, viewer: User) -> dict:
     return {
         'profile': _profile_dict(user, profile),
         'stats': _profile_stats(creations),
+        'social': _profile_social(user, viewer),
         'featured_creations': CommunityCreationSerializer(featured, many=True).data,
         'creations': CommunityCreationSerializer(creations, many=True).data,
         'is_owner': is_owner,
@@ -610,10 +640,72 @@ class PublicProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, username: str):
-        user = User.objects.filter(username__iexact=username, is_active=True).first()
+        user = _resolve_profile_user(username)
         if not user:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(_profile_payload(user, request.user))
+
+
+class ProfileFollowView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, username: str):
+        target = _resolve_profile_user(username)
+        if not target:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        if target.id == request.user.id:
+            return Response({'error': '不能关注自己'}, status=status.HTTP_400_BAD_REQUEST)
+        UserFollow.objects.get_or_create(follower=request.user, following=target)
+        return Response(_profile_payload(target, request.user))
+
+    def delete(self, request, username: str):
+        target = _resolve_profile_user(username)
+        if not target:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        UserFollow.objects.filter(follower=request.user, following=target).delete()
+        return Response(_profile_payload(target, request.user))
+
+
+class ProfileRelationListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, username: str, relation: str):
+        user = _resolve_profile_user(username)
+        if not user:
+            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        if relation not in {'followers', 'following'}:
+            return Response({'error': 'Unsupported relation'}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile = _get_or_create_profile(user)
+        is_owner = request.user.id == user.id
+        if profile.profile_visibility == 'private' and not is_owner:
+            return Response({'error': '主页未公开'}, status=status.HTTP_403_FORBIDDEN)
+
+        if relation == 'followers':
+            follows = UserFollow.objects.filter(following=user).select_related('follower', 'follower__profile').order_by('-created_at')
+            results = [_follow_user_summary(item.follower) for item in follows[:100]]
+        else:
+            follows = UserFollow.objects.filter(follower=user).select_related('following', 'following__profile').order_by('-created_at')
+            results = [_follow_user_summary(item.following) for item in follows[:100]]
+
+        return Response({
+            'username': user.username,
+            'relation': relation,
+            'count': len(results) if len(results) < 100 else follows.count(),
+            'results': results,
+        })
+
+
+class MyFollowingListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        follows = UserFollow.objects.filter(follower=request.user).select_related('following', 'following__profile').order_by('-created_at')
+        results = [_follow_user_summary(item.following) for item in follows[:200]]
+        return Response({
+            'count': len(results) if len(results) < 200 else follows.count(),
+            'results': results,
+        })
 
 
 class RegisterView(APIView):

@@ -1,17 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { apiFetch, parseApiErrorResponse } from '../../hooks/useApi';
 
-const FOLLOW_KEY = 'mh_followed_creators';
 const COLLECT_KEY = 'mh_collected_templates';
-
-function readList(key: string): string[] {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
-  } catch {
-    return [];
-  }
-}
 
 function readIdList(key: string): number[] {
   try {
@@ -23,17 +13,40 @@ function readIdList(key: string): number[] {
   }
 }
 
-function writeList(key: string, values: string[] | number[]) {
+function writeList(key: string, values: number[]) {
   localStorage.setItem(key, JSON.stringify(values));
 }
 
 export function useTemplateSocial(currentUsername?: string | null) {
-  const [followedCreators, setFollowedCreators] = useState<string[]>(() => readList(FOLLOW_KEY));
+  const [followedCreators, setFollowedCreators] = useState<string[]>([]);
   const [collectedIds, setCollectedIds] = useState<number[]>(() => readIdList(COLLECT_KEY));
+  const [followLoading, setFollowLoading] = useState(false);
+
+  const refreshFollowing = useCallback(async () => {
+    if (!currentUsername) {
+      setFollowedCreators([]);
+      return;
+    }
+    try {
+      const response = await apiFetch('/profiles/me/following/');
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => null);
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      setFollowedCreators(results.map((item: { username?: string }) => item.username).filter(Boolean));
+    } catch {
+      // ignore
+    }
+  }, [currentUsername]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshFollowing();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshFollowing]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === FOLLOW_KEY) setFollowedCreators(readList(FOLLOW_KEY));
       if (event.key === COLLECT_KEY) setCollectedIds(readIdList(COLLECT_KEY));
     };
     window.addEventListener('storage', onStorage);
@@ -50,17 +63,29 @@ export function useTemplateSocial(currentUsername?: string | null) {
     [collectedIds],
   );
 
-  const toggleFollow = useCallback((username: string) => {
-    if (!username || username === currentUsername) return false;
-    setFollowedCreators((prev) => {
-      const next = prev.includes(username)
-        ? prev.filter((name) => name !== username)
-        : [...prev, username];
-      writeList(FOLLOW_KEY, next);
-      return next;
-    });
-    return true;
-  }, [currentUsername]);
+  const toggleFollow = useCallback(async (username: string) => {
+    if (!username || username === currentUsername || followLoading) return false;
+    const nextFollow = !followedCreators.includes(username);
+    setFollowLoading(true);
+    try {
+      const response = await apiFetch(`/profiles/${encodeURIComponent(username)}/follow/`, {
+        method: nextFollow ? 'POST' : 'DELETE',
+      });
+      if (!response.ok) {
+        throw await parseApiErrorResponse(response, `/profiles/${encodeURIComponent(username)}/follow/`);
+      }
+      setFollowedCreators((prev) => (
+        nextFollow
+          ? [...new Set([...prev, username])]
+          : prev.filter((name) => name !== username)
+      ));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [currentUsername, followLoading, followedCreators]);
 
   const toggleCollect = useCallback((templateId: number) => {
     setCollectedIds((prev) => {
@@ -80,6 +105,7 @@ export function useTemplateSocial(currentUsername?: string | null) {
     isCollected,
     toggleFollow,
     toggleCollect,
+    refreshFollowing,
   };
 }
 

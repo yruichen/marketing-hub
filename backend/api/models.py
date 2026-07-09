@@ -57,6 +57,25 @@ class UserProfile(models.Model):
         return f'{self.user.username}:{self.status}'
 
 
+class UserFollow(models.Model):
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name='following_relations')
+    following = models.ForeignKey(User, on_delete=models.CASCADE, related_name='follower_relations')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['follower', 'following'], name='unique_user_follow'),
+        ]
+        indexes = [
+            models.Index(fields=['following', '-created_at'], name='api_userfol_followi_5c1e44_idx'),
+            models.Index(fields=['follower', '-created_at'], name='api_userfol_followe_a90f82_idx'),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self) -> str:
+        return f'{self.follower.username} -> {self.following.username}'
+
+
 class SignupInvite(models.Model):
     code_hash = models.CharField(max_length=128, unique=True)
     label = models.CharField(max_length=100, blank=True, default='')

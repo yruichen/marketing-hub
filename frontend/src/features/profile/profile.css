@@ -210,6 +210,209 @@
   line-height: 1.8;
 }
 
+.profile-hero__social {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.profile-social-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--editorial-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.profile-social-stat strong {
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+.profile-social-stat span {
+  color: var(--editorial-text-gray);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-social-stat:hover strong {
+  color: var(--brand-accent);
+}
+
+.profile-relation-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.profile-relation-modal__scrim {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(12, 11, 9, 0.42);
+}
+
+.profile-relation-modal__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(520px, 100%);
+  max-height: min(72vh, 640px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.profile-relation-modal__panel header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.profile-relation-modal__panel header p {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.profile-relation-modal__panel header h3 {
+  margin: 6px 0 0;
+  font-size: 20px;
+  font-weight: 1000;
+}
+
+.profile-relation-modal__panel header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.profile-relation-modal__state {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--editorial-text-gray);
+  font-size: 13px;
+}
+
+.profile-relation-list {
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.profile-relation-item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.profile-relation-item:hover {
+  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-muted) 72%, transparent);
+}
+
+.profile-relation-item__avatar {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--editorial-text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.profile-relation-item__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-relation-item__meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-relation-item__meta strong,
+.profile-relation-item__meta span,
+.profile-relation-item__meta em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-relation-item__meta strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.profile-relation-item__meta span {
+  color: var(--editorial-text-gray);
+  font-size: 12px;
+}
+
+.profile-relation-item__meta em {
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.profile-relation-item__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--editorial-text-gray);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .profile-hero__meta,
 .profile-tags,
 .profile-links {

@@ -280,8 +280,15 @@ const profile = {
     favorite_type_display: '文案',
     latest_published_at: now,
   },
+  social: {
+    follower_count: 0,
+    following_count: 0,
+    is_following: false,
+  },
+  featured_creations: [],
   creations: community,
   is_owner: true,
+  is_private: false,
 };
 
 function json(payload: RoutePayload, status = 200) {
@@ -336,6 +343,18 @@ export async function installMocks(page: Page) {
     await route.fulfill(json({ results: community, rag_logs: ['检索到历史素材 1 条'] }));
   });
   await page.route('**/api/profiles/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/following/') || url.includes('/followers/')) {
+      await route.fulfill(json({ username: 'DEMO', relation: 'following', count: 0, results: [] }));
+      return;
+    }
+    if (url.includes('/follow/')) {
+      await route.fulfill(json({
+        ...profile,
+        social: { follower_count: 1, following_count: 0, is_following: route.request().method() === 'POST' },
+      }));
+      return;
+    }
     if (route.request().method() === 'PATCH') {
       await route.fulfill(json(profile));
       return;
