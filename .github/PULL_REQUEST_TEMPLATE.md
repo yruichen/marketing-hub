@@ -43,3 +43,4 @@
 - [ ] Tests cover the changed behavior or the testing gap is explained.
 - [ ] Documentation is updated where needed.
 - [ ] No secrets, personal data, or generated artifacts are committed.
+- [ ] I have the right to submit this contribution and explicitly accept [CONTRIBUTOR_TERMS.md](../CONTRIBUTOR_TERMS.md).

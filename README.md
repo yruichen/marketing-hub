@@ -26,6 +26,7 @@
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
     <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19" />
     <img src="https://img.shields.io/badge/Django-6-092E20?logo=django&logoColor=white" alt="Django 6" />
+    <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-7C3AED" alt="PolyForm Noncommercial License" />
   </p>
 </div>
 
@@ -166,6 +167,14 @@ Marketing Hub is under active development. The current focus is production harde
 
 Contributions and focused feedback are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md), use the issue forms, and report vulnerabilities through [SECURITY.md](./SECURITY.md).
 
-The repository is currently private and has no public software license. Visibility and licensing will be decided explicitly before an open-source launch.
+## Licensing
+
+Marketing Hub is **source-available, not open source**.
+
+- Noncommercial use is available under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
+- Any commercial use requires a separate paid license; see [Commercial Licensing](./COMMERCIAL_LICENSE.md).
+- Contributions are governed by [Contributor Terms](./CONTRIBUTOR_TERMS.md) so the project can offer both noncommercial and commercial licenses.
+
+The repository remains private while its public-release scope and contributor acceptance records are prepared.
 
 <p align="right"><a href="#readme-top">Back to top</a></p>

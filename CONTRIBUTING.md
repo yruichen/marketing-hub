@@ -101,3 +101,9 @@ See [ENGINEERING_PLAYBOOK.md](./ENGINEERING_PLAYBOOK.md) for the full engineerin
 ## Conduct
 
 Participation is governed by [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+
+## Licensing Contributions
+
+Marketing Hub uses a source-available noncommercial license plus separate commercial licensing. By opening a pull request, contributors must explicitly accept [CONTRIBUTOR_TERMS.md](./CONTRIBUTOR_TERMS.md), which preserves contributor ownership while granting the project the rights needed to distribute and commercially sublicense contributions.
+
+Existing contributions require separate explicit acceptance before a public commercial launch. Consult qualified legal counsel before relying on these terms for a commercial transaction.

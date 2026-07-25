@@ -57,7 +57,7 @@ Items may move from the exclude list only after a deliberate content review.
 
 ## Clean Public Repository Procedure
 
-1. Select the public product scope and license.
+1. Confirm the public product scope, PolyForm license notice, commercial-license positioning, and contributor acceptance records.
 2. Create a new empty export directory outside this repository.
 3. Copy only approved current files. Do not copy `.git`.
 4. Replace private infrastructure and account details with RFC example domains and documentation IP ranges.
@@ -79,7 +79,8 @@ Items may move from the exclude list only after a deliberate content review.
 ## Final Human Checklist
 
 - [ ] Public scope is explicitly approved.
-- [ ] A public software license is present and intentional.
+- [ ] The PolyForm Noncommercial license and commercial-license notice are present and intentional.
+- [ ] Every included contributor has explicitly accepted the contributor terms.
 - [ ] No private Git history or author email history is included.
 - [ ] No internal plans, deployment files, provider probes, or legal working documents are included.
 - [ ] No public server IP, internal hostname, account identifier, or local absolute path is present.

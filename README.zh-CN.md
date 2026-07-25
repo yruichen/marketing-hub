@@ -141,6 +141,14 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 
 项目正在积极开发，当前重点是生产加固、工作流可靠性、AI 评测治理和社区协作体验。
 
-仓库目前保持私有，尚未选择公开软件许可证。是否开源及许可证类型会在公开发布前单独决定。
+## 授权模式
+
+Marketing Hub 是**源码可见（source-available）项目，不是纯开源项目**。
+
+- 非商业使用遵循 [PolyForm Noncommercial License 1.0.0](./LICENSE)。
+- 任何商业使用都需要单独购买商业许可证，详见 [商业授权说明](./COMMERCIAL_LICENSE.md)。
+- 贡献遵循 [Contributor Terms](./CONTRIBUTOR_TERMS.md)，确保项目可以同时提供非商业许可和付费商业授权。
+
+仓库目前继续保持私有，待公开范围、隐私审计和现有贡献者授权记录全部完成后，再创建全新的无历史公开仓库。
 
 <p align="right"><a href="#readme-top">回到顶部</a></p>
