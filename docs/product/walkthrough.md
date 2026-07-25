@@ -73,11 +73,11 @@ All generated assets (copy summaries, image previews, storyboard stages, audio p
 
 ## 🛠️ App Logo custom Instructions
 
-We have designated a dedicated app logo placeholder inside [App.tsx:L360-384](file:///Users/chenyingrui/Desktop/marketing-hub/frontend/src/App.tsx#L360-L384). 
+We have designated a dedicated app logo placeholder inside [App.tsx:L360-384](../../frontend/src/App.tsx#L360-L384).
 
 If you want to swap the hand-drawn SVG logo with a production image file:
 1. Copy your logo (e.g., `logo.png` or `logo.svg`) to your frontend public folder or asset directory.
-2. Edit [App.tsx](file:///Users/chenyingrui/Desktop/marketing-hub/frontend/src/App.tsx) and find the comment block `APP LOGO PLACEHOLDER`.
+2. Edit [App.tsx](../../frontend/src/App.tsx) and find the comment block `APP LOGO PLACEHOLDER`.
 3. Replace the SVG structure with your target image tag:
    ```tsx
    <img src="/logo.png" className="h-8 w-auto" alt="Brand Logo" />

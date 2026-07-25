@@ -84,23 +84,23 @@ cp .env.example .env
 
 | 服务 | 宿主机 | 容器内 | 访问示例 |
 |------|--------|--------|----------|
-| frontend | **5173** | 80 (Nginx) | `http://117.72.16.215:5173` |
-| backend | **8000** | 8000 | `http://117.72.16.215:8000/api` |
+| frontend | **5173** | 80 (Nginx) | `http://203.0.113.10:5173` |
+| backend | **8000** | 8000 | `http://203.0.113.10:8000/api` |
 | postgres / redis | 不暴露 | — | 仅 Docker 内网 |
 
 根目录 `.env` 默认值（见 `.env.example`）：
 
 ```bash
-VITE_API_BASE_URL=http://117.72.16.215:8000/api
+VITE_API_BASE_URL=http://203.0.113.10:8000/api
 FRONTEND_PORT=5173
 ```
 
 `backend/.env` 需与前端 origin 一致，至少包含：
 
 ```bash
-DJANGO_ALLOWED_HOSTS=117.72.16.215,localhost,127.0.0.1
-CSRF_TRUSTED_ORIGINS=http://117.72.16.215:5173
-FRONTEND_BASE_URL=http://117.72.16.215:5173
+DJANGO_ALLOWED_HOSTS=203.0.113.10,localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=http://203.0.113.10:5173
+FRONTEND_BASE_URL=http://203.0.113.10:5173
 SESSION_COOKIE_SECURE=false
 CSRF_COOKIE_SECURE=false
 ```
@@ -117,7 +117,7 @@ bash scripts/deploy.sh
 
 | Secret | 说明 | 示例 |
 |--------|------|------|
-| `DEPLOY_HOST` | 服务器 IP 或域名 | `117.72.16.215` |
+| `DEPLOY_HOST` | 服务器 IP 或域名 | `203.0.113.10` |
 | `DEPLOY_USER` | SSH 用户名 | `ubuntu` |
 | `DEPLOY_SSH_KEY` | 私钥（用于 Actions SSH 登录服务器） | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `DEPLOY_PATH` | 服务器上的项目目录 | `/root/marketing-hub` |

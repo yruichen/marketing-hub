@@ -1,7 +1,7 @@
 [project]
-name = "backend"
+name = "marketing-hub-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Django API, workflow runtime, and AI provider gateway for Marketing Hub"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
