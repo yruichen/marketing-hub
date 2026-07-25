@@ -12,10 +12,12 @@ This directory contains product, architecture, planning, operation, and archived
 
 ### Plans
 
-- [Upgrade Plan](./plans/upgrade_plan.md)
-- [Workflow UX Improvement Plan](./plans/workflow_ux_improvement_plan.md)
-- [Brand Memory Long-Term Evolution Plan](./plans/brand_memory_long_term_evolution_plan.md)
-- [RAG Search Upgrade Plan](./plans/rag_search_upgrade_plan.md)
+- [Upgrade Plan](./plans/finish/upgrade_plan.md)
+- [Workflow UX Improvement Plan](./plans/finish/workflow_ux_improvement_plan.md)
+- [Brand Memory Long-Term Evolution Plan](./plans/generation-harness-evolution/brand_memory_long_term_evolution_plan.md)
+- [RAG Search Upgrade Plan](./plans/finish/rag_search_upgrade_plan.md)
+- [Generation Harness Evolution](./plans/generation-harness-evolution/README.md)
+- [Launch Readiness](./plans/launch-readiness/README.md)
 
 ### Operations
 
@@ -33,11 +35,6 @@ Historical reports and presentation drafts are kept for reference, but should no
 
 - [MVP Implementation Plan](./archive/reports/implementation_plan.md)
 - [Upgrade Execution Report](./archive/reports/upgrade_execution_report.md)
-- [PPT Design Prompts and Content](./archive/pitch/ppt-design-prompts-and-content-v1.md)
-- [Semi-finals PPT Outline v13](./archive/pitch/semi-finals-ppt-outline-upgraded.md)
-- [Semi-finals PPT Outline v14](./archive/pitch/semi-finals-ppt-outline-v14-dense.md)
-- [Semi-finals PPT Outline v15](./archive/pitch/semi-finals-ppt-outline-v15-pov.md)
-- [Semi-finals Speech Script](./archive/pitch/台词.md)
 
 ## Assets
 

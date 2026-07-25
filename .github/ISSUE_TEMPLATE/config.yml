@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/yruichen/marketing-hub/security/advisories/new
+    about: Report security issues privately. Do not create a public issue.
+  - name: Documentation
+    url: https://github.com/yruichen/marketing-hub/blob/main/docs/README.md
+    about: Review the product, architecture, and operations documentation.

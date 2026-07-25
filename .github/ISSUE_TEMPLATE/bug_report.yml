@@ -1,0 +1,75 @@
+name: Bug report
+description: Report a reproducible problem in Marketing Hub
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Remove secrets, provider keys, personal data, and private workspace content from all logs and screenshots.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Authentication and accounts
+        - Workspaces and projects
+        - AI generation
+        - Workflow builder
+        - Community
+        - Billing and usage
+        - AI Gateway and providers
+        - Deployment and operations
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.0 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, Docker/local setup, Python/Node versions, and relevant provider.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Paste sanitized logs or attach screenshots. Never include secrets or private data.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
