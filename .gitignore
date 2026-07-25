@@ -6,6 +6,10 @@ __pycache__/
 *.pyc
 db.sqlite3
 .env
+.env.local
 .vscode/
 backend/db.sqlite3-journal
 tmp/
+
+# Pitch / roadshow assets (all files)
+docs/archive/pitch/
