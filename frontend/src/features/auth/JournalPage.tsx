@@ -192,7 +192,7 @@ export function JournalPage({
             <input
               type="text"
               {...register('username')}
-              placeholder="DEMO 或 name@company.com"
+              placeholder="DEMO 或 name@example.com"
               aria-invalid={Boolean(usernameErr)}
             />
             {usernameErr && (
@@ -238,7 +238,7 @@ export function JournalPage({
               type="email"
               value={accountEmail}
               onChange={(event) => setAccountEmail(event.target.value)}
-              placeholder="you@brand.com"
+              placeholder="you@example.com"
             />
           </div>
           <button type="button" className="auth-page__submit" onClick={requestPasswordReset} disabled={busy}>
@@ -262,7 +262,7 @@ export function JournalPage({
               type="email"
               value={registerForm.email}
               onChange={(event) => setRegisterForm((prev) => ({ ...prev, email: event.target.value }))}
-              placeholder="you@brand.com"
+              placeholder="you@example.com"
             />
           </div>
           <div className="auth-page__field">
