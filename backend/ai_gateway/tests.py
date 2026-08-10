@@ -897,3 +897,26 @@ class AssistantChatStreamingTests(APITestCase):
             HTTP_X_CSRFTOKEN=csrf,
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_chat_does_not_expose_provider_configuration_exception(self):
+        from ai_gateway.views import AssistantChatView
+        from django.test import RequestFactory
+
+        rf = RequestFactory()
+        factory_req = rf.post(
+            '/api/assistant/chat',
+            {'message': 'hello'},
+            content_type='application/json',
+        )
+        force_authenticate(factory_req, user=self.user)
+        factory_req.session = self.client_.session
+
+        with patch(
+            'ai_gateway.views.build_assistant_agent',
+            side_effect=RuntimeError('secret provider response and stack details'),
+        ):
+            view_resp = AssistantChatView.as_view()(factory_req)
+
+        self.assertEqual(view_resp.status_code, 409)
+        self.assertEqual(view_resp.data['code'], 'AI_PROVIDER_UNAVAILABLE')
+        self.assertNotIn('secret', str(view_resp.data).lower())

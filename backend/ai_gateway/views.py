@@ -515,11 +515,15 @@ class AssistantChatView(APIView):
         # recoverable onboarding state, not a reason to fabricate output.
         try:
             agent = build_assistant_agent(org)
-        except RuntimeError as exc:
+        except RuntimeError:
+            logger.info(
+                'Assistant provider is unavailable for organization=%s',
+                org.pk,
+            )
             return Response(
                 {
-                    'detail': str(exc),
-                    'code': str(exc).split(':', 1)[0],
+                    'detail': 'The assistant provider is unavailable.',
+                    'code': 'AI_PROVIDER_UNAVAILABLE',
                     'action': 'Open AI Settings and configure an active text provider.',
                 },
                 status=status.HTTP_409_CONFLICT,
