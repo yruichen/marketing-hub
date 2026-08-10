@@ -32,3 +32,5 @@ These are targets rather than guarantees. Complex provider, infrastructure, or s
 ## Deployment Safety
 
 Production deployments must disable demo bootstrap and mock fallback behavior. Never commit `.env` files, provider keys, deployment keys, database credentials, or session secrets.
+
+If a credential is committed, revoke or rotate it immediately before removing it from the current tree. Treat Git history, forks, clones, caches, and Actions artifacts as potentially retaining the exposed value; a follow-up commit alone is not sufficient incident response.

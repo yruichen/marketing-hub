@@ -19,19 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Block committed env files
-        run: |
-          set -euo pipefail
-          forbidden=()
-          while IFS= read -r file; do
-            forbidden+=("$file")
-          done < <(git ls-files | grep -E '(^|/)\.env(\.|$)' | grep -Ev '\.env\.example$' || true)
-          if ((${#forbidden[@]} > 0)); then
-            echo "::error::Forbidden env files committed: ${forbidden[*]}"
-            exit 1
-          fi
+      - name: Test repository audit
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Audit tracked public content
+        run: python3 scripts/audit_public_release.py --tracked .
 
   backend:
     name: Backend CI

@@ -63,7 +63,7 @@ Django + DRF ── AI Gateway ── 模型 Provider
 marketing-hub/
   backend/        Django API、领域应用、工作流运行时、AI Gateway
   frontend/       React SPA、业务模块、可视化工作流
-  docs/           产品、架构、运维和规划文档
+  docs/           面向社区的产品、架构和贡献者文档
 ```
 
 ## 快速开始
@@ -111,7 +111,7 @@ cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
-环境变量参考 [.env.example](./.env.example) 和 [backend/.env.example](./backend/.env.example)。
+环境变量参考 [frontend/.env.example](./frontend/.env.example) 和 [backend/.env.example](./backend/.env.example)。
 
 ## 验证
 
@@ -133,22 +133,24 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 ## 文档与协作
 
 - [文档索引](./docs/README.md)
-- [工程协作规范](./ENGINEERING_PLAYBOOK.md)
 - [开发流程](./docs/operations/development_workflow.md)
 - [后端模块化](./docs/architecture/backend_modularization.md)
-- [Prompt 治理](./docs/architecture/ai_content_generation_prompt_governance.md)
 - [产品 Walkthrough](./docs/product/walkthrough.md)
+- [公开仓库安全指南](./docs/operations/public_repository_security.md)
 
 项目正在积极开发，当前重点是生产加固、工作流可靠性、AI 评测治理和社区协作体验。
 
+## 加入社区
+
+- 从 [`good first issue`](https://github.com/yruichen/marketing-hub/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22) 或 [`help wanted`](https://github.com/yruichen/marketing-hub/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22) 选择适合上手的任务。
+- 在 [GitHub Discussions](https://github.com/yruichen/marketing-hub/discussions) 提问、分享使用经验或展示你的工作流。
+- 通过 [功能建议表单](https://github.com/yruichen/marketing-hub/issues/new?template=feature_request.yml) 提议产品与架构改进。
+- 如果项目对你有帮助，欢迎点 Star，让更多开发者看到它。
+
 ## 授权模式
 
-Marketing Hub 是**源码可见（source-available）项目，不是纯开源项目**。
+Marketing Hub 采用 [Apache License 2.0](./LICENSE) 开源。该许可证允许商业使用、修改和分发，并包含明确的 NOTICE 与专利授权条款。
 
-- 非商业使用遵循 [PolyForm Noncommercial License 1.0.0](./LICENSE)。
-- 任何商业使用都需要单独购买商业许可证，详见 [商业授权说明](./COMMERCIAL_LICENSE.md)。
-- 贡献遵循 [Contributor Terms](./CONTRIBUTOR_TERMS.md)，确保项目可以同时提供非商业许可和付费商业授权。
-
-仓库目前继续保持私有，待公开范围、隐私审计和现有贡献者授权记录全部完成后，再创建全新的无历史公开仓库。
+欢迎提交聚焦的问题反馈与 Pull Request。提交贡献即表示你同意以 Apache-2.0 许可该贡献，并确认自己有权提交相关内容。
 
 <p align="right"><a href="#readme-top">回到顶部</a></p>

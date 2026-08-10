@@ -26,7 +26,8 @@
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
     <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19" />
     <img src="https://img.shields.io/badge/Django-6-092E20?logo=django&logoColor=white" alt="Django 6" />
-    <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-7C3AED" alt="PolyForm Noncommercial License" />
+    <img src="https://img.shields.io/badge/license-Apache--2.0-7C3AED" alt="Apache License 2.0" />
+    <a href="https://github.com/yruichen/marketing-hub/stargazers"><img src="https://img.shields.io/github/stars/yruichen/marketing-hub?style=flat" alt="GitHub stars" /></a>
   </p>
 </div>
 
@@ -80,7 +81,7 @@ The monorepo is split by runtime:
 marketing-hub/
   backend/        Django API, domain apps, workflow runtime, AI Gateway
   frontend/       React SPA, feature modules, visual workflow builder
-  docs/           Product, architecture, operations, and planning docs
+  docs/           Public product, architecture, and contributor docs
 ```
 
 Backend domains include `accounts`, `workspaces`, `generation`, `community`, `billing`, and `ai_gateway`. Shared models, contracts, RBAC, and compatibility services live in `api`.
@@ -132,7 +133,7 @@ cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
-See [.env.example](./.env.example) and [backend/.env.example](./backend/.env.example) for configuration.
+See [frontend/.env.example](./frontend/.env.example) and [backend/.env.example](./backend/.env.example) for configuration.
 
 ## Verification
 
@@ -154,12 +155,10 @@ GitHub Actions additionally checks migration drift and builds both production Do
 ## Documentation
 
 - [Documentation index](./docs/README.md)
-- [Engineering playbook](./ENGINEERING_PLAYBOOK.md)
 - [Development workflow](./docs/operations/development_workflow.md)
 - [Backend modularization](./docs/architecture/backend_modularization.md)
-- [Prompt governance](./docs/architecture/ai_content_generation_prompt_governance.md)
-- [Global AI assistant plan](./docs/architecture/global_ai_assistant_upgrade_plan.md)
 - [Product walkthrough](./docs/product/walkthrough.md)
+- [Public repository security](./docs/operations/public_repository_security.md)
 
 ## Project Status
 
@@ -167,14 +166,17 @@ Marketing Hub is under active development. The current focus is production harde
 
 Contributions and focused feedback are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md), use the issue forms, and report vulnerabilities through [SECURITY.md](./SECURITY.md).
 
+## Join the Community
+
+- Pick a newcomer-friendly task from [`good first issue`](https://github.com/yruichen/marketing-hub/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22) or [`help wanted`](https://github.com/yruichen/marketing-hub/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22).
+- Ask setup and usage questions in [GitHub Discussions](https://github.com/yruichen/marketing-hub/discussions).
+- Propose product or architecture changes with the [feature request form](https://github.com/yruichen/marketing-hub/issues/new?template=feature_request.yml).
+- If Marketing Hub is useful to you, a star helps more developers discover the project.
+
 ## Licensing
 
-Marketing Hub is **source-available, not open source**.
+Marketing Hub is open source under the [Apache License 2.0](./LICENSE). Commercial use, modification, and distribution are permitted under its terms, including its notice and patent provisions.
 
-- Noncommercial use is available under the [PolyForm Noncommercial License 1.0.0](./LICENSE).
-- Any commercial use requires a separate paid license; see [Commercial Licensing](./COMMERCIAL_LICENSE.md).
-- Contributions are governed by [Contributor Terms](./CONTRIBUTOR_TERMS.md) so the project can offer both noncommercial and commercial licenses.
-
-The repository remains private while its public-release scope and contributor acceptance records are prepared.
+Focused issues and pull requests are welcome. By contributing, you agree that your contribution is licensed under Apache-2.0 and that you have the right to submit it.
 
 <p align="right"><a href="#readme-top">Back to top</a></p>
