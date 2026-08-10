@@ -10,7 +10,7 @@ Use the feature request form. Describe the user problem first, then the proposed
 
 ## Usage Questions
 
-Search the documentation and existing issues first. When GitHub Discussions is enabled, use the Q&A category for setup and usage questions.
+Search the documentation and existing issues first, then use [GitHub Discussions](https://github.com/yruichen/marketing-hub/discussions) for setup and usage questions.
 
 ## Security
 

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 import sys
 from pathlib import Path
+from corsheaders.defaults import default_headers
 from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -168,6 +169,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Configurations
 CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'true' if DEBUG else 'false').lower() == 'true'
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (*default_headers, 'x-mh-debug-errors')
 CORS_EXPOSE_HEADERS = ['X-CSRFToken', 'X-Request-ID']
 CSRF_TRUSTED_ORIGINS = [
     origin

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when a candidate public export contains common private material."""
+"""Audit public repository content for common secrets and private material."""
 
 from __future__ import annotations
 
@@ -7,26 +7,10 @@ import argparse
 import ipaddress
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
-
-DENIED_PATHS = {
-    ".github/workflows/cd.yml",
-    "AGENTS.md",
-    "ENGINEERING_PLAYBOOK.md",
-    "docker-compose.prod.yml",
-    "docs/operations/cicd.md",
-    "docs/operations/public_release_privacy.md",
-    "scripts/deploy.sh",
-}
-
-DENIED_PREFIXES = (
-    ".git/",
-    "backend/scripts/",
-    "docs/archive/",
-    "docs/plans/",
-)
 
 DENIED_DIRECTORY_NAMES = {
     ".agents",
@@ -47,28 +31,40 @@ DENIED_DIRECTORY_NAMES = {
     "tmp",
 }
 
+DENIED_FILENAMES = {".DS_Store"}
+
+DENIED_PATHS = {
+    ".github/workflows/cd.yml",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "ENGINEERING_PLAYBOOK.md",
+    "docker-compose.prod.yml",
+    "frontend/src/MODULE_ARCHITECTURE.md",
+    "scripts/deploy.sh",
+}
+
+DENIED_PREFIXES = (
+    "backend/scripts/",
+    "docs/archive/",
+    "docs/internal/",
+    "docs/plans/",
+    "docs/private/",
+)
+
 DENIED_SUFFIXES = {
     ".7z",
     ".bak",
     ".db",
-    ".doc",
-    ".docx",
     ".dump",
     ".key",
     ".log",
-    ".numbers",
-    ".pages",
+    ".p12",
     ".pem",
     ".pfx",
-    ".pkl",
-    ".ppt",
-    ".pptx",
     ".rar",
     ".sqlite",
     ".sqlite3",
     ".tar",
-    ".xls",
-    ".xlsx",
     ".zip",
 }
 
@@ -77,9 +73,17 @@ SECRET_PATTERNS = {
     "OpenAI-style key": re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
     "AWS access key": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     "Google API key": re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"),
+    "Slack token": re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
+    "Stripe live key": re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b"),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    "credentialed service URL": re.compile(
+        r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://"
+        r"[^:/\s]+:[^@/\s]+@[^\s]+"
+    ),
     "local absolute path": re.compile(
-        r"(?:/Users/[^/\s]+|/home/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)"
+        r"(?:(?<![A-Za-z0-9._-])/Users/[^/\s]+|"
+        r"(?<![A-Za-z0-9._-])/home/[^/\s]+|"
+        r"[A-Za-z]:\\Users\\[^\\\s]+)"
     ),
     "Chinese mobile number": re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"),
     "Chinese identity number": re.compile(
@@ -104,19 +108,27 @@ DOCUMENTATION_NETWORKS = (
     ipaddress.ip_network("203.0.113.0/24"),
 )
 
-MANUAL_REVIEW_SUFFIXES = {".gif", ".jpeg", ".jpg", ".pdf", ".png", ".svg", ".webp"}
+MANUAL_REVIEW_SUFFIXES = {
+    ".doc",
+    ".docx",
+    ".gif",
+    ".jpeg",
+    ".jpg",
+    ".numbers",
+    ".pages",
+    ".pdf",
+    ".png",
+    ".ppt",
+    ".pptx",
+    ".svg",
+    ".webp",
+    ".xls",
+    ".xlsx",
+}
 
 
 def relative_path(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
-
-
-def is_denied_path(relative: str, path: Path) -> bool:
-    if relative in DENIED_PATHS:
-        return True
-    if any(relative.startswith(prefix) for prefix in DENIED_PREFIXES):
-        return True
-    return path.suffix.lower() in DENIED_SUFFIXES
 
 
 def is_allowed_ip(value: str) -> bool:
@@ -129,34 +141,61 @@ def is_allowed_ip(value: str) -> bool:
     return any(address in network for network in DOCUMENTATION_NETWORKS)
 
 
-def audit(root: Path) -> tuple[list[tuple[str, str]], list[str]]:
-    findings: list[tuple[str, str]] = []
-    manual_review: list[str] = []
-
+def filesystem_files(root: Path) -> tuple[list[Path], list[tuple[str, str]]]:
     files: list[Path] = []
+    findings: list[tuple[str, str]] = []
+
     for current, directories, filenames in os.walk(root):
         current_path = Path(current)
         retained_directories = []
         for name in directories:
             directory = current_path / name
-            relative = relative_path(directory, root)
-            denied_prefix = f"{relative}/"
-            denied = name in DENIED_DIRECTORY_NAMES or any(
-                denied_prefix.startswith(prefix) for prefix in DENIED_PREFIXES
-            )
-            if denied:
-                findings.append((relative, "denied directory"))
+            if name in DENIED_DIRECTORY_NAMES:
+                findings.append((relative_path(directory, root), "denied directory"))
             else:
                 retained_directories.append(name)
         directories[:] = retained_directories
         files.extend(current_path / name for name in filenames)
 
-    for path in sorted(files):
+    return files, findings
 
+
+def tracked_files(root: Path) -> list[Path]:
+    result = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    )
+    return [
+        root / value.decode("utf-8", errors="surrogateescape")
+        for value in result.stdout.split(b"\0")
+        if value
+    ]
+
+
+def audit(root: Path, *, tracked_only: bool = False) -> tuple[list[tuple[str, str]], list[str]]:
+    findings: list[tuple[str, str]] = []
+    manual_review: list[str] = []
+
+    if tracked_only:
+        files = tracked_files(root)
+    else:
+        files, directory_findings = filesystem_files(root)
+        findings.extend(directory_findings)
+
+    for path in sorted(files):
         relative = relative_path(path, root)
 
-        if is_denied_path(relative, path):
-            findings.append((relative, "denied path or binary type"))
+        # A tracked file can be intentionally removed in the pending change.
+        if tracked_only and not path.exists() and not path.is_symlink():
+            continue
+
+        if relative in DENIED_PATHS or any(relative.startswith(prefix) for prefix in DENIED_PREFIXES):
+            findings.append((relative, "internal-only path"))
+            continue
+
+        if path.name in DENIED_FILENAMES or path.suffix.lower() in DENIED_SUFFIXES:
+            findings.append((relative, "denied file type"))
             continue
 
         if path.name.startswith(".env") and not path.name.endswith(".example"):
@@ -167,9 +206,9 @@ def audit(root: Path) -> tuple[list[tuple[str, str]], list[str]]:
             manual_review.append(relative)
 
         try:
-            raw = path.read_bytes()
+            raw = os.readlink(path).encode() if path.is_symlink() else path.read_bytes()
         except OSError:
-            findings.append((relative, "unreadable file"))
+            findings.append((relative, "missing or unreadable file"))
             continue
 
         if b"\x00" in raw:
@@ -177,6 +216,7 @@ def audit(root: Path) -> tuple[list[tuple[str, str]], list[str]]:
 
         text = raw.decode("utf-8", errors="replace")
 
+        # The scanner necessarily contains the signatures it detects.
         if relative == "scripts/audit_public_release.py":
             continue
 
@@ -206,22 +246,30 @@ def audit(root: Path) -> tuple[list[tuple[str, str]], list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Audit a history-free candidate directory before creating a public repository."
+        description="Audit public repository content before pushing it to GitHub."
     )
-    parser.add_argument("root", type=Path, help="Candidate public export directory")
+    parser.add_argument("root", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--tracked",
+        action="store_true",
+        help="scan only files tracked by the Git repository",
+    )
     args = parser.parse_args()
 
     root = args.root.expanduser().resolve()
     if not root.is_dir():
         parser.error(f"not a directory: {root}")
 
-    findings, manual_review = audit(root)
+    try:
+        findings, manual_review = audit(root, tracked_only=args.tracked)
+    except subprocess.CalledProcessError as exc:
+        parser.error(f"unable to list tracked files: {exc.stderr.decode(errors='replace').strip()}")
 
     for relative, label in findings:
         print(f"BLOCK {relative}: {label}")
 
     for relative in manual_review:
-        print(f"REVIEW {relative}: inspect visual/binary content manually")
+        print(f"REVIEW {relative}: inspect visual or binary content manually")
 
     print(
         f"Audit complete: {len(findings)} blocking finding(s), "

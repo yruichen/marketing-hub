@@ -96,7 +96,7 @@ npm run test:e2e
 - Put new frontend product work under `features/<domain>/` instead of expanding `App.tsx`.
 - Use the shared API client and existing design system.
 
-See [ENGINEERING_PLAYBOOK.md](./ENGINEERING_PLAYBOOK.md) for the full engineering conventions.
+See [Development Workflow](./docs/operations/development_workflow.md) and [Backend Modularization](./docs/architecture/backend_modularization.md) for the public engineering conventions.
 
 ## Conduct
 
@@ -104,6 +104,4 @@ Participation is governed by [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ## Licensing Contributions
 
-Marketing Hub uses a source-available noncommercial license plus separate commercial licensing. By opening a pull request, contributors must explicitly accept [CONTRIBUTOR_TERMS.md](./CONTRIBUTOR_TERMS.md), which preserves contributor ownership while granting the project the rights needed to distribute and commercially sublicense contributions.
-
-Existing contributions require separate explicit acceptance before a public commercial launch. Consult qualified legal counsel before relying on these terms for a commercial transaction.
+Marketing Hub is licensed under [Apache License 2.0](./LICENSE). By submitting a pull request, you agree to license your contribution under Apache-2.0 and confirm that you have the right to submit it, including any third-party code, assets, data, and notices it contains.
