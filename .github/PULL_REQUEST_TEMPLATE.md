@@ -43,4 +43,4 @@
 - [ ] Tests cover the changed behavior or the testing gap is explained.
 - [ ] Documentation is updated where needed.
 - [ ] No secrets, personal data, or generated artifacts are committed.
-- [ ] I have the right to submit this contribution and agree to license it under [Apache-2.0](../LICENSE).
+- [ ] I have the right to submit this contribution and agree to license it under the [repository license](../LICENSE).

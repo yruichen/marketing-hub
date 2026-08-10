@@ -3,7 +3,7 @@ name = "marketing-hub-backend"
 version = "0.1.0"
 description = "Django API, workflow runtime, and AI provider gateway for Marketing Hub"
 readme = "README.md"
-license = "Apache-2.0"
+license = "PolyForm-Noncommercial-1.0.0"
 requires-python = ">=3.12"
 dependencies = [
     "celery>=5.5.0",

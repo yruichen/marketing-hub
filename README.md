@@ -26,7 +26,7 @@
     <img src="https://img.shields.io/badge/Node.js-22-339933?logo=node.js&logoColor=white" alt="Node.js 22" />
     <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111" alt="React 19" />
     <img src="https://img.shields.io/badge/Django-6-092E20?logo=django&logoColor=white" alt="Django 6" />
-    <img src="https://img.shields.io/badge/license-Apache--2.0-7C3AED" alt="Apache License 2.0" />
+    <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-7C3AED" alt="PolyForm Noncommercial License 1.0.0" />
     <a href="https://github.com/yruichen/marketing-hub/stargazers"><img src="https://img.shields.io/github/stars/yruichen/marketing-hub?style=flat" alt="GitHub stars" /></a>
   </p>
 </div>
@@ -175,8 +175,8 @@ Contributions and focused feedback are welcome. Read [CONTRIBUTING.md](./CONTRIB
 
 ## Licensing
 
-Marketing Hub is open source under the [Apache License 2.0](./LICENSE). Commercial use, modification, and distribution are permitted under its terms, including its notice and patent provisions.
+Marketing Hub is source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE). It may be used, modified, and redistributed only for permitted noncommercial purposes. Commercial use—including using the software to operate, support, or build a revenue-generating business—requires a separate written license from the copyright holder.
 
-Focused issues and pull requests are welcome. By contributing, you agree that your contribution is licensed under Apache-2.0 and that you have the right to submit it.
+This is not an OSI-approved open-source license because it restricts commercial use. Focused issues and pull requests are welcome. By contributing, you agree that your contribution is licensed under the repository license and that you have the right to submit it.
 
 <p align="right"><a href="#readme-top">Back to top</a></p>

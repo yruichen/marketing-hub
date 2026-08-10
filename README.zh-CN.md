@@ -149,8 +149,8 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 
 ## 授权模式
 
-Marketing Hub 采用 [Apache License 2.0](./LICENSE) 开源。该许可证允许商业使用、修改和分发，并包含明确的 NOTICE 与专利授权条款。
+Marketing Hub 以 [PolyForm Noncommercial License 1.0.0](./LICENSE) 公开源码。允许在许可证规定的非商业目的下使用、修改和分发；任何商业使用——包括利用本软件运营、支持或构建营利性业务——都需要事先取得版权所有者另行出具的书面商业许可。
 
-欢迎提交聚焦的问题反馈与 Pull Request。提交贡献即表示你同意以 Apache-2.0 许可该贡献，并确认自己有权提交相关内容。
+由于限制商业使用，本项目不属于 OSI 定义的开源软件，而是 source-available（源码可见）项目。欢迎提交聚焦的问题反馈与 Pull Request；提交贡献即表示你同意按仓库当前许可证授权该贡献，并确认自己有权提交相关内容。
 
 <p align="right"><a href="#readme-top">回到顶部</a></p>
