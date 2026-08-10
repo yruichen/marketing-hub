@@ -1,0 +1,1 @@
+"""Bounded custom-agent capability."""

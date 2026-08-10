@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useState } from 'react';
 import { apiFetch, parseApiErrorResponse } from '../../hooks/useApi';
-import { buildErrorToast, resolveErrorActionsFromRaw } from '../../shared/api/errorActions';
+import { buildErrorToast } from '../../shared/api/errorActions';
 import type { ToastMessage } from '../../shared/types/toast';
 import type { GenerationTaskRecord } from '../../types/workspace';
 import type { WorkspaceScope } from '../dashboard/types';
@@ -14,8 +14,6 @@ import {
   taskProgressMessage,
   type GenerationTaskUiState,
 } from './taskStatus';
-
-const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -110,10 +108,10 @@ export function useGenerationTask({
         body: JSON.stringify({
           task_type: taskType,
           payload,
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
-          campaign: workspaceScope?.campaign.id,
+          campaign: workspaceScope?.campaign?.id,
           run_now: true,
         }),
       });
@@ -228,10 +226,10 @@ export function useGenerationTask({
         method: 'POST',
         body: JSON.stringify({
           ...payload,
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
-          campaign: workspaceScope?.campaign.id,
+          campaign: workspaceScope?.campaign?.id,
           async: true,
         }),
       });
@@ -318,22 +316,17 @@ export function useGenerationTask({
       setLastCompletedTaskId(task.id);
       await fetchDashboard();
       await onWorkspaceRefresh?.();
-      const result = task.result.data as VideoOutput;
       const successProgress = taskProgressMessage(task);
       setTaskUiState({
         phase: 'succeeded',
         task,
         title: successProgress.title,
-        message: result.is_demo_fallback ? '已返回演示视频，未调用真实视频模型。' : successProgress.message,
-        detail: result.is_demo_fallback ? '请在 AI 设置检查 Agnes 视频模型配置。' : successProgress.detail,
-        recoveryActions: result.is_demo_fallback ? ['前往 AI 设置检查 API Key', '确认视频模型名称', '重新运行视频任务'] : undefined,
-        actions: result.is_demo_fallback
-          ? resolveErrorActionsFromRaw('前往 AI 设置检查 API Key')
-          : undefined,
+        message: successProgress.message,
+        detail: successProgress.detail,
       });
       triggerToast(
-        result.is_demo_fallback ? '演示视频已返回（非真实 API）' : '视频已生成，可在下方直接播放',
-        result.is_demo_fallback ? 'info' : 'success',
+        '视频已生成，可在下方直接播放',
+        'success',
       );
     } catch (err) {
       const errorInfo = explainGenerationError(err);

@@ -1,0 +1,1 @@
+"""Image prompt capability assets."""

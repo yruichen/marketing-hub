@@ -1,0 +1,1 @@
+{"id":"continuous-video","input":{"video_topic":"Reusable bottle","duration":5,"aspect_ratio":"9:16"},"assertions":["motion_explicit","continuity_explicit","provider_constraints_preserved"]}

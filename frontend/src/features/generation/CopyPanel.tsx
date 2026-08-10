@@ -42,22 +42,18 @@ export function CopyPanel({
   void _loading;
   void _setLoading;
   const [copyInput, setCopyInput] = useState({
-    brandName: 'Marketing-Hub',
-    description: 'AI 营销场景全能助手，秒级生成爆款图文',
-    tone: '爆款活泼',
+    brandName: '',
+    description: '',
+    tone: '',
     platform: 'Xiaohongshu',
   });
   const [copyOutput, setCopyOutput] = useState<CopyOutput>({
-    platform: 'Xiaohongshu',
-    tone: '爆款活泼',
-    title: '🔥 救命！这个 Marketing-Hub 真的绝了！后悔没早点发现！',
-    paragraphs: [
-      '家人们谁懂啊！今天必须给你们安利这个神仙单品：【Marketing-Hub】！它的核心功能是 AI 营销场景全能助手，秒级生成爆款图文，简直是创作者和打工人的福利！😭',
-      '用了一段时间，从打开到出稿全程丝滑，细节打磨得很到位，那种越用越顺手的爽感真的会上瘾。✨',
-      '姐妹们听我的，闭眼入不踩雷！早买早享受，别怪我没提醒你们哦～'
-    ],
-    tags: ['安利神仙单品', '好物分享', '高颜值实用', 'Marketing-Hub', '宝藏工具'],
-    call_to_action: '👉 立即点击体验 Marketing-Hub，解锁你的创意生产力！'
+    platform: '',
+    tone: '',
+    title: '',
+    paragraphs: [],
+    tags: [],
+    call_to_action: '',
   });
 
   const [isRunning, setIsRunning] = useState(false);
@@ -189,7 +185,7 @@ export function CopyPanel({
             </div>
           </div>
 
-          <div className="space-y-5">
+          {copyOutput.title ? <div className="space-y-5">
             <div className="border border-[var(--editorial-stroke)] bg-[var(--editorial-bg)]/50 px-3 py-2 text-[10px] font-black uppercase text-[var(--editorial-text-muted)]">
               AI 生成初稿，发布前需人工审核
             </div>
@@ -208,12 +204,11 @@ export function CopyPanel({
                 <span key={idx}>#{t}</span>
               ))}
             </div>
-          </div>
-
-          <div className="absolute bottom-3 left-6 right-6 flex justify-between items-center text-[9px] font-mono text-[var(--editorial-text-gray)] uppercase border-t border-dashed border-[var(--editorial-stroke)]/40 pt-2.5 mt-4">
-            <span>SEED: 827419-TYP</span>
-            <span>MODEL: MANUSCRIPT-V2</span>
-          </div>
+          </div> : (
+            <div className="flex flex-1 items-center justify-center border border-dashed border-[var(--editorial-stroke)] p-8 text-center text-xs text-[var(--editorial-text-gray)]">
+              填写品牌和产品信息，并在 AI 设置中配置文本 Provider 后开始生成。
+            </div>
+          )}
           <SaveControlBar
             visible={taskUiState.phase === 'succeeded'}
             taskId={lastCompletedTaskId}

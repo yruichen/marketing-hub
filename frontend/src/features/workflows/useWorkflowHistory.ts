@@ -1,113 +1,79 @@
-import { useCallback, useRef, useState } from 'react';
-import type { WorkflowEdge, WorkflowNode } from '../../types/workspace';
-import type { BrandContext } from '../../types/workspace';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { WorkflowSnapshot } from './types';
 
-export function useWorkflowHistory() {
+type WorkflowHistoryOptions = {
+  makeSnapshot: (label: string) => WorkflowSnapshot;
+  restoreSnapshot: (snapshot: WorkflowSnapshot) => void;
+  onRestore?: () => void;
+  debounceMs?: number;
+  limit?: number;
+};
+
+export function useWorkflowHistory({
+  makeSnapshot,
+  restoreSnapshot,
+  onRestore,
+  debounceMs = 800,
+  limit = 25,
+}: WorkflowHistoryOptions) {
   const [history, setHistory] = useState<WorkflowSnapshot[]>([]);
   const [future, setFuture] = useState<WorkflowSnapshot[]>([]);
-  const [versions, setVersions] = useState<WorkflowSnapshot[]>([]);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pushSnapshot = useCallback((snapshot: WorkflowSnapshot) => {
-    setHistory((prev) => [...prev.slice(-24), snapshot]);
+    setHistory((previous) => [...previous.slice(-(limit - 1)), snapshot]);
+    setFuture([]);
+  }, [limit]);
+
+  const resetHistory = useCallback((snapshot?: WorkflowSnapshot) => {
+    setHistory(snapshot ? [snapshot] : []);
     setFuture([]);
   }, []);
 
-  const makeAndPush = useCallback((
-    label: string,
-    nodes: WorkflowNode[],
-    edges: WorkflowEdge[],
-    brandContext: BrandContext,
-    selectedNodeId: string,
-  ) => {
-    const snapshot: WorkflowSnapshot = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      label,
-      createdAt: new Date().toISOString(),
-      nodes: nodes.map((n) => ({ ...n, config: { ...n.config }, output: { ...(n.output || {}) } })),
-      edges: edges.map((e) => ({ ...e })),
-      brandContext: { ...brandContext },
-      selectedNodeId,
-    };
-    pushSnapshot(snapshot);
-  }, [pushSnapshot]);
+  const markHistory = useCallback((label: string) => {
+    pushSnapshot(makeSnapshot(label));
+  }, [makeSnapshot, pushSnapshot]);
 
-  const debouncedPush = useCallback((
-    label: string,
-    nodes: WorkflowNode[],
-    edges: WorkflowEdge[],
-    brandContext: BrandContext,
-    selectedNodeId: string,
-  ) => {
+  const debouncedMarkHistory = useCallback((label: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      makeAndPush(label, nodes, edges, brandContext, selectedNodeId);
-    }, 800);
-  }, [makeAndPush]);
+    timerRef.current = setTimeout(() => pushSnapshot(makeSnapshot(label)), debounceMs);
+  }, [debounceMs, makeSnapshot, pushSnapshot]);
 
-  const addVersion = useCallback((snapshot: WorkflowSnapshot) => {
-    setVersions((prev) => [snapshot, ...prev].slice(0, 12));
-  }, []);
-
-  const undo = useCallback((
-    currentNodes: WorkflowNode[],
-    currentEdges: WorkflowEdge[],
-    currentBrandContext: BrandContext,
-    currentSelectedNodeId: string,
-    restore: (snap: WorkflowSnapshot) => void,
-  ) => {
-    setHistory((prev) => {
-      const snapshot = prev[prev.length - 1];
-      if (!snapshot) return prev;
-      const currentSnapshot: WorkflowSnapshot = {
-        id: `${Date.now()}-redo`,
-        label: '重做点',
-        createdAt: new Date().toISOString(),
-        nodes: currentNodes.map((n) => ({ ...n, config: { ...n.config }, output: { ...(n.output || {}) } })),
-        edges: currentEdges.map((e) => ({ ...e })),
-        brandContext: { ...currentBrandContext },
-        selectedNodeId: currentSelectedNodeId,
-      };
-      setFuture((items) => [currentSnapshot, ...items].slice(0, 25));
-      restore(snapshot);
-      return prev.slice(0, -1);
+  const undo = useCallback(() => {
+    const current = makeSnapshot('重做点');
+    setHistory((previous) => {
+      const snapshot = previous.at(-1);
+      if (!snapshot) return previous;
+      setFuture((items) => [current, ...items].slice(0, limit));
+      restoreSnapshot(snapshot);
+      onRestore?.();
+      return previous.slice(0, -1);
     });
-  }, []);
+  }, [limit, makeSnapshot, onRestore, restoreSnapshot]);
 
-  const redo = useCallback((
-    currentNodes: WorkflowNode[],
-    currentEdges: WorkflowEdge[],
-    currentBrandContext: BrandContext,
-    currentSelectedNodeId: string,
-    restore: (snap: WorkflowSnapshot) => void,
-  ) => {
-    setFuture((prev) => {
-      const snapshot = prev[0];
-      if (!snapshot) return prev;
-      const currentSnapshot: WorkflowSnapshot = {
-        id: `${Date.now()}-undo`,
-        label: '撤销点',
-        createdAt: new Date().toISOString(),
-        nodes: currentNodes.map((n) => ({ ...n, config: { ...n.config }, output: { ...(n.output || {}) } })),
-        edges: currentEdges.map((e) => ({ ...e })),
-        brandContext: { ...currentBrandContext },
-        selectedNodeId: currentSelectedNodeId,
-      };
-      setHistory((items) => [...items.slice(-24), currentSnapshot]);
-      restore(snapshot);
-      return prev.slice(1);
+  const redo = useCallback(() => {
+    const current = makeSnapshot('撤销点');
+    setFuture((previous) => {
+      const snapshot = previous[0];
+      if (!snapshot) return previous;
+      setHistory((items) => [...items.slice(-(limit - 1)), current]);
+      restoreSnapshot(snapshot);
+      onRestore?.();
+      return previous.slice(1);
     });
+  }, [limit, makeSnapshot, onRestore, restoreSnapshot]);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
   return {
     history,
     future,
-    versions,
     pushSnapshot,
-    makeAndPush,
-    debouncedPush,
-    addVersion,
+    resetHistory,
+    markHistory,
+    debouncedMarkHistory,
     undo,
     redo,
   };

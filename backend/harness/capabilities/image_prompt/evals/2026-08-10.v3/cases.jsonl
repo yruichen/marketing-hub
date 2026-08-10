@@ -1,0 +1,1 @@
+{"id":"model-ready-image-prompt","input":{"subject":"Reusable steel bottle","aspect_ratio":"4:5","output_locale":"en-US"},"assertions":["valid_schema","english_model_prompt","composition_explicit"]}

@@ -237,6 +237,7 @@ export interface WorkflowRunRecord {
   estimated_cost_usd: string;
   actual_cost_usd: string;
   celery_task_id: string;
+  attempt_count?: number;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -323,6 +324,7 @@ export interface GenerationTaskRecord {
   task_type: 'copy' | 'image' | 'image_prompt' | 'storyboard' | 'video' | 'audio' | 'review' | 'rag_search' | 'custom_agent' | 'brainstorm';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   celery_task_id?: string;
+  attempt_count?: number;
   result: {
     data?: unknown;
     logs?: string[];
@@ -332,6 +334,7 @@ export interface GenerationTaskRecord {
   cost_usd?: string;
   created_at: string;
   updated_at?: string;
+  started_at?: string | null;
   completed_at?: string | null;
 }
 

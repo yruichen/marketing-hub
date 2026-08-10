@@ -1,9 +1,7 @@
-from django.conf import settings
 from django.utils.text import slugify
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from api.models import Campaign, Membership, Organization, Project
-from api.services import ensure_demo_workspace
 
 
 def authenticated_user(request):
@@ -14,6 +12,12 @@ def authenticated_user(request):
 
 
 def get_scope(request):
+    """Resolve the caller's tenant scope without mutating workspace data.
+
+    Workspace creation belongs to explicit onboarding and collection POST
+    endpoints. Keeping this resolver read-only prevents a GET request from
+    silently creating projects or campaigns.
+    """
     user = authenticated_user(request)
     if not user:
         raise PermissionDenied('Authentication required.')
@@ -31,38 +35,32 @@ def get_scope(request):
 
     if project_slug:
         project = Project.objects.filter(slug=project_slug, organization=org).first()
+        if not project:
+            raise NotFound('Project not found in the selected organization.')
     else:
         project = Project.objects.filter(organization=org).order_by('-created_at').first()
-    if not project:
-        project = Project.objects.create(
-            organization=org,
-            name='Default Project',
-            slug=slugify(f'{org.slug}-default-project')[:50] or 'default-project',
-            brief='Default workspace project',
-        )
+    if campaign_id and not project:
+        raise NotFound('A campaign cannot be selected without a project.')
     if campaign_id:
         campaign = Campaign.objects.filter(pk=campaign_id, project=project).first()
+        if not campaign:
+            raise NotFound('Campaign not found in the selected project.')
+    elif project:
+        campaign = Campaign.objects.filter(project=project).order_by('-created_at').first()
     else:
         campaign = None
-    if not campaign or campaign.project_id != project.id:
-        campaign = Campaign.objects.filter(project=project).order_by('-created_at').first()
-    if not campaign:
-        campaign = Campaign.objects.create(
-            project=project,
-            name='Default Campaign',
-            objective='Default campaign workspace',
-        )
 
     return user, org, project, campaign
 
 
-def get_demo_scope(request):
-    if not (settings.DEBUG and settings.MARKETING_HUB_BOOTSTRAP_DEMO):
-        raise PermissionDenied('Demo workspace bootstrap is disabled.')
-    user = authenticated_user(request)
-    username = user.username if user else (request.query_params.get('username') or request.data.get('username'))
-    workspace = ensure_demo_workspace(username)
-    return workspace['user'], workspace['organization'], workspace['project'], workspace['campaign']
+def require_workspace_scope(request):
+    """Resolve a complete workspace scope for endpoints that require a draft."""
+    user, organization, project, campaign = get_scope(request)
+    if project is None:
+        raise NotFound('No project exists in the selected organization. Create a project first.')
+    if campaign is None:
+        raise NotFound('No campaign exists in the selected project. Create a campaign first.')
+    return user, organization, project, campaign
 
 
 def member_role(user, organization: Organization | None) -> str | None:

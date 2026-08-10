@@ -340,10 +340,13 @@ class GenerationTask(models.Model):
     result = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True, default='')
     celery_task_id = models.CharField(max_length=255, blank=True, default='')
+    execution_id = models.UUIDField(null=True, blank=True, editable=False)
+    attempt_count = models.PositiveIntegerField(default=0)
     token_count = models.IntegerField(default=0)
     cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -351,6 +354,42 @@ class GenerationTask(models.Model):
 
     def __str__(self) -> str:
         return f'{self.task_type}:{self.status}:{self.id}'
+
+
+class HarnessRun(models.Model):
+    STATUS_CHOICES = [
+        ('queued', 'Queued'),
+        ('running', 'Running'),
+        ('waiting_approval', 'Waiting Approval'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    run_id = models.UUIDField(primary_key=True, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='harness_runs',
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='harness_runs',
+        null=True,
+        blank=True,
+    )
+    capability = models.CharField(max_length=80, db_index=True)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, db_index=True)
+    trace_id = models.CharField(max_length=120, blank=True, default='', db_index=True)
+    state = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
 
 class WorkspaceDraft(models.Model):
@@ -364,7 +403,7 @@ class WorkspaceDraft(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='workspace_drafts')
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='workspace_drafts')
     campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='workspace_drafts')
-    name = models.CharField(max_length=160, default='Default Workflow')
+    name = models.CharField(max_length=160, default='Untitled Workflow')
     brand_context = models.JSONField(default=dict, blank=True)
     nodes = models.JSONField(default=list, blank=True)
     edges = models.JSONField(default=list, blank=True)
@@ -410,6 +449,8 @@ class WorkflowRun(models.Model):
     estimated_cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     actual_cost_usd = models.DecimalField(max_digits=10, decimal_places=4, default=0)
     celery_task_id = models.CharField(max_length=255, blank=True, default='')
+    execution_id = models.UUIDField(null=True, blank=True, editable=False)
+    attempt_count = models.PositiveIntegerField(default=0)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -493,7 +534,7 @@ class WorkflowTemplate(models.Model):
     source_campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='workflow_templates')
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True, default='')
-    author_username = models.CharField(max_length=100, default='DEMO')
+    author_username = models.CharField(max_length=100, blank=True, default='')
     brand_context = models.JSONField(default=dict, blank=True)
     nodes = models.JSONField(default=list, blank=True)
     edges = models.JSONField(default=list, blank=True)
@@ -516,7 +557,7 @@ class UsageEvent(models.Model):
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='usage_events')
     campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='usage_events')
     generation_task = models.ForeignKey(GenerationTask, on_delete=models.SET_NULL, null=True, blank=True, related_name='usage_events')
-    provider = models.CharField(max_length=32, default='mock')
+    provider = models.CharField(max_length=32, default='unreported')
     model_name = models.CharField(max_length=128, blank=True, default='')
     prompt_tokens = models.IntegerField(default=0)
     completion_tokens = models.IntegerField(default=0)
@@ -637,7 +678,6 @@ class EnterpriseContactRequest(models.Model):
 
 class AIConfiguration(models.Model):
     PROVIDER_CHOICES = [
-        ('mock', 'Mock Sandbox Simulator'),
         ('agnes', 'Agnes AI'),
         ('gemini', 'Google Gemini API'),
         ('openai', 'OpenAI API'),
@@ -664,7 +704,7 @@ class AIConfiguration(models.Model):
         blank=True,
         help_text='Blank means platform-managed configuration. BYOK keys must be organization-scoped.',
     )
-    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='mock')
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='agnes')
     api_key = models.CharField(max_length=255, blank=True, default='')
     api_key_encrypted = models.TextField(blank=True, default='')
     api_key_fingerprint = models.CharField(max_length=64, blank=True, default='')
@@ -828,7 +868,7 @@ class CommunityCreation(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='community_creations', null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
     campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='community_creations')
-    username = models.CharField(max_length=100, default='DEMO')
+    username = models.CharField(max_length=100, blank=True, default='')
     creation_type = models.CharField(max_length=20, choices=CREATION_TYPES)
     title = models.CharField(max_length=255)
     content = models.TextField(help_text='JSON-serialized creation details')

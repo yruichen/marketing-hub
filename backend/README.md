@@ -15,7 +15,9 @@ The backend is organized as a domain-modular Django application set. The `api` a
 - `community`
   - Community publishing, likes, and brand inspiration search.
 - `ai_gateway`
-  - Provider configuration, BYOK settings, base URL, and model selection.
+  - Provider configuration and compatibility entry points.
+- `harness`
+  - AI contracts, capabilities, versioned prompts/evals, runtime, policy, ports, and adapters.
 - `billing`
   - Subscription plans and quota rules.
 
@@ -24,7 +26,8 @@ The backend is organized as a domain-modular Django application set. The `api` a
 - `backend/api/contracts.py` - Shared domain contracts and IO schema.
 - `backend/api/scope.py` - Request scope helpers and slug utilities.
 - `backend/api/serializers.py` - Shared model serializers.
-- `backend/ARCHITECTURE.md` - Collaboration and module ownership rules.
+- `backend/harness/facade.py` - Stable AI boundary used by business services.
+- `docs/architecture/ai_harness.md` - Harness dependency and extension rules.
 
 ## Local Workflow
 
@@ -51,4 +54,5 @@ uv run python manage.py migrate
 - Prefer one domain app per business area.
 - Keep compatibility URLs stable unless there is a deliberate migration plan.
 - Put shared request helpers in `api/scope.py`, not inside individual views.
-
+- Keep provider calls and prompt assets behind the harness boundary.
+- Never return synthetic generation results when configuration or providers fail.

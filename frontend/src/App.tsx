@@ -28,8 +28,8 @@ import { AssetsLibrary } from './features/assets';
 import { publishAssetToCommunity } from './features/assets/publishAssetToCommunity';
 import { CopyPanel, ImagePanel, StoryboardPanel, AudioPanel, VideoPanel } from './features/generation';
 import { taskTypeLabels, type CreationContent, type StoryboardOutput } from './features/generation';
-import { ContentPackagePanel, buildContentPackage, buildContentPackageRequest } from './features/content-package';
-import type { ContentPackage } from './features/generation';
+import { ContentPackagePanel, buildContentPackageRequest } from './features/content-package';
+import type { ContentPackage, ContentVersion } from './features/generation';
 import { TemplateLibraryPage } from './features/community';
 import { ProfilePage } from './features/profile';
 import { DashboardPage, useDashboardSnapshot, useWorkspaceScope } from './features/dashboard';
@@ -48,6 +48,7 @@ import {
   type PageContext,
 } from './features/assistant';
 import { useUiStore, type AppSection } from './shared/stores/uiStore';
+import { useI18n } from './shared/i18n';
 import type { AssetRecord, CampaignRecord, ProjectRecord, GenerationTaskRecord, BillingPlanResponse } from './types/workspace';
 
 const WorkflowBuilder = lazy(() =>
@@ -71,7 +72,7 @@ type AuthMeResponse = {
   admin_mode?: boolean;
   is_staff?: boolean;
   is_superuser?: boolean;
-  demo_account?: boolean;
+  workspace_required?: boolean;
   organization?: string;
   project?: string;
   campaign?: number;
@@ -95,10 +96,6 @@ type TopbarNotification = {
   actionLabel?: string;
   onAction?: () => void;
 };
-
-const ENABLE_DEMO_LOGIN = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true' || import.meta.env.DEV;
-const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || '123';
 
 const ACTIVE_TASK_STATUSES = new Set(['queued', 'running']);
 
@@ -146,73 +143,52 @@ function profileUsernameFromPath(pathname: string) {
   }
 }
 
-const LEGAL_COPY: Record<string, { title: string; body: string[] }> = {
-  terms: {
-    title: '服务条款（Beta）',
-    body: [
-      '这是 Marketing Hub beta 阶段的服务条款占位页，用于测试版本追踪和用户同意流程。',
-      '正式上线前，服务范围、账户责任、可接受使用、AI 输出责任、暂停/终止、免责声明和争议处理条款必须由法务复核后替换。',
-      '当前产品中的 AI 生成内容均为初稿，发布前需要用户自行进行真实性、合法性、广告合规和知识产权审核。',
-    ],
-  },
-  privacy: {
-    title: '隐私政策（Beta）',
-    body: [
-      '这是 Marketing Hub beta 阶段的隐私政策占位页，用于测试个人信息告知、版本追踪和同意记录。',
-      '正式上线前，需要补齐运营主体、联系方式、数据类型、处理目的、保存期限、第三方共享、跨境数据和用户权利流程。',
-      '平台会处理账号信息、组织成员信息、项目/品牌上下文、生成输入输出、素材、AI provider 调用记录、审计日志和额度记录。',
-    ],
-  },
-  'ai-usage': {
-    title: 'AI 生成内容使用规则（Beta）',
-    body: [
-      'AI 输出仅作为营销内容初稿，不构成平台对广告真实性、合规性、版权或商业效果的担保。',
-      '用户公开发布前必须进行人工审核，高风险行业内容应经过专业人士复核。',
-    ],
-  },
-  community: {
-    title: '社区发布规则（Beta）',
-    body: [
-      '社区内容不得包含违法、侵权、虚假广告、未授权素材、个人敏感信息或规避审核的内容。',
-      '被举报内容可被临时隐藏、下架并进入复核流程。',
-    ],
-  },
-  'asset-rights': {
-    title: '素材上传授权声明（Beta）',
-    body: [
-      '上传素材前，用户必须确认其拥有权利或已取得在工作区内使用、编辑、生成和发布所需授权。',
-      '未经授权的商标、肖像、字体、音乐、图片和视频素材不得用于公开模板或社区内容。',
-    ],
-  },
-  billing: {
-    title: '订阅、额度、退款和发票规则（Beta）',
-    body: [
-      '正式收费前必须明确价格、额度消耗、超额策略、退款、取消、发票和税务说明。',
-      '当前 beta 文本仅用于产品流程验证，不作为正式商业收费条款。',
-    ],
-  },
-  byok: {
-    title: 'BYOK 数据处理和密钥安全说明（Beta）',
-    body: [
-      '用户配置自有模型 key 时，应确认其遵守第三方 provider 的服务条款和数据处理规则。',
-      '平台应加密存储 key，不在日志和响应中输出明文 key，并支持删除和轮换。',
-    ],
-  },
+type PolicyDocument = {
+  policy_type: string;
+  version: string;
+  title: string;
+  content_url: string;
+  effective_at: string;
 };
 
 function LegalPage({ slug, onBack }: { slug: string; onBack: () => void }) {
-  const doc = LEGAL_COPY[slug] || LEGAL_COPY.terms;
+  const [document, setDocument] = useState<PolicyDocument | null>(null);
+  const [loading, setLoading] = useState(true);
+  const policyType = slug.replaceAll('-', '_');
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch('/legal/policies/')
+      .then(async (response) => response.ok ? response.json() as Promise<{ policies?: PolicyDocument[] }> : { policies: [] })
+      .then((payload) => {
+        if (active) setDocument((payload.policies || []).find((item) => item.policy_type === policyType) || null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [policyType]);
+
   return (
     <main className="min-h-screen bg-[var(--surface-canvas)] px-4 py-8 text-[var(--editorial-text)]">
       <section className="mx-auto max-w-3xl border border-[var(--editorial-stroke)] bg-[var(--editorial-paper)] p-6 shadow-[8px_8px_0_var(--editorial-stroke)]">
         <span className="font-mono text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">Marketing Hub Legal</span>
-        <h1 className="serif-header mt-3 text-3xl font-black">{doc.title}</h1>
-        <div className="mt-5 grid gap-4 text-sm font-semibold leading-7 text-[var(--editorial-text-muted)]">
-          {doc.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-        </div>
-        <div className="mt-6 border-t border-dashed border-[var(--editorial-stroke)] pt-4 text-xs font-bold text-[var(--danger-accent)]">
-          Beta 占位文本，不构成正式法律意见；公开上线前必须由律师复核替换。
-        </div>
+        <h1 className="serif-header mt-3 text-3xl font-black">{document?.title || '法律文档'}</h1>
+        {loading ? (
+          <p className="mt-5 text-sm text-[var(--editorial-text-muted)]">正在读取当前生效版本…</p>
+        ) : document ? (
+          <div className="mt-5 grid gap-4 text-sm font-semibold leading-7 text-[var(--editorial-text-muted)]">
+            <p>版本：{document.version}</p>
+            <p>生效时间：{new Date(document.effective_at).toLocaleDateString()}</p>
+            <a href={document.content_url} target="_blank" rel="noreferrer" className="w-fit underline">
+              打开完整文档
+            </a>
+          </div>
+        ) : (
+          <div className="mt-5 border border-[var(--danger-accent)] p-4 text-sm font-semibold leading-7 text-[var(--danger-accent)]">
+            当前部署尚未配置该法律文档。为避免用户同意无效文本，注册会保持关闭；部署管理员需要先创建并启用对应的 PolicyDocument。
+          </div>
+        )}
         <button type="button" onClick={onBack} className="mt-5 border border-[var(--editorial-stroke)] bg-[var(--editorial-stroke)] px-4 py-2 font-mono text-xs font-black text-[var(--editorial-bg)]">
           返回
         </button>
@@ -224,20 +200,17 @@ function LegalPage({ slug, onBack }: { slug: string; onBack: () => void }) {
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t, locale } = useI18n();
   const {
-    activeSection,
-    setActiveSection,
     rightPanelOpen,
     setRightPanelOpen,
-    darkMode: storedDarkMode,
-    setDarkMode: setStoredDarkMode,
+    darkMode,
+    setDarkMode,
   } = useUiStore();
 
-  const [darkMode, setDarkMode] = useState<boolean>(() => storedDarkMode);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarToggled, setSidebarToggled] = useState(false);
 
-  const [token, setToken] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'anonymous'>('checking');
   const mainRef = useRef<HTMLElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -245,13 +218,12 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(localStorage.getItem('mh_username'));
   const [authUser, setAuthUser] = useState<AuthMeResponse | null>(null);
   const [authError, setAuthError] = useState('');
-  const [routeSynced, setRouteSynced] = useState(false);
   const [resetPasswordToken, setResetPasswordToken] = useState('');
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const [resetPasswordError, setResetPasswordError] = useState('');
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: ENABLE_DEMO_LOGIN ? { username: DEMO_USERNAME, password: DEMO_PASSWORD } : { username: '', password: '' },
+    defaultValues: { username: '', password: '' },
   });
 
   const routeSection = sectionFromPath(location.pathname);
@@ -260,7 +232,7 @@ export default function App() {
   const isLegalRoute = location.pathname.startsWith('/legal/');
   const isTemplateLibraryRoute = location.pathname.startsWith('/templates');
   const legalSlug = location.pathname.replace(/^\/legal\/?/, '').split('/')[0] || 'terms';
-  const activeTab = routeSynced ? activeSection : routeSection;
+  const activeTab = routeSection;
   const sidebarOpen = activeTab === 'brainstorm' ? sidebarToggled : true;
   const sidebarIconOnly = activeTab !== 'brainstorm' && sidebarCollapsed;
   const rightPanelAvailable = activeTab !== 'builder';
@@ -275,13 +247,8 @@ export default function App() {
   const [headerOpen, setHeaderOpen] = useState(true);
 
   const [onboarding, setOnboarding] = useState<OnboardingState>(onboardingDefaults);
-  const [contentPackage, setContentPackage] = useState<ContentPackage>(() => {
-    return buildContentPackage(
-      { onboarding, copyInput: { brandName: 'Marketing-Hub', description: onboardingDefaults.brief, tone: onboardingDefaults.tone, platform: '小红书' }, workspaceScope: null, contentBrief: onboardingDefaults.brief },
-      onboardingDefaults.brief,
-    );
-  });
-  const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>('AI 初稿');
+  const [contentPackage, setContentPackage] = useState<ContentPackage | null>(null);
+  const [contentVersion, setContentVersion] = useState<ContentVersion>('ai_draft');
   const [latestStoryboardOutput, setLatestStoryboardOutput] = useState<StoryboardOutput | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -293,9 +260,8 @@ export default function App() {
   const [billingPlans, setBillingPlans] = useState<BillingPlanResponse | null>(null);
 
   const setActiveTab = useCallback((tab: AppSection) => {
-    setActiveSection(tab);
     navigate(pathForSection(tab));
-  }, [navigate, setActiveSection]);
+  }, [navigate]);
 
   // Workspace & dashboard state (shared across panels)
   const { workspaceScope, fetchWorkspaceBootstrap, selectProjectScope } = useWorkspaceScope(username);
@@ -403,9 +369,9 @@ export default function App() {
     () => ({
       tab: activeTab,
       projectId: workspaceScope?.project.id,
-      campaignId: workspaceScope?.campaign.id,
+      campaignId: workspaceScope?.campaign?.id,
     }),
-    [activeTab, workspaceScope?.project.id, workspaceScope?.campaign.id],
+    [activeTab, workspaceScope?.project.id, workspaceScope?.campaign?.id],
   );
 
   // Sync theme
@@ -417,8 +383,7 @@ export default function App() {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('mh_darkMode', 'false');
     }
-    setStoredDarkMode(darkMode);
-  }, [darkMode, setStoredDarkMode]);
+  }, [darkMode]);
 
   const triggerToast = useCallback((input: string | ToastMessage, type: ToastMessage['type'] = 'success') => {
     const message: ToastMessage = typeof input === 'string'
@@ -436,25 +401,19 @@ export default function App() {
       const response = await apiFetch('/auth/me/');
       const data = await response.json() as AuthMeResponse;
       if (!response.ok || !data.authenticated || !data.username) {
-        localStorage.removeItem('mh_token');
         localStorage.removeItem('mh_username');
-        setToken(null);
         setUsername(null);
         setAuthUser(null);
         setAuthStatus('anonymous');
         return null;
       }
-      localStorage.setItem('mh_token', 'session');
       localStorage.setItem('mh_username', data.username);
-      setToken('session');
       setUsername(data.username);
       setAuthUser(data);
       setAuthStatus('authenticated');
       return data;
     } catch {
-      localStorage.removeItem('mh_token');
       localStorage.removeItem('mh_username');
-      setToken(null);
       setUsername(null);
       setAuthUser(null);
       setAuthStatus('anonymous');
@@ -471,7 +430,6 @@ export default function App() {
 
   useEffect(() => {
     const handleAuthExpired = () => {
-      setToken(null);
       setUsername(null);
       setAuthUser(null);
       setAuthStatus('anonymous');
@@ -624,12 +582,32 @@ export default function App() {
 
   const completeOnboarding = useCallback(async () => {
     if (onboardingSubmitting) return;
+    if (!onboarding.brandName.trim() || !onboarding.brief.trim() || !onboarding.audience.trim() || !onboarding.tone.trim() || !onboarding.useCase || onboarding.channels.length === 0) {
+      setOnboardingError('请填写品牌名称、brief、目标人群和语调，并选择使用场景及至少一个渠道。');
+      return;
+    }
     setOnboardingSubmitting(true);
     setOnboardingError('');
     setAgentLogs(['正在保存品牌记忆...', '随后会生成第一份内容包草稿。']);
 
     try {
-      const scope = workspaceScope ?? await fetchWorkspaceBootstrap();
+      let scope = workspaceScope ?? await fetchWorkspaceBootstrap();
+      if (!scope && authUser?.organization) {
+        const createScopeResponse = await apiFetch('/workspace/', {
+          method: 'POST',
+          body: JSON.stringify({
+            organization_slug: authUser.organization,
+            project_name: onboarding.brandName,
+            campaign_name: onboarding.useCase,
+            brief: onboarding.brief,
+            objective: onboarding.brief,
+          }),
+        });
+        if (!createScopeResponse.ok) {
+          throw await parseApiErrorResponse(createScopeResponse, '/workspace/');
+        }
+        scope = await fetchWorkspaceBootstrap();
+      }
       if (!scope?.organization?.slug || !scope?.project?.id) {
         throw new Error('还没有可用项目，请稍后重试或先进入「我的项目」创建项目。');
       }
@@ -669,7 +647,7 @@ export default function App() {
           method: 'POST',
           body: JSON.stringify({
             project_id: updatedProject.id,
-            name: `${onboarding.useCase} Launch`,
+            name: onboarding.useCase,
             objective: onboarding.brief,
             status: 'active',
           }),
@@ -690,7 +668,7 @@ export default function App() {
           brandName: onboarding.brandName,
           description: onboarding.brief,
           tone: onboarding.tone,
-          platform: onboarding.channels[0] || '小红书',
+          platform: onboarding.channels[0] || '',
         },
         workspaceScope: {
           ...scope,
@@ -702,6 +680,7 @@ export default function App() {
         },
         username,
         storyboardDuration: 30,
+        outputLocale: locale,
       });
 
       const packageResponse = await apiFetch('/generate/content-package/', {
@@ -714,7 +693,7 @@ export default function App() {
       const packageData: { content_package: ContentPackage; logs?: string[] } = await packageResponse.json();
 
       setContentPackage(packageData.content_package);
-      setContentVersion(packageData.content_package.version || 'AI 初稿');
+      setContentVersion(packageData.content_package.version || 'ai_draft');
       setAgentLogs(packageData.logs?.length ? packageData.logs : ['已生成第一份内容包草稿。']);
       localStorage.setItem('mh_onboarding_complete', 'true');
       setShowOnboarding(false);
@@ -733,8 +712,10 @@ export default function App() {
   }, [
     fetchDashboard,
     fetchWorkspaceBootstrap,
+    authUser,
     onboarding,
     onboardingSubmitting,
+    locale,
     selectProjectScope,
     setActiveTab,
     triggerToast,
@@ -752,9 +733,6 @@ export default function App() {
       });
       const data = await response.json();
       if (response.ok) {
-        const sessionMarker = data.auth_type === 'session' ? 'session' : (data.token || 'session');
-        localStorage.setItem('mh_token', sessionMarker);
-        setToken(sessionMarker);
         setAuthStatus('checking');
         const me = await refreshAuthUser();
         if (!me) {
@@ -764,7 +742,7 @@ export default function App() {
         const nextUsername = me.username || values.username;
         localStorage.setItem('mh_username', nextUsername);
         setUsername(nextUsername);
-        setActiveSection('brainstorm');
+        navigate('/', { replace: true });
         triggerToast(`欢迎回来, ${nextUsername}!`, 'success');
       } else {
         if (data.admin_login_required) {
@@ -792,9 +770,7 @@ export default function App() {
         setAuthError(data.error || '管理员登录失败');
         return;
       }
-      localStorage.setItem('mh_token', 'session');
       localStorage.setItem('mh_username', data.username);
-      setToken('session');
       setUsername(data.username);
       setAuthStatus('checking');
       const me = await refreshAuthUser();
@@ -810,9 +786,7 @@ export default function App() {
 
   const handleLogout = () => {
     void apiFetch('/auth/logout/', { method: 'POST' }).catch(() => undefined);
-    localStorage.removeItem('mh_token');
     localStorage.removeItem('mh_username');
-    setToken(null);
     setUsername(null);
     setAuthUser(null);
     setAuthStatus('anonymous');
@@ -825,7 +799,7 @@ export default function App() {
       const res = await apiFetch('/billing/redeem-pro-invite/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username || DEMO_USERNAME, code }),
+        body: JSON.stringify({ username: username || '', code }),
       });
       const data = await res.json();
       if (!res.ok) throw await parseApiErrorResponse(res, '/billing/redeem-pro-invite/');
@@ -852,7 +826,7 @@ export default function App() {
       const res = await apiFetch('/billing/enterprise-requests/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username || DEMO_USERNAME, ...payload }),
+        body: JSON.stringify({ username: username || '', ...payload }),
       });
       const data: BillingPlanResponse = await res.json();
       if (!res.ok) throw await parseApiErrorResponse(res, '/billing/enterprise-requests/');
@@ -882,10 +856,9 @@ export default function App() {
   }, [selectProjectScope, username, setActiveTab, triggerToast]);
 
   const handleOpenProfile = useCallback((targetUsername?: string | null) => {
-    setActiveSection('profile');
     const target = targetUsername?.trim();
     navigate(target ? `/profile/${encodeURIComponent(target)}` : '/profile');
-  }, [navigate, setActiveSection]);
+  }, [navigate]);
 
   const handleGlobalSearchSelect = useCallback(async (result: GlobalSearchResult) => {
     if (result.kind === 'project' && result.project) {
@@ -954,10 +927,10 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
-          campaign: workspaceScope?.campaign.id,
+          campaign: workspaceScope?.campaign?.id,
           creation_type: type,
           title,
           content,
@@ -992,10 +965,10 @@ export default function App() {
           'Idempotency-Key': `retry-${task.id}-${Date.now()}`,
         },
         body: JSON.stringify({
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: workspaceScope?.organization.slug,
           project: workspaceScope?.project.slug,
-          campaign: workspaceScope?.campaign.id,
+          campaign: workspaceScope?.campaign?.id,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -1017,31 +990,11 @@ export default function App() {
     }
   }, [fetchDashboard, fetchWorkspaceBootstrap, retryingTaskId, triggerToast, username, workspaceScope]);
 
-  // One-time URL → store sync on mount, so deep links / refresh land
-  // on the right tab. After that, store is the source of truth: every
-  // sidebar click / programmatic jump goes through setActiveSection,
-  // and the URL is the projection (handled by each call site).
-  // (Earlier we tried a two-way sync here and it re-introduced the
-  // "Maximum update depth exceeded" loop, so it's intentionally
-  // one-way.)
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const section = sectionFromPath(location.pathname);
-      if (section !== activeSection) {
-        setActiveSection(section);
-      }
-      setRouteSynced(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     if (authUser && !authUser.admin_mode && location.pathname.startsWith('/admin-console')) {
-      setActiveSection('dashboard');
       navigate('/dashboard', { replace: true });
     }
-  }, [authUser, location.pathname, navigate, setActiveSection]);
+  }, [authUser, location.pathname, navigate]);
 
   useEffect(() => {
     const handleOpenProjectBrandMemory = () => {
@@ -1053,7 +1006,7 @@ export default function App() {
 
   // Initial bootstrap: API status + workspace + dashboard + billing
   useEffect(() => {
-    if (!token || !authUser || authUser.admin_mode) return;
+    if (authStatus !== 'authenticated' || !authUser || authUser.admin_mode) return;
     const timer = window.setTimeout(() => {
       fetchWorkspaceBootstrap();
       fetchDashboard();
@@ -1061,21 +1014,21 @@ export default function App() {
         .then(() => setApiLive(true))
         .catch(() => setApiLive(false));
 
-      apiFetch(`/billing/plans/?username=${username || DEMO_USERNAME}`)
+      apiFetch(`/billing/plans/?username=${username || ''}`)
         .then((res) => res.ok ? res.json() : null)
         .then((data: BillingPlanResponse | null) => data && setBillingPlans(data))
         .catch(() => undefined);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [authUser, fetchWorkspaceBootstrap, fetchDashboard, token, username]);
+  }, [authStatus, authUser, fetchWorkspaceBootstrap, fetchDashboard, username]);
 
   useEffect(() => {
-    if (!token || !authUser || authUser.admin_mode || activeTaskCount <= 0) return;
+    if (authStatus !== 'authenticated' || !authUser || authUser.admin_mode || activeTaskCount <= 0) return;
     const interval = window.setInterval(() => {
       void fetchDashboard();
     }, 8000);
     return () => window.clearInterval(interval);
-  }, [activeTaskCount, authUser, fetchDashboard, token]);
+  }, [activeTaskCount, authStatus, authUser, fetchDashboard]);
 
   useEffect(() => {
     if (!notificationOpen) return;
@@ -1113,7 +1066,7 @@ export default function App() {
     );
   }
 
-  if (authStatus === 'anonymous' || !token) {
+  if (authStatus === 'anonymous') {
     if (isAdminLoginRoute) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-[var(--surface-canvas)] p-4 text-[var(--editorial-text)]">
@@ -1151,7 +1104,6 @@ export default function App() {
           loginForm={loginForm}
           handleLogin={handleLogin}
           triggerToast={triggerToast}
-          enableDemoLogin={ENABLE_DEMO_LOGIN}
         />
         {resetPasswordToken ? (
           <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4">
@@ -1314,8 +1266,8 @@ export default function App() {
                 type="button"
                 onClick={() => setSidebarCollapsed((prev) => !prev)}
                 className="h-8 w-8 shrink-0 rounded-lg border border-[var(--border-default)] bg-[var(--surface-elevated)] inline-flex items-center justify-center hover:bg-[var(--surface-hover)]"
-                title={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
-                aria-label={sidebarIconOnly ? '展开侧栏' : '收起侧栏'}
+                title={sidebarIconOnly ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
+                aria-label={sidebarIconOnly ? t('shell.expandSidebar') : t('shell.collapseSidebar')}
               >
                 <Menu className="h-4 w-4" />
               </button>
@@ -1323,14 +1275,14 @@ export default function App() {
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <div className="min-w-0">
                   <h2 className="text-sm md:text-base font-bold text-[var(--editorial-text)] serif-header whitespace-nowrap">
-                    {TAB_META[activeTab]?.title || '工作台'}
+                    {TAB_META[activeTab] ? t(TAB_META[activeTab].titleKey) : t('shell.workspace')}
                   </h2>
                   <span className="hidden md:block text-[10px] text-[var(--editorial-text-gray)] truncate min-w-0">
                     {workspaceScope?.campaign?.objective || workspaceScope?.project?.brief
                       ? `${workspaceScope.campaign?.objective || workspaceScope.project?.brief}`
                       : workspaceScope?.project?.name
                       ? `${workspaceScope.project.name}${workspaceScope.campaign?.name ? ` · ${workspaceScope.campaign.name}` : ''}`
-                      : TAB_META[activeTab]?.subtitle || '从左侧菜单选择功能'}
+                      : TAB_META[activeTab] ? t(TAB_META[activeTab].subtitleKey) : t('shell.chooseFeature')}
                   </span>
                 </div>
               </div>
@@ -1371,7 +1323,7 @@ export default function App() {
                 </span>
                 <span className="hidden h-6 max-w-[160px] items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2 text-[9px] font-black md:inline-flex">
                   <UserCircle className="h-3 w-3" />
-                  <span className="truncate">{username || DEMO_USERNAME}</span>
+                  <span className="truncate">{username || '未登录'}</span>
                 </span>
               </div>
 
@@ -1463,7 +1415,7 @@ export default function App() {
                   project={workspaceScope?.project || null}
                   campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
                   organizationSlug={workspaceScope?.organization.slug}
-                  username={username || DEMO_USERNAME}
+                  username={username || ''}
                   triggerToast={triggerToast}
                   featureEntitlements={billingPlans?.feature_entitlements}
                   onOpenBilling={() => setActiveTab('billing')}
@@ -1478,11 +1430,10 @@ export default function App() {
                   organization={workspaceScope?.organization || null}
                   project={workspaceScope?.project || null}
                   campaign={workspaceScope?.campaign?.id ? workspaceScope.campaign : null}
-                  username={username || DEMO_USERNAME}
+                  username={username || ''}
                   triggerToast={triggerToast}
                   onComplete={(draftId) => {
                     setSidebarToggled(true);
-                    setActiveSection('builder');
                     navigate(`/workflows?draft=${draftId}&from=brainstorm`, { replace: true });
                   }}
                   onToggleSidebar={() => setSidebarToggled((prev) => !prev)}
@@ -1510,7 +1461,7 @@ export default function App() {
               <ContentPackagePanel
                 onboarding={onboarding}
                 setOnboarding={setOnboarding}
-                copyInput={{ brandName: 'Marketing-Hub', description: onboarding.brief, tone: onboarding.tone, platform: onboarding.channels[0] || '小红书' }}
+                copyInput={{ brandName: onboarding.brandName, description: onboarding.brief, tone: onboarding.tone, platform: onboarding.channels[0] || '' }}
                 workspaceScope={workspaceScope}
                 username={username}
                 storyboardDuration={30}
@@ -1522,7 +1473,7 @@ export default function App() {
                 onCopy={handleCopyClipboard}
                 onApplyContentPackage={(pkg) => {
                   setContentPackage(pkg);
-                  setContentVersion(pkg.version || 'AI 初稿');
+                  setContentVersion(pkg.version || 'ai_draft');
                   void fetchDashboard();
                 }}
               />
@@ -1684,11 +1635,11 @@ export default function App() {
         <footer className="shrink-0 w-full border-t border-[var(--editorial-stroke)]/45 py-2 mt-2 flex flex-col md:flex-row justify-between items-center gap-2 text-[8px] font-mono font-bold text-[var(--editorial-text-gray)] uppercase">
           <span>© 2026 MARKETING-HUB DRAFTBOOK INC.</span>
           <div className="flex gap-3">
-            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[TERMS]</a>
+            <a href="/legal/terms" className="hover:text-[var(--editorial-text)] transition-all">[TERMS]</a>
             <span>//</span>
-            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[PRIVACY]</a>
+            <a href="/legal/privacy" className="hover:text-[var(--editorial-text)] transition-all">[PRIVACY]</a>
             <span>//</span>
-            <a href="#" className="hover:text-[var(--editorial-text)] transition-all">[SUPPORT]</a>
+            <a href="https://github.com/yruichen/marketing-hub/issues" target="_blank" rel="noreferrer" className="hover:text-[var(--editorial-text)] transition-all">[SUPPORT]</a>
           </div>
         </footer>
         )}

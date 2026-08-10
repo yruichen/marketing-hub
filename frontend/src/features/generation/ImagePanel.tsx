@@ -46,16 +46,16 @@ export function ImagePanel({
   void _loading;
   void _setLoading;
   const [imageInput, setImageInput] = useState({
-    prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
+    prompt: '',
     aspectRatio: '1:1',
     styleSkill: DEFAULT_IMAGE_STYLE_SKILL_ID,
   });
   const [imageOutput, setImageOutput] = useState<ImageOutput>({
-    prompt: '一张精致的产品桌面场景，明亮自然光，适合小红书种草风格',
-    style: IMAGE_STYLE_SKILLS[1].skill,
+    prompt: '',
+    style: '',
     aspectRatio: '1:1',
-    image_url: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
-    revised_prompt: 'A refined product desktop scene with bright natural light, styled for Xiaohongshu lifestyle marketing, 1:1 aspect ratio',
+    image_url: '',
+    revised_prompt: '',
   });
 
   const [isRunning, setIsRunning] = useState(false);
@@ -173,13 +173,15 @@ export function ImagePanel({
             <div className="flex gap-2">
               <button
                 onClick={() => onShare('image', `[${imageOutput.style}] Graphic Polaroid`, imageOutput, imageOutput.image_url)}
+                disabled={!imageOutput.image_url}
                 className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
               >
                 <span>分享社区</span>
               </button>
               <a
-                href={imageOutput.image_url}
+                href={imageOutput.image_url || undefined}
                 target="_blank"
+                aria-disabled={!imageOutput.image_url}
                 className="bg-[var(--editorial-stroke)] border border-[var(--editorial-stroke)] text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-black hover:scale-103 active:scale-97 transition-all cursor-pointer flex items-center text-center"
               >
                 大图
@@ -199,12 +201,16 @@ export function ImagePanel({
                     AIGC RENDERING ENGINE...
                   </span>
                 </div>
-              ) : (
+              ) : imageOutput.image_url ? (
                 <img
                   src={imageOutput.image_url}
                   alt="AI polaroid output sketch"
                   className="max-h-[240px] w-full object-cover object-center border border-[var(--editorial-stroke)]"
                 />
+              ) : (
+                <div className="p-6 text-center text-xs text-[var(--editorial-text-gray)]">
+                  填写视觉描述，并在 AI 设置中配置图像 Provider 后生成。
+                </div>
               )}
             </div>
 

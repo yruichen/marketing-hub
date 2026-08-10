@@ -8,8 +8,10 @@ export interface ContentPackage {
   voiceover: string;
   reviewAdvice: string[];
   exportFormats: string[];
-  version: 'AI 初稿' | '用户修改稿' | '最终稿';
+  version: ContentVersion;
 }
+
+export type ContentVersion = 'ai_draft' | 'user_revision' | 'final';
 
 export interface CopyInput {
   brandName: string;
@@ -73,6 +75,7 @@ export interface AudioOutput {
   voice_id: string;
   speed: number;
   audio_url: string;
+  voice_direction?: string;
   text_length?: number;
   estimated_audio_duration_seconds?: number;
 }
@@ -95,7 +98,6 @@ export interface VideoOutput {
   num_frames?: number;
   frame_rate?: number;
   asset_id?: number;
-  is_demo_fallback?: boolean;
 }
 
 export type CreationContent = Partial<CopyOutput & ImageOutput & StoryboardOutput & AudioOutput & VideoOutput>;

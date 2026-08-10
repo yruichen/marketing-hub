@@ -4,38 +4,14 @@ import json
 from typing import Any
 
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
+from harness.graph import direct_upstream_outputs, ordered_nodes
 
 def workflow_execution_order(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    node_by_id = {str(node.get('id')): node for node in nodes if node.get('id')}
-    indegree = {node_id: 0 for node_id in node_by_id}
-    outgoing: dict[str, list[str]] = {node_id: [] for node_id in node_by_id}
-
-    for edge in edges:
-        source = str(edge.get('source', ''))
-        target = str(edge.get('target', ''))
-        if source in node_by_id and target in node_by_id:
-            outgoing[source].append(target)
-            indegree[target] += 1
-
-    queue = [node_id for node_id, degree in indegree.items() if degree == 0]
-    ordered_ids: list[str] = []
-    while queue:
-        current = queue.pop(0)
-        ordered_ids.append(current)
-        for target in outgoing[current]:
-            indegree[target] -= 1
-            if indegree[target] == 0:
-                queue.append(target)
-
-    if len(ordered_ids) != len(node_by_id):
-        raise ValueError('Workflow contains a cycle or invalid edge definition.')
-    return [node_by_id[node_id] for node_id in ordered_ids]
+    return ordered_nodes(nodes, edges)
 
 
 def upstream_outputs(node_id: str, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    source_ids = [str(edge.get('source')) for edge in edges if str(edge.get('target')) == node_id]
-    by_id = {str(node.get('id')): node for node in nodes}
-    return [by_id[source_id].get('output', {}) for source_id in source_ids if source_id in by_id]
+    return direct_upstream_outputs(node_id, nodes, edges)
 
 
 def extract_upstream_text(upstream: list[dict[str, Any]], max_chars: int = 2000) -> str:
@@ -154,15 +130,15 @@ def build_payload_for_node(
     config = node.get('config') if isinstance(node.get('config'), dict) else {}
     context_text = json.dumps(brand_context, ensure_ascii=False)
     upstream_text = extract_upstream_text(upstream)
-    feedback_text = f'\n修改意见：{feedback}' if feedback else ''
+    feedback_text = f'\nRevision feedback: {feedback}' if feedback else ''
     node_type = node.get('type')
 
     if node_type == 'copy':
         return {
-            'brand_name': config.get('brand_name') or brand_context.get('brand_name') or 'Marketing-Hub',
-            'product_description': config.get('product_description') or upstream_text or brand_context.get('selling_points') or 'AI 营销场景全能助手',
-            'tone': config.get('tone') or brand_context.get('tone') or '爆款活泼',
-            'platform': config.get('platform') or 'Xiaohongshu',
+            'brand_name': config.get('brand_name') or brand_context.get('brand_name') or '',
+            'product_description': config.get('product_description') or upstream_text or brand_context.get('selling_points') or '',
+            'tone': config.get('tone') or brand_context.get('tone') or 'clear and specific',
+            'platform': config.get('platform') or 'general',
             'workflow_context': context_text,
             'feedback': feedback,
         }
@@ -170,13 +146,13 @@ def build_payload_for_node(
         merged = _merge_upstream_image_params(upstream)
         prompt = str(merged.get('prompt') or config.get('prompt') or upstream_text or '').strip()
         if not prompt:
-            prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
+            prompt = str(brand_context.get('visual_style') or '').strip()
         style_skill_id = merged.get('style_skill') or config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
         style = resolve_style_skill(style_skill_id, merged.get('style') or config.get('style') or brand_context.get('visual_style'))
         aspect_ratio = str(merged.get('aspect_ratio') or config.get('aspect_ratio') or '1:1').strip()
         negative_prompt = str(merged.get('negative_prompt') or '').strip()
         if negative_prompt:
-            prompt = f'{prompt}\n避免: {negative_prompt}'
+            prompt = f'{prompt}\nExclude: {negative_prompt}'
         return {
             'prompt': f'{prompt}{feedback_text}',
             'style': style,
@@ -190,16 +166,16 @@ def build_payload_for_node(
         except (ValueError, TypeError):
             duration = 30
         return {
-            'video_topic': config.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or 'Product launch story',
+            'video_topic': config.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or '',
             'duration': duration,
-            'target_audience': config.get('target_audience') or brand_context.get('audience') or 'Young creators',
+            'target_audience': config.get('target_audience') or brand_context.get('audience') or 'general audience',
             'workflow_context': context_text,
             'feedback': feedback,
         }
     if node_type == 'audio':
         text = config.get('text') or ''
         if not text and upstream:
-            text = upstream_text[:2000] or '欢迎使用 Marketing Hub'
+            text = upstream_text[:2000]
         return {
             'text': f'{text}{feedback_text}',
             'voice_id': config.get('voice_id') or 'female_warm',
@@ -222,14 +198,14 @@ def build_payload_for_node(
         negative_prompt = str(config.get('negative_prompt') or '').strip()
         extra_feedback = feedback
         if negative_prompt:
-            extra_feedback = f'{feedback}\n负面提示词: {negative_prompt}'.strip()
+            extra_feedback = f'{feedback}\nNegative prompt: {negative_prompt}'.strip()
         return {
-            'brand_name': brand_context.get('brand_name') or 'Marketing-Hub',
+            'brand_name': brand_context.get('brand_name') or '',
             'subject': subject,
             'style': skill_text,
             'style_skill': skill_id,
             'aspect_ratio': str(config.get('aspect_ratio') or '1:1').strip(),
-            'platform': str(config.get('platform') or '小红书').strip(),
+            'platform': str(config.get('platform') or 'general').strip(),
             'negative_prompt': negative_prompt,
             'upstream_text': upstream_text,
             'workflow_context': context_text,
@@ -239,13 +215,13 @@ def build_payload_for_node(
         merged = _merge_upstream_image_params(upstream)
         prompt = str(merged.get('prompt') or upstream_text or '').strip()
         if not prompt:
-            prompt = str(brand_context.get('visual_style') or 'A creative marketing campaign visual').strip()
+            prompt = str(brand_context.get('visual_style') or '').strip()
         style_skill_id = merged.get('style_skill') or config.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID
         style = resolve_style_skill(style_skill_id, merged.get('style') or brand_context.get('visual_style'))
         aspect_ratio = str(merged.get('aspect_ratio') or '1:1').strip()
         negative_prompt = str(merged.get('negative_prompt') or '').strip()
         if negative_prompt:
-            prompt = f'{prompt}\n避免: {negative_prompt}'
+            prompt = f'{prompt}\nExclude: {negative_prompt}'
         return {
             'prompt': f'{prompt}{feedback_text}',
             'style': style,
@@ -264,7 +240,7 @@ def build_payload_for_node(
             duration = 30
         image_url = str(merged.get('image_url') or config.get('image_url') or '').strip()
         return {
-            'video_topic': config.get('video_topic') or merged.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or 'Marketing video',
+            'video_topic': config.get('video_topic') or merged.get('video_topic') or upstream_text or brand_context.get('campaign_goal') or '',
             'scenes': scenes,
             'audio_url': str(merged.get('audio_url') or ''),
             'image_url': image_url,
@@ -289,13 +265,13 @@ def build_payload_for_node(
             'tags': upstream_tags,
             'forbidden_words': str(config.get('forbidden_words') or '').strip(),
             'channel_rules': str(config.get('channel_rules') or '').strip(),
-            'platform': str(config.get('platform') or brand_context.get('platform') or '小红书').strip(),
+            'platform': str(config.get('platform') or brand_context.get('platform') or 'general').strip(),
             'workflow_context': context_text,
             'feedback': feedback,
         }
     if node_type == 'custom_agent':
         return {
-            'name': config.get('name') or node.get('label') or '自定义智能体',
+            'name': config.get('name') or node.get('label') or 'Custom agent',
             'icon': config.get('icon') or 'Sparkles',
             'prompt': config.get('prompt') or '',
             'temperature': float(config.get('temperature') or 0.7),

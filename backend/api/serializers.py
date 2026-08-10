@@ -227,6 +227,7 @@ class WorkflowRunSerializer(serializers.ModelSerializer):
             'estimated_cost_usd',
             'actual_cost_usd',
             'celery_task_id',
+            'attempt_count',
             'started_at',
             'completed_at',
             'created_at',
@@ -295,10 +296,12 @@ class TaskSerializer(serializers.ModelSerializer):
             'result',
             'error_message',
             'celery_task_id',
+            'attempt_count',
             'token_count',
             'cost_usd',
             'created_at',
             'updated_at',
+            'started_at',
             'completed_at',
         )
 

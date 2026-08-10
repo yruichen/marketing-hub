@@ -12,7 +12,6 @@ from ai_gateway.gateway_modules.adapters import (
     ChatCompletionsAdapter,
     GeminiAdapter,
     LocalProxyAdapter,
-    MockProviderAdapter,
     OpenAIAdapter,
     ProviderAdapter,
 )
@@ -72,7 +71,6 @@ __all__ = [
     'JSON_RESPONSE_TASK_TYPES',
     'LocalProxyAdapter',
     'MODEL_CAPABILITIES',
-    'MockProviderAdapter',
     'ModelPolicy',
     'NonRetryableGatewayError',
     'OpenAIAdapter',

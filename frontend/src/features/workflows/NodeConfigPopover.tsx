@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { RotateCcw, Trash2, X } from 'lucide-react';
 import { useReactFlow } from '@xyflow/react';
 import type { WorkflowNode } from '../../types/workspace';
-import { nodeTypeDescriptions, nodeTypeLabels, nodeTypeOutputs } from './constants';
+import { nodeTypeDescriptionKeys, nodeTypeLabelKeys, nodeTypeOutputKeys, statusLabelKeys } from './presentation';
+import { useI18n } from '../../shared/i18n';
 import { NodeConfigFields } from './NodeConfigFields';
 import { nodeStatusDotClass } from './utils';
 
@@ -45,10 +46,15 @@ export function NodeConfigPopover({
   onRemoveNode,
   onClose,
 }: NodeConfigPopoverProps) {
+  const { t } = useI18n();
   const { getNode, flowToScreenPosition } = useReactFlow();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const nodeDescription = node ? nodeTypeDescriptions[node.type] : '';
-  const nodeOutput = node ? nodeTypeOutputs[node.type] : '';
+  const descriptionKey = node ? nodeTypeDescriptionKeys[node.type] : null;
+  const outputKey = node ? nodeTypeOutputKeys[node.type] : null;
+  const nodeDescription = descriptionKey ? t(descriptionKey) : '';
+  const nodeOutput = outputKey ? t(outputKey) : '';
+  const nodeStatus = node?.status || 'idle';
+  const nodeStatusKey = statusLabelKeys[nodeStatus];
 
   const position = useMemo(() => {
     if (!node || readOnly) return null;
@@ -86,9 +92,9 @@ export function NodeConfigPopover({
             />
             <div className="mt-2 flex items-center gap-2 text-xs text-[var(--editorial-text-gray)]">
               <span className={`h-2 w-2 rounded-full ${nodeStatusDotClass(node.status)}`} />
-              <span>{nodeTypeLabels[node.type] || node.type}</span>
+              <span>{nodeTypeLabelKeys[node.type] ? t(nodeTypeLabelKeys[node.type]) : node.type}</span>
               <span>·</span>
-              <span>{node.status || '未运行'}</span>
+              <span>{nodeStatusKey ? t(nodeStatusKey) : nodeStatus}</span>
             </div>
             {node.status === 'failed' && node.error_message && (
               <p className="mt-2 text-[10px] text-rose-600 leading-snug line-clamp-2">{node.error_message}</p>

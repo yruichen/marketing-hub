@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.audio.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: system_prompt
+  owner: content-generation
+  task_type: audio
+  title: Voiceover script direction
+  description: Produces speakable copy with measurable delivery guidance.
+  output_contract: optimized_text, voice_direction, estimated_duration_seconds, pause_markers[]
+  evaluation_profile: audio-script-v3
+  risk: low
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"optimized_text":"string","voice_direction":"string","estimated_duration_seconds":15,"pause_markers":["string"]}
+  quality_bar:
+    - The script is natural to speak at the requested pace.
+    - Facts, offer terms, and call to action are preserved.
+    - Direction is concrete enough for a voice actor or TTS operator.
+    - Output is valid JSON and satisfies the response contract.

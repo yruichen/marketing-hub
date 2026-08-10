@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any
+from uuid import UUID, uuid4
 
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -20,6 +21,7 @@ from api.service_modules.workflow_parts.payloads import (
     upstream_outputs,
     workflow_execution_order,
 )
+from harness.graph import build_graph_plan
 
 
 def _workflow_user(username: str | None) -> User | None:
@@ -186,10 +188,31 @@ def create_workflow_run(
 
 
 def run_workflow_run_by_id(workflow_run_id: int, username: str | None = None) -> tuple[WorkspaceDraft | None, list[GenerationTask]]:
+    execution_id = _claim_workflow_run(workflow_run_id)
     workflow_run = WorkflowRun.objects.select_related('draft', 'organization', 'project', 'campaign').filter(pk=workflow_run_id).first()
     if not workflow_run:
         return None, []
+    if execution_id is None:
+        task_ids = workflow_run.summary.get('task_ids', []) if isinstance(workflow_run.summary, dict) else []
+        tasks = list(GenerationTask.objects.filter(pk__in=task_ids).order_by('created_at')) if task_ids else []
+        return workflow_run.draft, tasks
     return run_workspace_workflow(workflow_run.draft, username=username, workflow_run=workflow_run)
+
+
+def _claim_workflow_run(workflow_run_id: int) -> UUID | None:
+    """Claim a workflow run once so broker redelivery cannot execute the DAG twice."""
+    terminal_statuses = {'succeeded', 'failed', 'partial_success', 'cancelled'}
+    with transaction.atomic():
+        workflow_run = WorkflowRun.objects.select_for_update().filter(pk=workflow_run_id).first()
+        if workflow_run is None or workflow_run.status == 'running' or workflow_run.status in terminal_statuses:
+            return None
+        execution_id = uuid4()
+        workflow_run.status = 'running'
+        workflow_run.execution_id = execution_id
+        workflow_run.attempt_count += 1
+        workflow_run.started_at = timezone.now()
+        workflow_run.save(update_fields=['status', 'execution_id', 'attempt_count', 'started_at', 'updated_at'])
+        return execution_id
 
 
 def run_workflow_node(
@@ -307,45 +330,44 @@ def run_workspace_workflow(
                 node_run.save(update_fields=['status', 'started_at', 'error_code', 'error_message', 'updated_at'])
             record_workflow_event(workflow_run, 'node_started', node_run=node_run, node_id=str(node.get('id')), payload={'node_type': node.get('type')})
             try:
-                with transaction.atomic():
-                    updated_node, task = run_workflow_node(
-                        node=node,
-                        nodes=nodes,
-                        edges=edges,
-                        brand_context=brand_context,
-                        organization=draft.organization,
-                        project=draft.project,
-                        campaign=draft.campaign,
-                        username=username,
-                    )
-                    by_id[str(updated_node.get('id'))] = updated_node
-                    if task:
-                        tasks.append(task)
-                    if updated_node.get('status') == 'failed':
-                        failed_node_ids.append(str(updated_node.get('id')))
-                    if node_run:
-                        node_completed_at = timezone.now()
-                        node_run.status = 'succeeded' if updated_node.get('status') == 'succeeded' else str(updated_node.get('status') or 'failed')
-                        node_run.completed_at = node_completed_at
-                        node_run.duration_ms = max(0, int((node_completed_at - node_started_at).total_seconds() * 1000))
-                        node_run.generation_task = task
-                        node_run.output_summary = _summarize_output(updated_node.get('output'))
-                        node_run.error_message = str(updated_node.get('error_message') or '')
-                        node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
-                    if task and updated_node.get('status') == 'succeeded':
-                        workflow_asset_ids.extend(annotate_task_assets_for_workflow(
-                            task=task,
-                            workflow_run=workflow_run,
-                            node_run=node_run,
-                            node=updated_node,
-                        ))
-                    record_workflow_event(
-                        workflow_run,
-                        'node_succeeded' if updated_node.get('status') == 'succeeded' else 'node_finished',
+                updated_node, task = run_workflow_node(
+                    node=node,
+                    nodes=nodes,
+                    edges=edges,
+                    brand_context=brand_context,
+                    organization=draft.organization,
+                    project=draft.project,
+                    campaign=draft.campaign,
+                    username=username,
+                )
+                by_id[str(updated_node.get('id'))] = updated_node
+                if task:
+                    tasks.append(task)
+                if updated_node.get('status') == 'failed':
+                    failed_node_ids.append(str(updated_node.get('id')))
+                if node_run:
+                    node_completed_at = timezone.now()
+                    node_run.status = 'succeeded' if updated_node.get('status') == 'succeeded' else str(updated_node.get('status') or 'failed')
+                    node_run.completed_at = node_completed_at
+                    node_run.duration_ms = max(0, int((node_completed_at - node_started_at).total_seconds() * 1000))
+                    node_run.generation_task = task
+                    node_run.output_summary = _summarize_output(updated_node.get('output'))
+                    node_run.error_message = str(updated_node.get('error_message') or '')
+                    node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
+                if task and updated_node.get('status') == 'succeeded':
+                    workflow_asset_ids.extend(annotate_task_assets_for_workflow(
+                        task=task,
+                        workflow_run=workflow_run,
                         node_run=node_run,
-                        node_id=str(node.get('id')),
-                        payload={'task_id': task.id if task else None, 'status': updated_node.get('status')},
-                    )
+                        node=updated_node,
+                    ))
+                record_workflow_event(
+                    workflow_run,
+                    'node_succeeded' if updated_node.get('status') == 'succeeded' else 'node_finished',
+                    node_run=node_run,
+                    node_id=str(node.get('id')),
+                    payload={'task_id': task.id if task else None, 'status': updated_node.get('status')},
+                )
             except Exception as node_exc:
                 node['status'] = 'failed'
                 node['error_message'] = str(node_exc)
@@ -442,9 +464,8 @@ def retry_workspace_node(
         idempotency_key=idempotency_key,
         summary={'mode': 'retry', 'retry_node_id': node_id},
     )
-    workflow_run.status = 'running'
-    workflow_run.started_at = timezone.now()
-    workflow_run.save(update_fields=['status', 'started_at', 'updated_at'])
+    _claim_workflow_run(workflow_run.id)
+    workflow_run.refresh_from_db()
     WorkflowNodeRun.objects.filter(workflow_run=workflow_run).exclude(node_id=str(node_id)).update(status='skipped')
     node_run = WorkflowNodeRun.objects.filter(workflow_run=workflow_run, node_id=str(node_id), attempt=1).first()
     node_started_at = timezone.now()
@@ -464,36 +485,35 @@ def retry_workspace_node(
     target['feedback'] = feedback
     workflow_asset_ids: list[int] = []
     try:
-        with transaction.atomic():
-            updated_node, task = run_workflow_node(
-                node=target,
-                nodes=nodes,
-                edges=edges,
-                brand_context=brand_context,
-                organization=draft.organization,
-                project=draft.project,
-                campaign=draft.campaign,
-                username=username,
-                feedback=feedback,
-            )
-            target.update(updated_node)
-            if node_run:
-                completed_at = timezone.now()
-                node_run.status = 'succeeded' if updated_node.get('status') == 'succeeded' else str(updated_node.get('status') or 'failed')
-                node_run.completed_at = completed_at
-                node_run.duration_ms = max(0, int((completed_at - node_started_at).total_seconds() * 1000))
-                node_run.generation_task = task
-                node_run.output_summary = _summarize_output(updated_node.get('output'))
-                node_run.error_message = str(updated_node.get('error_message') or '')
-                node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
-            if task and updated_node.get('status') == 'succeeded':
-                workflow_asset_ids.extend(annotate_task_assets_for_workflow(
-                    task=task,
-                    workflow_run=workflow_run,
-                    node_run=node_run,
-                    node=updated_node,
-                ))
-            record_workflow_event(workflow_run, 'retry_node_succeeded', node_run=node_run, node_id=str(node_id), payload={'task_id': task.id if task else None})
+        updated_node, task = run_workflow_node(
+            node=target,
+            nodes=nodes,
+            edges=edges,
+            brand_context=brand_context,
+            organization=draft.organization,
+            project=draft.project,
+            campaign=draft.campaign,
+            username=username,
+            feedback=feedback,
+        )
+        target.update(updated_node)
+        if node_run:
+            completed_at = timezone.now()
+            node_run.status = 'succeeded' if updated_node.get('status') == 'succeeded' else str(updated_node.get('status') or 'failed')
+            node_run.completed_at = completed_at
+            node_run.duration_ms = max(0, int((completed_at - node_started_at).total_seconds() * 1000))
+            node_run.generation_task = task
+            node_run.output_summary = _summarize_output(updated_node.get('output'))
+            node_run.error_message = str(updated_node.get('error_message') or '')
+            node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
+        if task and updated_node.get('status') == 'succeeded':
+            workflow_asset_ids.extend(annotate_task_assets_for_workflow(
+                task=task,
+                workflow_run=workflow_run,
+                node_run=node_run,
+                node=updated_node,
+            ))
+        record_workflow_event(workflow_run, 'retry_node_succeeded', node_run=node_run, node_id=str(node_id), payload={'task_id': task.id if task else None})
     except Exception as exc:
         error_message = redact_text(str(exc))
         target['status'] = 'failed'
@@ -525,9 +545,11 @@ def retry_workspace_node(
         raise
 
     # Cascade: re-execute downstream nodes in topological order
-    order = workflow_execution_order(nodes, edges)
-    target_idx = next((i for i, n in enumerate(order) if str(n.get('id')) == str(node_id)), -1)
-    downstream_nodes = order[target_idx + 1:] if target_idx >= 0 else []
+    graph_plan = build_graph_plan(nodes, edges)
+    descendant_ids = set(graph_plan.descendants(str(node_id)))
+    downstream_nodes = [
+        by_id[ordered_id] for ordered_id in graph_plan.ordered_ids if ordered_id in descendant_ids
+    ]
     tasks: list[GenerationTask] = [task] if task else []
     failed_downstream: list[str] = []
 
@@ -542,37 +564,36 @@ def retry_workspace_node(
             ds_node_run.save(update_fields=['status', 'started_at', 'updated_at'])
         record_workflow_event(workflow_run, 'cascade_node_started', node_run=ds_node_run, node_id=str(node.get('id')), payload={'source_retry_node_id': node_id})
         try:
-            with transaction.atomic():
-                updated, ds_task = run_workflow_node(
-                    node=node,
-                    nodes=nodes,
-                    edges=edges,
-                    brand_context=brand_context,
-                    organization=draft.organization,
-                    project=draft.project,
-                    campaign=draft.campaign,
-                    username=username,
-                )
-                node.update(updated)
-                if ds_task:
-                    tasks.append(ds_task)
-                if ds_node_run:
-                    ds_completed_at = timezone.now()
-                    ds_node_run.status = 'succeeded' if updated.get('status') == 'succeeded' else str(updated.get('status') or 'failed')
-                    ds_node_run.completed_at = ds_completed_at
-                    ds_node_run.duration_ms = max(0, int((ds_completed_at - ds_started_at).total_seconds() * 1000))
-                    ds_node_run.generation_task = ds_task
-                    ds_node_run.output_summary = _summarize_output(updated.get('output'))
-                    ds_node_run.error_message = str(updated.get('error_message') or '')
-                    ds_node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
-                if ds_task and updated.get('status') == 'succeeded':
-                    workflow_asset_ids.extend(annotate_task_assets_for_workflow(
-                        task=ds_task,
-                        workflow_run=workflow_run,
-                        node_run=ds_node_run,
-                        node=updated,
-                    ))
-                record_workflow_event(workflow_run, 'cascade_node_succeeded', node_run=ds_node_run, node_id=str(node.get('id')), payload={'task_id': ds_task.id if ds_task else None})
+            updated, ds_task = run_workflow_node(
+                node=node,
+                nodes=nodes,
+                edges=edges,
+                brand_context=brand_context,
+                organization=draft.organization,
+                project=draft.project,
+                campaign=draft.campaign,
+                username=username,
+            )
+            node.update(updated)
+            if ds_task:
+                tasks.append(ds_task)
+            if ds_node_run:
+                ds_completed_at = timezone.now()
+                ds_node_run.status = 'succeeded' if updated.get('status') == 'succeeded' else str(updated.get('status') or 'failed')
+                ds_node_run.completed_at = ds_completed_at
+                ds_node_run.duration_ms = max(0, int((ds_completed_at - ds_started_at).total_seconds() * 1000))
+                ds_node_run.generation_task = ds_task
+                ds_node_run.output_summary = _summarize_output(updated.get('output'))
+                ds_node_run.error_message = str(updated.get('error_message') or '')
+                ds_node_run.save(update_fields=['status', 'completed_at', 'duration_ms', 'generation_task', 'output_summary', 'error_message', 'updated_at'])
+            if ds_task and updated.get('status') == 'succeeded':
+                workflow_asset_ids.extend(annotate_task_assets_for_workflow(
+                    task=ds_task,
+                    workflow_run=workflow_run,
+                    node_run=ds_node_run,
+                    node=updated,
+                ))
+            record_workflow_event(workflow_run, 'cascade_node_succeeded', node_run=ds_node_run, node_id=str(node.get('id')), payload={'task_id': ds_task.id if ds_task else None})
         except Exception:
             node['status'] = 'failed'
             failed_downstream.append(str(node.get('id')))

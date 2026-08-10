@@ -1,0 +1,1 @@
+{"id":"speakable-script","input":{"text":"A concise product introduction.","speed":1.0,"output_locale":"en-US"},"assertions":["valid_schema","meaning_preserved","duration_plausible"]}

@@ -1,14 +1,27 @@
 from django.contrib.auth.models import User
 from decimal import Decimal
+from unittest.mock import patch
 from django.core.cache import cache
 from django.core.checks import Tags, run_checks
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from api.models import AIConfiguration, Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, EnterpriseContactRequest, GenerationTask, Membership, Organization, PolicyDocument, ProInvite, Project, UsageEvent, UserConsent, UserFollow, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft, hash_pro_invite_code
+from api.models import Asset, AuditLog, Campaign, CommunityCreation, ContentReport, CreditLedgerEntry, EnterpriseContactRequest, GenerationTask, Membership, Organization, PolicyDocument, ProInvite, Project, UsageEvent, UserConsent, UserFollow, UserProfile, WorkflowNodeRun, WorkflowRun, WorkflowRunEvent, WorkflowTemplate, WorkspaceDraft, hash_pro_invite_code
 from api.audit import record_audit_log
 from api.redaction import redact_text
+from harness.adapters.django.generation import DjangoGenerationGateway
+from tests.provider_double import DeterministicProviderAdapter, configure_test_provider
+
+
+def install_test_provider(testcase, organization):
+    configure_test_provider(organization)
+    provider_patch = patch.dict(
+        DjangoGenerationGateway.ADAPTERS,
+        {'local_proxy': DeterministicProviderAdapter},
+    )
+    provider_patch.start()
+    testcase.addCleanup(provider_patch.stop)
 
 
 def grant_required_policy_consents(user):
@@ -23,8 +36,7 @@ def grant_required_policy_consents(user):
 
 class AdminConsoleSeparationTests(APITestCase):
     def setUp(self):
-        self.admin = User.objects.get(username='ROOT')
-        self.demo = User.objects.get(username='DEMO')
+        self.admin = User.objects.create_superuser(username='ROOT', password='123', email='root@example.com')
         self.member = User.objects.create_user(username='member-user', password='123', email='member@example.com')
         self.organization = Organization.objects.create(name='Member Org', slug='member-org')
         Membership.objects.create(user=self.member, organization=self.organization, role='admin')
@@ -71,13 +83,10 @@ class AdminConsoleSeparationTests(APITestCase):
         response = self.client.post(f'/api/admin-console/users/{self.admin.id}/actions/freeze/', {}, format='json')
         self.assertEqual(response.status_code, 400)
 
-    def test_demo_account_is_not_admin(self):
-        self.assertFalse(self.demo.is_superuser)
-        self.assertFalse(self.demo.is_staff)
+    def test_demo_credentials_are_not_seeded(self):
+        self.assertFalse(User.objects.filter(username='DEMO').exists())
         response = self.client.post('/api/auth/login/', {'username': 'DEMO', 'password': '123'}, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.data['demo_account'])
-        self.assertFalse(response.data['is_superuser'])
+        self.assertEqual(response.status_code, 401)
 
     def test_admin_can_create_update_and_delete_pro_invite(self):
         self.client.post('/api/admin-auth/login/', {'username': 'ROOT', 'password': '123'}, format='json')
@@ -410,7 +419,7 @@ class WorkspaceUpgradeTests(APITestCase):
             name='Wave One',
             objective='Validate the launch message',
         )
-        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        install_test_provider(self, self.organization)
         grant_required_policy_consents(self.user)
         self.client.login(username='workspace-user', password='123')
 
@@ -423,7 +432,7 @@ class WorkspaceUpgradeTests(APITestCase):
 
     def test_copy_generation_returns_structured_payload(self):
         response = self.client.post('/api/generate/copy/', {
-            'username': 'DEMO',
+            'username': 'ignored-user',
             'brand_name': 'Launchbook',
             'product_description': 'AI marketing workspace for creator teams',
             'tone': 'concise',
@@ -441,9 +450,8 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['task']['status'], 'succeeded')
 
     def test_content_package_generation_returns_structured_payload(self):
-        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         response = self.client.post('/api/generate/content-package/', {
-            'username': 'DEMO',
+            'username': 'ignored-user',
             'brief': 'Launch an AI marketing workspace for creator teams',
             'brand_name': 'Launchbook',
             'use_case': '新品上市',
@@ -494,7 +502,7 @@ class WorkspaceUpgradeTests(APITestCase):
             nodes=[],
             edges=[],
         )
-        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'DEMO'}, format='json')
+        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'ignored-user'}, format='json')
         self.assertEqual(response.status_code, 403, response.content)
         self.assertTrue(response.data['upgrade_required'])
         self.assertEqual(response.data['feature'], 'workflow_run')
@@ -521,9 +529,8 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['feature'], 'ai_config_write')
 
     def test_image_generation_returns_structured_payload(self):
-        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         response = self.client.post('/api/generate/image/', {
-            'username': 'DEMO',
+            'username': 'ignored-user',
             'prompt': 'A minimalist marketing desk setup',
             'style': 'editorial sketch',
             'aspect_ratio': '1:1',
@@ -589,7 +596,7 @@ class WorkspaceUpgradeTests(APITestCase):
             edges=[{'id': 'context-copy', 'source': 'context-1', 'target': 'copy-1'}],
         )
 
-        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'DEMO'}, format='json')
+        response = self.client.post(f'/api/drafts/{draft.id}/run/', {'username': 'ignored-user'}, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertIn('workflow_run', response.data)
         self.assertEqual(response.data['draft']['status'], 'completed')
@@ -624,7 +631,7 @@ class WorkspaceUpgradeTests(APITestCase):
 
         response = self.client.post(
             f'/api/drafts/{draft.id}/nodes/copy-1/retry/',
-            {'username': 'DEMO', 'feedback': 'Make the opening more direct.'},
+            {'username': 'ignored-user', 'feedback': 'Make the opening more direct.'},
             format='json',
             HTTP_IDEMPOTENCY_KEY='retry-copy-1',
         )
@@ -722,8 +729,8 @@ class WorkspaceUpgradeTests(APITestCase):
             organization=self.organization,
             project=self.project,
             campaign=self.campaign,
-            provider='mock',
-            model_name='mock-copy',
+            provider='deterministic-test',
+            model_name='test-copy',
             prompt_tokens=80,
             completion_tokens=20,
             total_tokens=100,
@@ -735,7 +742,7 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['project_count'], 1)
         self.assertIn('usage_summary', response.data)
         self.assertEqual(response.data['usage_summary']['total_tokens'], 100)
-        self.assertEqual(response.data['recent_usage'][0]['provider'], 'mock')
+        self.assertEqual(response.data['recent_usage'][0]['provider'], 'deterministic-test')
 
         response = self.client.post('/api/billing/plans/', {
             'organization': 'test-org',
@@ -815,8 +822,8 @@ class WorkspaceUpgradeTests(APITestCase):
             project=self.project,
             campaign=self.campaign,
             generation_task=task,
-            provider='mock',
-            model_name='mock-copy',
+            provider='deterministic-test',
+            model_name='test-copy',
             prompt_tokens=80,
             completion_tokens=20,
             total_tokens=100,
@@ -845,7 +852,7 @@ class WorkspaceUpgradeTests(APITestCase):
         self.assertEqual(response.data['metrics']['success_rate'], 100)
         self.assertEqual(response.data['tasks_by_status']['succeeded'], 1)
         self.assertEqual(response.data['asset_type_counts']['document'], 1)
-        self.assertEqual(response.data['usage_by_provider'][0]['provider'], 'mock')
+        self.assertEqual(response.data['usage_by_provider'][0]['provider'], 'deterministic-test')
         self.assertEqual(len(response.data['usage_trend']), 7)
         self.assertEqual(response.data['workspace_health']['completed_drafts'], 1)
         self.assertEqual(response.data['recent_tasks'][0]['id'], task.id)
@@ -870,6 +877,7 @@ class SecurityAccessLayerTests(APITestCase):
         self.project = Project.objects.create(organization=self.organization, name='Owned Project', slug='owned-project')
         self.other_project = Project.objects.create(organization=self.other_org, name='Other Project', slug='other-project')
         self.campaign = Campaign.objects.create(project=self.project, name='Owned Campaign')
+        install_test_provider(self, self.organization)
         self.task = GenerationTask.objects.create(
             organization=self.organization,
             project=self.project,
@@ -914,7 +922,6 @@ class SecurityAccessLayerTests(APITestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_generation_ignores_request_username(self):
-        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
         self.client.login(username='sec-creator', password='123')
         response = self.client.post(
             '/api/generate/copy/',
@@ -1133,13 +1140,23 @@ class SecurityAccessLayerTests(APITestCase):
 
 class LegalLaunchReadinessTests(APITestCase):
     def setUp(self):
+        now = timezone.now()
+        PolicyDocument.objects.create(
+            policy_type='terms', version='test-terms-v1', title='Test Terms',
+            content_url='https://policies.example.test/terms', is_active=True, effective_at=now,
+        )
+        PolicyDocument.objects.create(
+            policy_type='privacy', version='test-privacy-v1', title='Test Privacy',
+            content_url='https://policies.example.test/privacy', is_active=True, effective_at=now,
+        )
         self.user = User.objects.create_user(username='legal-user', password='123', email='legal@example.com')
         self.ops = User.objects.create_user(username='legal-ops', password='123', email='ops@example.com')
         self.organization = Organization.objects.create(name='Legal Org', slug='legal-org')
         Membership.objects.create(user=self.user, organization=self.organization, role='creator')
         Membership.objects.create(user=self.ops, organization=self.organization, role='ops')
         self.project = Project.objects.create(organization=self.organization, name='Legal Project', slug='legal-project')
-        AIConfiguration.objects.filter(provider='mock').update(is_active=True)
+        self.campaign = Campaign.objects.create(project=self.project, name='Legal Campaign')
+        install_test_provider(self, self.organization)
 
     def test_register_requires_terms_and_privacy_flags(self):
         response = self.client.post('/api/auth/register/', {
@@ -1150,6 +1167,39 @@ class LegalLaunchReadinessTests(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, 400)
         self.assertIn('服务条款', response.data['error'])
+
+    def test_register_requires_an_explicit_organization_name(self):
+        response = self.client.post('/api/auth/register/', {
+            'email': 'no-org@example.com',
+            'username': 'no-org',
+            'password': 'StrongPass123!',
+            'accepted_terms': True,
+            'accepted_privacy': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('组织名称', response.data['error'])
+        self.assertFalse(User.objects.filter(email='no-org@example.com').exists())
+
+    @patch('accounts.views._send_verification_email')
+    def test_register_creates_membership_without_seeded_project_or_campaign(self, send_email):
+        response = self.client.post('/api/auth/register/', {
+            'email': 'clean-start@example.com',
+            'username': 'clean-start',
+            'organization_name': 'Clean Start Studio',
+            'password': 'StrongPass123!',
+            'accepted_terms': True,
+            'accepted_privacy': True,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        user = User.objects.get(username='clean-start')
+        membership = Membership.objects.get(user=user)
+        self.assertEqual(membership.role, 'admin')
+        self.assertEqual(membership.organization.name, 'Clean Start Studio')
+        self.assertFalse(Project.objects.filter(organization=membership.organization).exists())
+        self.assertFalse(Campaign.objects.filter(project__organization=membership.organization).exists())
+        self.assertIsNone(response.data['project'])
+        self.assertIsNone(response.data['campaign'])
+        send_email.assert_called_once_with(user)
 
     def test_policy_consent_endpoint_records_versions(self):
         self.client.login(username='legal-user', password='123')
@@ -1259,12 +1309,52 @@ class LegalLaunchReadinessTests(APITestCase):
         self.assertTrue(AuditLog.objects.filter(action='content_moderation', target_id=str(creation_id)).exists())
 
 
+class WorkspaceScopeCreationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='scope-owner', password='123')
+        self.owned_org = Organization.objects.create(name='Owned Studio', slug='owned-studio')
+        Membership.objects.create(user=self.user, organization=self.owned_org, role='admin')
+        self.other_org = Organization.objects.create(name='Other Studio', slug='other-studio')
+        self.client.login(username='scope-owner', password='123')
+
+    def test_workspace_scope_requires_real_project_and_campaign_names(self):
+        response = self.client.post('/api/workspace/', {
+            'organization_slug': self.owned_org.slug,
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Project.objects.filter(organization=self.owned_org).exists())
+
+    def test_workspace_scope_cannot_claim_an_unowned_organization(self):
+        response = self.client.post('/api/workspace/', {
+            'organization_slug': self.other_org.slug,
+            'project_name': 'Illicit Project',
+            'campaign_name': 'Illicit Campaign',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Membership.objects.filter(user=self.user, organization=self.other_org).exists())
+        self.assertFalse(Project.objects.filter(organization=self.other_org).exists())
+
+    def test_workspace_scope_uses_explicit_input_in_owned_organization(self):
+        response = self.client.post('/api/workspace/', {
+            'organization_slug': self.owned_org.slug,
+            'project_name': 'Autumn Product Launch',
+            'campaign_name': 'North America Rollout',
+            'brief': 'Coordinate launch assets across owned channels.',
+            'objective': 'Build qualified demand.',
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        project = Project.objects.get(organization=self.owned_org)
+        campaign = Campaign.objects.get(project=project)
+        self.assertEqual(project.name, 'Autumn Product Launch')
+        self.assertEqual(project.brief, 'Coordinate launch assets across owned channels.')
+        self.assertEqual(campaign.name, 'North America Rollout')
+        self.assertEqual(campaign.objective, 'Build qualified demand.')
+
+
 class ProductionSecurityChecksTests(APITestCase):
     @override_settings(
         DEBUG=False,
         ALLOW_UNAUTHENTICATED_API=True,
-        MARKETING_HUB_BOOTSTRAP_DEMO=True,
-        AI_ALLOW_MOCK_FALLBACK=True,
         CORS_ALLOW_ALL_ORIGINS=True,
         SESSION_COOKIE_SECURE=False,
         CSRF_COOKIE_SECURE=False,
@@ -1273,7 +1363,7 @@ class ProductionSecurityChecksTests(APITestCase):
     def test_deploy_check_fails_for_dangerous_production_settings(self):
         errors = run_checks(tags=[Tags.security], include_deployment_checks=True)
         ids = {error.id for error in errors}
-        self.assertTrue({'api.E001', 'api.E002', 'api.E003', 'api.E004', 'api.E010', 'api.E011', 'api.E012'}.issubset(ids))
+        self.assertTrue({'api.E001', 'api.E002', 'api.E010', 'api.E011', 'api.E012'}.issubset(ids))
 
 
 class CsrfEndpointTests(APITestCase):

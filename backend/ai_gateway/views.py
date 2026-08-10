@@ -20,11 +20,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ai_gateway.agent import LlmUpstreamError, build_assistant_agent
-from ai_gateway.services import (
-    AGNES_DEFAULT_BASE_URL,
-)
-from ai_gateway.tools import ToolContext
+from harness.adapters.django.assistant import LlmUpstreamError, build_assistant_agent
+from harness.adapters.providers.constants import AGNES_DEFAULT_BASE_URL
+from harness.adapters.tools import ToolContext
 from api.audit import record_audit_log
 from api.entitlements import can_use_feature, feature_denied_payload
 from api.models import AIConfiguration, AssistantMessage, AssistantSession
@@ -69,13 +67,11 @@ def normalize_config_scope(provider: str, config_scope: str) -> str:
     scope = config_scope if config_scope in allowed else 'all'
     if provider == 'anthropic':
         return 'text'
-    if provider == 'mock':
-        return 'all'
-    if scope == 'image' and provider not in {'agnes', 'mock'}:
+    if scope == 'image' and provider not in {'agnes', 'local_proxy'}:
         return 'text'
-    if scope == 'video' and provider not in {'agnes', 'mock'}:
+    if scope == 'video' and provider not in {'agnes', 'local_proxy'}:
         return 'text'
-    if scope == 'audio' and provider not in {'mock', 'openai'}:
+    if scope == 'audio' and provider != 'local_proxy':
         return 'text'
     return scope
 
@@ -224,8 +220,6 @@ class AIConfigView(APIView):
         configs = AIConfiguration.objects.filter(organization__isnull=True)
         if org is not None:
             configs = AIConfiguration.objects.filter(Q(organization__isnull=True) | Q(organization=org))
-        if not settings.AI_ALLOW_MOCK_PROVIDER:
-            configs = configs.exclude(provider='mock')
         return with_csrf_token(
             Response(AIConfigurationSerializer(configs.order_by('-is_active', '-updated_at'), many=True).data),
             request,
@@ -243,9 +237,10 @@ class AIConfigView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
         provider = request.data.get('provider', 'agnes')
-        if provider == 'mock' and not settings.AI_ALLOW_MOCK_PROVIDER:
+        supported_providers = {choice[0] for choice in AIConfiguration.PROVIDER_CHOICES}
+        if provider not in supported_providers:
             return Response(
-                {'detail': 'Mock provider is disabled for this environment.'},
+                {'detail': f'Unsupported AI provider: {provider}.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         api_key = request.data.get('api_key', '').strip()
@@ -352,11 +347,6 @@ class AIConfigModelsView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
         provider = (request.data.get('provider') or 'agnes').strip()
-        if provider == 'mock':
-            return Response(
-                {'detail': 'Mock provider does not expose production models.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if provider not in PROVIDER_BASE_URLS:
             return Response(
                 {'detail': f'Unsupported provider: {provider}'},
@@ -521,15 +511,25 @@ class AssistantChatView(APIView):
                 'role', 'content', 'tool_calls', 'tool_name',
             )
         )
-        # Resolve the LLM from AIConfiguration (text lane). The factory
-        # falls back to mock when no key is configured, so this stays
-        # usable in dev/tests.
-        agent = build_assistant_agent(org)
+        # Resolve a real LLM from AIConfiguration. Missing configuration is a
+        # recoverable onboarding state, not a reason to fabricate output.
+        try:
+            agent = build_assistant_agent(org)
+        except RuntimeError as exc:
+            return Response(
+                {
+                    'detail': str(exc),
+                    'code': str(exc).split(':', 1)[0],
+                    'action': 'Open AI Settings and configure an active text provider.',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         ctx = ToolContext(organization=org, user=request.user, session_id=session.id)
         messages = agent.build_messages(
             history=history,
             page_context=page_context,
             user_message=user_message,
+            output_locale=str(request.data.get('output_locale') or 'zh-CN'),
         )
 
         def event_stream():
@@ -556,6 +556,8 @@ class AssistantChatView(APIView):
                         'result': step.result,
                         'error': step.error,
                         'status_text': step.status_text,
+                        'status_code': step.status_code,
+                        'finish_reason': step.finish_reason,
                     }
                     # Surface upstream LLM status (e.g. 429) so the UI
                     # can show a specific message instead of "unknown".

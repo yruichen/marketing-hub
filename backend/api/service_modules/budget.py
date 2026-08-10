@@ -68,10 +68,21 @@ def _validate_payload(task_type: str, payload: dict[str, Any]) -> None:
 
     if task_type == 'copy' and len(str(payload.get('product_description') or '')) > 8000:
         raise ValidationError({'product_description': 'product_description must be 8000 characters or fewer.'})
+    if task_type == 'copy':
+        if not str(payload.get('brand_name') or '').strip():
+            raise ValidationError({'brand_name': 'brand_name is required.'})
+        if not str(payload.get('product_description') or '').strip():
+            raise ValidationError({'product_description': 'product_description is required.'})
     if task_type in {'image', 'image_prompt'} and len(str(payload.get('prompt') or payload.get('subject') or '')) > 3000:
         raise ValidationError({'prompt': 'prompt must be 3000 characters or fewer.'})
+    if task_type == 'image' and not str(payload.get('prompt') or '').strip():
+        raise ValidationError({'prompt': 'prompt is required.'})
+    if task_type == 'image_prompt' and not str(payload.get('subject') or payload.get('upstream_text') or '').strip():
+        raise ValidationError({'subject': 'subject or upstream_text is required.'})
     if task_type == 'audio' and len(str(payload.get('text') or '')) > 5000:
         raise ValidationError({'text': 'text must be 5000 characters or fewer.'})
+    if task_type == 'audio' and not str(payload.get('text') or '').strip():
+        raise ValidationError({'text': 'text is required.'})
     if task_type in {'storyboard', 'video'}:
         if len(str(payload.get('script') or payload.get('prompt') or '')) > 12000:
             raise ValidationError({'script': 'script or prompt must be 12000 characters or fewer.'})
@@ -82,6 +93,17 @@ def _validate_payload(task_type: str, payload: dict[str, Any]) -> None:
         max_duration = int(getattr(settings, 'GENERATION_MAX_VIDEO_SECONDS', 180 if task_type == 'storyboard' else 60))
         if duration < 1 or duration > max_duration:
             raise ValidationError({'duration': f'duration must be between 1 and {max_duration} seconds.'})
+    if task_type == 'storyboard' and not str(payload.get('video_topic') or '').strip():
+        raise ValidationError({'video_topic': 'video_topic is required.'})
+    if task_type == 'video':
+        if not str(payload.get('video_topic') or '').strip():
+            raise ValidationError({'video_topic': 'video_topic is required.'})
+        if not (
+            str(payload.get('prompt') or '').strip()
+            or str(payload.get('script') or '').strip()
+            or payload.get('scenes')
+        ):
+            raise ValidationError({'prompt': 'prompt, script, or scenes is required.'})
 
 
 def assert_generation_allowed(

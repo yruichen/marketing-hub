@@ -1,6 +1,8 @@
 import { Bot, ExternalLink, GitBranch, Image as ImageIcon, Settings2, Sparkles } from 'lucide-react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { nodeTypeLabels, presets, statusLabels, type NodeType } from './constants';
+import type { NodeType } from './definition';
+import { nodeTypeLabelKeys, presets, statusLabelKeys } from './presentation';
+import { useI18n } from '../../shared/i18n';
 import {
   buildWorkflowPreviewItems,
   nodeStatusDotClass,
@@ -132,6 +134,7 @@ function NodePreview({
 }
 
 export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode>) {
+  const { t } = useI18n();
   const {
     label,
     nodeType,
@@ -150,8 +153,10 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
   } = data;
   const preset = presets.find((item) => item.type === nodeType);
   const Icon = preset?.icon || Settings2;
-  const statusLabel = statusLabels[status] || status || '未运行';
-  const typeLabel = nodeTypeLabels[nodeType] || preset?.label || nodeType;
+  const statusKey = statusLabelKeys[status];
+  const typeKey = nodeTypeLabelKeys[nodeType];
+  const statusLabel = statusKey ? t(statusKey) : status || t('workflow.status.idle');
+  const typeLabel = label || (typeKey ? t(typeKey) : preset ? t(preset.labelKey) : nodeType);
   const isDimmedTarget = connectionModeActive && !isConnectionSource && !isCompatibleTarget;
   const isActive = status === 'running' || status === 'queued';
   const inputText = schemaText(inputSchema);
@@ -198,8 +203,8 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
                 {statusLabel}
               </span>
             </div>
-            <h4 className="mt-2 line-clamp-2 text-[17px] font-black leading-tight text-[var(--editorial-text)]" title={label}>
-              {label}
+            <h4 className="mt-2 line-clamp-2 text-[17px] font-black leading-tight text-[var(--editorial-text)]" title={typeLabel}>
+              {typeLabel}
             </h4>
           </div>
           <button
@@ -210,7 +215,7 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
             }}
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-[var(--border-default)] bg-[var(--surface-panel)] hover:bg-[var(--surface-hover)]"
             title="从此节点开始连线"
-            aria-label={`从 ${label} 开始连线`}
+            aria-label={`从 ${typeLabel} 开始连线`}
           >
             <GitBranch className="h-3.5 w-3.5" />
           </button>
@@ -240,7 +245,7 @@ export function WorkflowNodeComponent({ data, id, selected }: NodeProps<FlowNode
               }}
               className="inline-flex h-8 w-8 items-center justify-center rounded-[7px] border border-[var(--border-subtle)] bg-[var(--surface-panel)] hover:bg-[var(--surface-hover)]"
               title="AI 编辑"
-              aria-label={`AI 编辑 ${label}`}
+              aria-label={`AI 编辑 ${typeLabel}`}
             >
               <Bot className="h-3.5 w-3.5" />
             </button>

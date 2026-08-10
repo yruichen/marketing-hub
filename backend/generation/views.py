@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
+from pydantic import ValidationError as PydanticValidationError
 
 from api.idempotency import claim_idempotency_key, finish_idempotency_key
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
@@ -13,7 +14,7 @@ from api.entitlements import can_use_feature, feature_denied_payload
 from api.legal import require_current_policy_consent
 from api.throttles import GenerationBurstThrottle, OrgRateThrottle
 from api.scope import as_bool, get_scope
-from ai_gateway.content_package import generate_content_package
+from generation.content_package import ContentPackageInput, generate_content_package
 from api.services import (
     ai_edit_workflow,
     brainstorm_workflow,
@@ -24,7 +25,6 @@ from api.services import (
     schedule_generation_task,
     retry_workspace_node,
     run_generation_task,
-    run_workspace_workflow,
     serialize_task,
     serialize_workflow_run,
     serialize_workspace_draft,
@@ -39,7 +39,7 @@ def _image_generation_payload(data) -> dict:
     style_skill = str(data.get('style_skill') or DEFAULT_IMAGE_STYLE_SKILL_ID).strip()
     legacy_style = data.get('style')
     return {
-        'prompt': data.get('prompt', 'A creative workspace'),
+        'prompt': str(data.get('prompt') or '').strip(),
         'style_skill': style_skill,
         'style': resolve_style_skill(style_skill, legacy_style),
         'aspect_ratio': data.get('aspect_ratio', '1:1'),
@@ -103,7 +103,7 @@ def _video_generation_payload(data) -> dict:
     if image_url and image_url not in reference_images:
         reference_images.insert(0, image_url)
     return {
-        'video_topic': data.get('video_topic') or data.get('topic') or 'Product launch video',
+        'video_topic': str(data.get('video_topic') or data.get('topic') or '').strip(),
         'prompt': data.get('prompt', ''),
         'script': data.get('script', ''),
         'creative_mode': data.get('creative_mode', 'single_shot'),
@@ -155,6 +155,14 @@ class ContentPackageView(APIView):
         policy_block = require_current_policy_consent(user)
         if policy_block:
             return policy_block
+        try:
+            payload = ContentPackageInput.model_validate(dict(request.data)).model_dump()
+        except PydanticValidationError as exc:
+            return Response({
+                'error': 'Content package input is invalid.',
+                'code': 'CONTENT_PACKAGE_INPUT_INVALID',
+                'details': exc.errors(include_url=False, include_context=False, include_input=False),
+            }, status=status.HTTP_400_BAD_REQUEST)
         replay, idempotency = idempotency_response(request, org)
         if replay:
             return replay
@@ -163,7 +171,7 @@ class ContentPackageView(APIView):
         package, logs, _, _ = generate_content_package(
             organization=org,
             role=role,
-            payload=dict(request.data),
+            payload=payload,
         )
         response = Response({'content_package': package, 'logs': logs}, status=status.HTTP_200_OK)
         return finalize_idempotency(idempotency, response, 'content_package', package.get('title', ''))
@@ -187,10 +195,10 @@ class MarketingCopyView(APIView):
             task = create_generation_task(auto_save=False, 
                 task_type='copy',
                 payload={
-                    'brand_name': request.data.get('brand_name', 'Marketing-Hub'),
-                    'product_description': request.data.get('product_description', 'AI 营销场景全能助手'),
-                    'tone': request.data.get('tone', '爆款活泼'),
-                    'platform': request.data.get('platform', 'Xiaohongshu'),
+                    'brand_name': str(request.data.get('brand_name') or '').strip(),
+                    'product_description': str(request.data.get('product_description') or '').strip(),
+                    'tone': str(request.data.get('tone') or 'clear and specific').strip(),
+                    'platform': str(request.data.get('platform') or 'general').strip(),
                 },
                 username=request_username,
                 organization=org,
@@ -208,10 +216,10 @@ class MarketingCopyView(APIView):
         task = create_generation_task(
             task_type='copy',
             payload={
-                'brand_name': request.data.get('brand_name', 'Marketing-Hub'),
-                'product_description': request.data.get('product_description', 'AI 营销场景全能助手'),
-                'tone': request.data.get('tone', '爆款活泼'),
-                'platform': request.data.get('platform', 'Xiaohongshu'),
+                'brand_name': str(request.data.get('brand_name') or '').strip(),
+                'product_description': str(request.data.get('product_description') or '').strip(),
+                'tone': str(request.data.get('tone') or 'clear and specific').strip(),
+                'platform': str(request.data.get('platform') or 'general').strip(),
             },
             username=request_username,
             organization=org,
@@ -281,9 +289,9 @@ class StoryboardView(APIView):
             task = create_generation_task(auto_save=False, 
                 task_type='storyboard',
                 payload={
-                    'video_topic': request.data.get('video_topic', 'Coffee Shop Morning'),
+                    'video_topic': str(request.data.get('video_topic') or '').strip(),
                     'duration': int(request.data.get('duration', 30)),
-                    'target_audience': request.data.get('target_audience', 'Young creators'),
+                    'target_audience': str(request.data.get('target_audience') or 'general audience').strip(),
                 },
                 username=request_username,
                 organization=org,
@@ -296,9 +304,9 @@ class StoryboardView(APIView):
         task = create_generation_task(
             task_type='storyboard',
             payload={
-                'video_topic': request.data.get('video_topic', 'Coffee Shop Morning'),
+                'video_topic': str(request.data.get('video_topic') or '').strip(),
                 'duration': int(request.data.get('duration', 30)),
-                'target_audience': request.data.get('target_audience', 'Young creators'),
+                'target_audience': str(request.data.get('target_audience') or 'general audience').strip(),
             },
             username=request_username,
             organization=org,
@@ -326,7 +334,7 @@ class AudioVoiceoverView(APIView):
             task = create_generation_task(auto_save=False, 
                 task_type='audio',
                 payload={
-                    'text': request.data.get('text', '欢迎使用 Marketing Hub AI 一站式营销场景配音助手'),
+                    'text': str(request.data.get('text') or '').strip(),
                     'voice_id': request.data.get('voice_id', 'female_warm'),
                     'speed': float(request.data.get('speed', 1.0)),
                 },
@@ -341,7 +349,7 @@ class AudioVoiceoverView(APIView):
         task = create_generation_task(
             task_type='audio',
             payload={
-                'text': request.data.get('text', '欢迎使用 Marketing Hub AI 一站式营销场景配音助手'),
+                'text': str(request.data.get('text') or '').strip(),
                 'voice_id': request.data.get('voice_id', 'female_warm'),
                 'speed': float(request.data.get('speed', 1.0)),
             },
@@ -497,17 +505,11 @@ class WorkflowRunView(APIView):
             idempotency_key=idempotency.key if idempotency else '',
         )
         if as_bool(request.data.get('async', False)):
-            from django.conf import settings
             from api.tasks import process_workflow_run
 
-            if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', True):
-                import threading
-
-                threading.Thread(target=run_workflow_run_by_id, args=(workflow_run.id, username), daemon=True).start()
-            else:
-                async_result = process_workflow_run.delay(workflow_run.id, username)
-                workflow_run.celery_task_id = async_result.id
-                workflow_run.save(update_fields=['celery_task_id', 'updated_at'])
+            async_result = process_workflow_run.delay(workflow_run.id, username)
+            workflow_run.celery_task_id = async_result.id
+            workflow_run.save(update_fields=['celery_task_id', 'updated_at'])
             response = Response({
                 'workflow_run': serialize_workflow_run(workflow_run),
                 'draft': serialize_workspace_draft(draft),
@@ -515,7 +517,8 @@ class WorkflowRunView(APIView):
             }, status=status.HTTP_202_ACCEPTED)
             return finalize_idempotency(idempotency, response, 'workflow_run', workflow_run.id)
 
-        draft, tasks = run_workspace_workflow(draft, username=username, workflow_run=workflow_run)
+        completed_draft, tasks = run_workflow_run_by_id(workflow_run.id, username=username)
+        draft = completed_draft or draft
         workflow_run = WorkflowRun.objects.prefetch_related('node_runs', 'events').get(pk=workflow_run.id)
         return finalize_idempotency(idempotency, Response({
             'workflow_run': serialize_workflow_run(workflow_run),

@@ -52,16 +52,16 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [viewMode] = useState<ViewMode>('list');
   const [sortKey] = useState<ProjectSortKey>('recent');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [newFolderName] = useState('默认文件夹');
+  const [newFolderName] = useState('');
   const [newProject, setNewProject] = useState<ProjectForm>({
-    name: '新营销项目',
-    brief: '新品上市全链路营销活动',
+    name: '',
+    brief: '',
     folder_id: null,
-    folder_path: '默认文件夹',
-    platform_tags: ['小红书'],
+    folder_path: '',
+    platform_tags: [],
     status_tag: 'creating',
   });
-  const [newCampaignName, setNewCampaignName] = useState('Launch Wave');
+  const [newCampaignName, setNewCampaignName] = useState('');
   const [draftContext, setDraftContext] = useState<BrandContext>(EMPTY_BRAND_CONTEXT);
   const [brandContextSaving, setBrandContextSaving] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -72,7 +72,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   const [deletedFolders, setDeletedFolders] = useState<FolderRecord[]>([]);
   const initialFolderSetRef = useRef(false);
 
-  const organizationSlug = organization?.slug || 'marketing-hub';
+  const organizationSlug = organization?.slug ?? null;
   const projectsQueryKey = useMemo(() => ['projects', organizationSlug], [organizationSlug]);
   const foldersQueryKey = useMemo(() => ['projects-folders', organizationSlug], [organizationSlug]);
   const brandContextDirty = useMemo(
@@ -83,6 +83,12 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   // ===== data fetch =====
   const fetchProjects = useCallback(
     async (preferredProjectId?: number) => {
+      if (!organizationSlug) {
+        setProjects([]);
+        setFolders([]);
+        setSelectedProject(null);
+        return;
+      }
       setLoading(true);
       try {
         const params = new URLSearchParams({ organization: organizationSlug });
@@ -237,7 +243,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   };
 
   const createProject = async () => {
-    if (!organization) return;
+    if (!organization || !newProject.name.trim() || !newProject.brief.trim()) return;
     setLoading(true);
     try {
       const project = await apiPost<ProjectRecord>('/projects/', {
@@ -257,11 +263,11 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
       triggerToast('项目已创建', 'success');
       setShowCreateProject(false);
       setNewProject({
-        name: '新营销项目',
-        brief: '新品上市全链路营销活动',
+        name: '',
+        brief: '',
         folder_id: null,
-        folder_path: '默认文件夹',
-        platform_tags: ['小红书'],
+        folder_path: '',
+        platform_tags: [],
         status_tag: 'creating',
       });
       await fetchProjects(project.id);
@@ -304,7 +310,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   };
 
   const createCampaign = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !newCampaignName.trim()) return;
     try {
       const campaign = await apiPost<CampaignRecord>('/campaigns/', {
         project_id: selectedProject.id,
@@ -315,6 +321,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
         ...selectedProject,
         campaigns: [campaign, ...selectedProject.campaigns],
       });
+      setNewCampaignName('');
       triggerToast('活动已创建', 'success');
     } catch (err) {
       triggerToast(buildErrorToast(err, '活动创建失败'));
@@ -412,7 +419,7 @@ export function ProjectManager({ organization, activeProjectId, onSelectScope, t
   // When sidebar folder changes, load trash if needed
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (sidebarFolderPath === '__trash__') {
+    if (sidebarFolderPath === '__trash__' && organizationSlug) {
       try {
         const params = new URLSearchParams({ organization: organizationSlug, trash: 'true' });
         apiFetch(`/projects/?${params.toString()}`)

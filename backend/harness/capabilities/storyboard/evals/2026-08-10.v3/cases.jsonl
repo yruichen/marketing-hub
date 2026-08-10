@@ -1,0 +1,1 @@
+{"id":"timed-storyboard","input":{"video_topic":"Reusable bottle","duration":15,"output_locale":"en-US"},"assertions":["valid_schema","durations_sum","scenes_executable"]}

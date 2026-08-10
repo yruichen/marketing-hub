@@ -40,17 +40,17 @@ export function AudioPanel({
   void _loading;
   void _setLoading;
   const [audioInput, setAudioInput] = useState({
-    text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
+    text: '',
     voiceId: 'female_warm',
     speed: 1.0,
   });
   const [audioOutput, setAudioOutput] = useState<AudioOutput>({
-    text: '欢迎使用 Marketing Hub 创意纸页杂志配音系统，为您流式输出极低疲劳旁白！',
+    text: '',
     voice_id: 'female_warm',
     speed: 1.0,
-    audio_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    text_length: 35,
-    estimated_audio_duration_seconds: 8.8
+    audio_url: '',
+    text_length: 0,
+    estimated_audio_duration_seconds: 0,
   });
 
   const [isRunning, setIsRunning] = useState(false);
@@ -152,7 +152,7 @@ export function AudioPanel({
           {isRunning ? (
             <span className="inline-block animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
           ) : null}
-          <span>{isRunning ? 'AGENT SYNTHESIZING...' : '运行配音合成 Agent'}</span>
+          <span>{isRunning ? 'AGENT RUNNING...' : '生成配音脚本与演绎指导'}</span>
         </button>
         </div>
 
@@ -168,6 +168,7 @@ export function AudioPanel({
             </span>
             <button
               onClick={() => onShare('audio', `[配音] Warm Narrator Sketch`, audioOutput, '', audioOutput.audio_url)}
+              disabled={!audioOutput.text}
               className="bg-transparent border border-[var(--editorial-stroke)] hover:bg-[var(--editorial-stroke)] hover:text-[var(--editorial-bg)] px-2.5 py-1 text-[10px] font-bold transition-all cursor-pointer"
             >
               <span>分享社区</span>
@@ -192,7 +193,7 @@ export function AudioPanel({
                   SOUNDWAVE CALCULATING...
                 </span>
               </div>
-            ) : (
+            ) : audioOutput.text ? (
               <div className="h-10 flex items-end gap-1 border-b border-[var(--editorial-stroke)]/20 pb-2">
                 {Array.from({ length: 24 }).map((_, idx) => {
                   const heights = ['h-2', 'h-8', 'h-10', 'h-6', 'h-3', 'h-9', 'h-5', 'h-2', 'h-6', 'h-8', 'h-4', 'h-2'];
@@ -203,6 +204,10 @@ export function AudioPanel({
                     ></span>
                   );
                 })}
+              </div>
+            ) : (
+              <div className="flex h-10 items-center justify-center text-[9px] text-[var(--editorial-text-gray)]">
+                输入旁白后生成可朗读脚本和演绎指导。
               </div>
             )}
 
@@ -220,7 +225,7 @@ export function AudioPanel({
               <div className="p-2 border border-[var(--editorial-stroke)]/40 text-[9px] text-center font-bold text-[var(--editorial-text-gray)] animate-pulse bg-[var(--editorial-paper)]">
                 LOADING STREAMING AUDIO PIPELINE...
               </div>
-            ) : (
+            ) : audioOutput.audio_url ? (
               <audio
                 key={audioOutput.audio_url}
                 controls
@@ -229,6 +234,10 @@ export function AudioPanel({
                 <source src={audioOutput.audio_url} type="audio/mpeg" />
                 Your browser does not support the audio element.
               </audio>
+            ) : (
+              <div className="p-3 text-center text-[9px] font-bold text-[var(--editorial-text-gray)]">
+                当配置的音频 Provider 返回真实音频时，播放器会在这里显示。
+              </div>
             )}
           </div>
 

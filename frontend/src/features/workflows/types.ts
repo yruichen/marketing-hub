@@ -1,8 +1,8 @@
 import type { ErrorActionId } from '../../shared/api/errorActions';
 import type { BrandContext, CampaignRecord, FeatureEntitlements, ProjectRecord, WorkflowNode, WorkflowEdge, WorkspaceDraftRecord } from '../../types/workspace';
 import type { TriggerToastFn } from '../../shared/types/toast';
-import type { NodeType, LegacyNodeType } from './constants';
-import { ioSchema, defaultNodeConfig, nodeTypeLabels } from './constants';
+import type { NodeType, LegacyNodeType } from './definition';
+import { ioSchema, defaultNodeConfig } from './definition';
 
 export interface ProjectDetail extends ProjectRecord {
   campaigns: CampaignRecord[];
@@ -47,7 +47,7 @@ export function normalizeWorkflowNode(node: WorkflowNode, brandContext: BrandCon
   return {
     ...node,
     type: normalizedType,
-    label: node.label || nodeTypeLabels[normalizedType] || '节点',
+    label: node.label || '',
     width: node.width && node.width >= 300 ? node.width : 320,
     height: node.height && node.height >= 320 ? node.height : 360,
     input_schema: node.input_schema || schema.input,

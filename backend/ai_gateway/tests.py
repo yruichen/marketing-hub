@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import Client, SimpleTestCase, override_settings
@@ -8,6 +10,7 @@ from rest_framework.test import APITestCase, force_authenticate
 from ai_gateway.content_package import assemble_content_package
 from ai_gateway.prompt_catalog import PROMPT_ASSETS, get_prompt_asset, prompt_registry_snapshot
 from ai_gateway.services import AIModelGateway, ModelPolicy, NonRetryableGatewayError
+from harness.capabilities import build_capability_registry
 from api.models import AIConfiguration, AssistantMessage, AssistantSession, Membership, Organization, Project, UserProfile
 from ai_gateway.prompts import (
     aspect_ratio_to_size,
@@ -28,6 +31,8 @@ from ai_gateway.prompts import (
     snap_agnes_num_frames,
 )
 from generation.views import _video_generation_payload
+from harness.adapters.django.generation import DjangoGenerationGateway
+from tests.provider_double import DeterministicProviderAdapter, configure_test_provider
 
 
 class CopyPromptTests(SimpleTestCase):
@@ -41,9 +46,10 @@ class CopyPromptTests(SimpleTestCase):
         })
         self.assertEqual(messages[0]['role'], 'system')
         self.assertIn('Make the hook sharper.', messages[1]['content'])
-        self.assertIn('事实与合规边界', messages[0]['content'])
-        self.assertIn('质量自检', messages[1]['content'])
-        self.assertIn('小红书', messages[1]['content'])
+        self.assertIn('<instruction_order>', messages[0]['content'])
+        self.assertIn('Internal quality gate', messages[1]['content'])
+        self.assertIn('Xiaohongshu channel profile', messages[1]['content'])
+        self.assertIn('Output locale: zh-CN', messages[1]['content'])
 
     def test_normalize_copy_result_fills_defaults(self):
         normalized = normalize_copy_result(
@@ -59,8 +65,11 @@ class PromptCatalogTests(SimpleTestCase):
         asset = get_prompt_asset('marketing.copy.system')
         self.assertIsNotNone(asset)
         self.assertEqual(asset.task_type, 'copy')
-        self.assertTrue(asset.version.startswith('2026-06-27'))
+        self.assertEqual(asset.version, '2026-08-10.v3')
+        self.assertEqual(asset.locale, 'en-US')
         self.assertGreaterEqual(len(asset.quality_bar), 3)
+        self.assertTrue(asset.evaluation_profile.endswith('-v3'))
+        self.assertEqual(len(asset.checksum), 64)
         self.assertIn('marketing.review.system', prompt_registry_snapshot())
 
     def test_prompt_catalog_covers_content_generation_prompts(self):
@@ -74,8 +83,28 @@ class PromptCatalogTests(SimpleTestCase):
             'marketing.video.system',
             'marketing.custom_agent.system',
             'marketing.brainstorm.system',
+            'marketing.workflow_edit.system',
         }
         self.assertTrue(required_keys.issubset(set(PROMPT_ASSETS)))
+
+    def test_each_prompt_has_one_independent_versioned_asset_file(self):
+        specs = build_capability_registry().all()
+        self.assertEqual(len(specs), len(PROMPT_ASSETS))
+        for spec in specs:
+            version_root = spec.prompt_root / spec.default_prompt_version
+            self.assertTrue((version_root / 'manifest.yaml').is_file())
+            self.assertTrue((version_root / 'user.md').is_file())
+
+    def test_default_prompt_instruction_assets_are_english(self):
+        han = re.compile(r'[\u4e00-\u9fff]')
+        for asset in PROMPT_ASSETS.values():
+            authored_content = '\n'.join((
+                asset.system_prompt,
+                asset.template,
+                asset.schema_hint,
+                *asset.quality_bar,
+            ))
+            self.assertIsNone(han.search(authored_content), asset.key)
 
 
 class StoryboardPromptTests(SimpleTestCase):
@@ -87,21 +116,21 @@ class StoryboardPromptTests(SimpleTestCase):
             'feedback': 'Make the opening hook stronger.',
         })
         self.assertEqual(messages[0]['role'], 'system')
-        self.assertIn('30 秒', messages[1]['content'])
+        self.assertIn('30 seconds', messages[1]['content'])
         self.assertIn('Make the opening hook stronger.', messages[1]['content'])
-        self.assertIn('前 3 秒', messages[1]['content'])
-        self.assertIn('可拍摄', messages[1]['content'])
+        self.assertIn('first three seconds', messages[0]['content'])
+        self.assertIn('observable and shootable', messages[1]['content'])
 
-    def test_normalize_storyboard_result_balances_scene_durations(self):
+    def test_normalize_storyboard_result_preserves_valid_timeline(self):
         normalized = normalize_storyboard_result(
             {
                 'video_topic': 'Launch video',
                 'total_duration_seconds': 30,
                 'target_audience': 'Marketers',
                 'scenes': [
-                    {'scene_number': 1, 'visual_description': 'Wide shot', 'audio_narration': 'Intro', 'duration_seconds': 5},
-                    {'scene_number': 2, 'visual_description': 'Close-up', 'audio_narration': 'Value', 'duration_seconds': 5},
-                    {'scene_number': 3, 'visual_description': 'End card', 'audio_narration': 'CTA', 'duration_seconds': 5},
+                    {'scene_number': 1, 'visual_description': 'Wide shot', 'audio_narration': 'Intro', 'duration_seconds': 10},
+                    {'scene_number': 2, 'visual_description': 'Close-up', 'audio_narration': 'Value', 'duration_seconds': 10},
+                    {'scene_number': 3, 'visual_description': 'End card', 'audio_narration': 'CTA', 'duration_seconds': 10},
                 ],
             },
             {'video_topic': 'Launch video', 'duration': 30, 'target_audience': 'Marketers'},
@@ -174,27 +203,30 @@ class ModelPolicyTests(APITestCase):
 
     def test_gateway_logs_prompt_catalog_metadata(self):
         AIConfiguration.objects.filter(is_active=True).update(is_active=False)
-        response = AIModelGateway.execute(
-            organization=None,
-            role='admin',
-            task_type='copy',
-            payload={
-                'brand_name': 'Launchbook',
-                'product_description': 'AI marketing workspace',
-                'tone': 'concise',
-                'platform': 'Xiaohongshu',
-            },
-            prompt_key='marketing.copy.system',
-        )
-        self.assertIn('gateway:prompt_version=2026-06-27.v2', response.logs)
+        configure_test_provider()
+        with patch.dict(DjangoGenerationGateway.ADAPTERS, {'local_proxy': DeterministicProviderAdapter}):
+            response = AIModelGateway.execute(
+                organization=None,
+                role='admin',
+                task_type='copy',
+                payload={
+                    'brand_name': 'Launchbook',
+                    'product_description': 'AI marketing workspace',
+                    'tone': 'concise',
+                    'platform': 'Xiaohongshu',
+                },
+                prompt_key='marketing.copy.system',
+            )
+        self.assertIn('gateway:prompt_version=2026-08-10.v3', response.logs)
+        self.assertIn('gateway:prompt_locale=en-US', response.logs)
+        self.assertIn('gateway:prompt_eval=copy-quality-v3', response.logs)
         self.assertIn('gateway:prompt_owner=content-generation', response.logs)
         self.assertIn('gateway:prompt_risk=medium', response.logs)
 
-    @override_settings(AI_ALLOW_MOCK_PROVIDER=False)
-    def test_gateway_rejects_mock_provider_when_disabled(self):
+    def test_gateway_requires_provider_configuration(self):
         AIConfiguration.objects.filter(is_active=True).update(is_active=False)
 
-        with self.assertRaises(NonRetryableGatewayError):
+        with self.assertRaisesRegex(NonRetryableGatewayError, 'AI_PROVIDER_NOT_CONFIGURED'):
             AIModelGateway.execute(
                 organization=None,
                 role='admin',
@@ -222,12 +254,17 @@ class ImagePromptEngineTests(SimpleTestCase):
         self.assertEqual(messages[0]['role'], 'system')
         self.assertIn('xiaohongshu_lifestyle', messages[1]['content'])
         self.assertIn('夏季新品护肤套装', messages[1]['content'])
-        self.assertIn('subject, scene, composition', messages[1]['content'])
-        self.assertIn('平台视觉策略', messages[1]['content'])
+        self.assertIn('English model-ready prompt', messages[1]['content'])
+        self.assertIn('Channel visual profile', messages[1]['content'])
 
-    def test_normalize_image_prompt_result_fills_defaults(self):
+    def test_normalize_image_prompt_result_adds_delivery_metadata(self):
         normalized = normalize_image_prompt_result(
-            {'prompt': 'A product hero shot on marble desk', 'prompt_zh': '大理石桌面产品主视觉'},
+            {
+                'prompt': 'A product hero shot on marble desk',
+                'prompt_localized': '大理石桌面产品主视觉',
+                'negative_prompt': '',
+                'composition_notes': 'Centered hero composition.',
+            },
             {'style_skill': 'product_studio', 'style': '产品棚拍', 'aspect_ratio': '1:1'},
         )
         self.assertIn('product hero shot', normalized['prompt'])
@@ -243,17 +280,22 @@ class ReviewPromptTests(SimpleTestCase):
             'platform': '小红书',
         })
         self.assertIn('绝对,第一', messages[1]['content'])
-        self.assertIn('具体 word', messages[1]['content'])
-        self.assertIn('风险提示', messages[1]['content'])
+        self.assertIn('traceable to an excerpt', messages[1]['content'])
+        self.assertIn('advisory risks', messages[0]['content'])
 
-    def test_normalize_review_result_coerces_issues(self):
+    def test_normalize_review_result_preserves_valid_issues(self):
         normalized = normalize_review_result(
             {
                 'passed': False,
                 'brand_consistency_score': 60,
-                'sensitive_word_issues': ['绝对'],
+                'sensitive_word_issues': [{
+                    'word': '绝对',
+                    'context': '正文中的绝对化承诺',
+                    'suggestion': '改为可验证的表述',
+                }],
                 'channel_rule_issues': [{'rule': '标题过长', 'context': '标题', 'suggestion': '缩短'}],
                 'summary': '需修改',
+                'revised_suggestions': ['删除绝对化表述'],
             },
             {},
         )
@@ -269,7 +311,7 @@ class ImageGenerationPromptTests(SimpleTestCase):
             'aspect_ratio': '1:1',
         })
         self.assertIn('品牌主视觉', prompt)
-        self.assertIn('极简构图', prompt)
+        self.assertIn('Minimal composition', prompt)
 
 
 class VideoPromptTests(SimpleTestCase):
@@ -291,7 +333,7 @@ class VideoPromptTests(SimpleTestCase):
         self.assertIn('Shot 1', prompt)
         self.assertIn('产品特写', prompt)
         self.assertIn('Aspect ratio', prompt)
-        self.assertIn('subject continuity', prompt)
+        self.assertIn('subject identity', prompt)
 
     def test_build_video_generation_prompt_includes_movie_studio_context(self):
         prompt = build_video_generation_prompt({
@@ -380,7 +422,7 @@ class ImagePromptHelperTests(SimpleTestCase):
             'aspect_ratio': '1:1',
         })
         self.assertIn('A product hero shot', prompt)
-        self.assertIn('极简构图', prompt)
+        self.assertIn('Minimal composition', prompt)
 
     def test_normalize_image_result_supports_openai_style_response(self):
         normalized = normalize_image_result(
@@ -393,7 +435,7 @@ class ImagePromptHelperTests(SimpleTestCase):
 
 class AIConfigPermissionTests(APITestCase):
     def setUp(self):
-        self.staff = User.objects.get(username='ROOT')
+        self.staff = User.objects.create_superuser(username='ROOT', password='123', email='root@example.com')
         self.admin = User.objects.create_user(username='ai-org-admin', password='123')
         self.creator = User.objects.create_user(username='ai-org-creator', password='123')
         self.organization = Organization.objects.create(name='AI Org', slug='ai-org')
@@ -600,11 +642,11 @@ class AssistantAgentTests(APITestCase):
         msgs = agent.build_messages(
             history=history, page_context={'tab': 'projects'}, user_message='second'
         )
-        # system + page context + history × 2 + new user
+        # system + history × 2 + the versioned user prompt asset
         self.assertEqual(msgs[0]['role'], 'system')
-        self.assertEqual(msgs[1]['role'], 'system')
-        self.assertEqual(msgs[2]['content'], 'first')
-        self.assertEqual(msgs[-1]['content'], 'second')
+        self.assertEqual(msgs[1]['content'], 'first')
+        self.assertIn('second', msgs[-1]['content'])
+        self.assertIn('<page_context', msgs[-1]['content'])
 
 
 class _PlainEchoLlm:
@@ -782,12 +824,13 @@ class AssistantChatStreamingTests(APITestCase):
         Membership.objects.create(
             user=self.user, organization=self.organization, role='admin'
         )
-        # Monkey-patch the default agent with a plain-text LLM.
-        from ai_gateway import agent as agent_mod
         from ai_gateway.tests import _PlainEchoLlm
-        self._orig_agent_cls = agent_mod.AssistantAgent
-        agent_mod.AssistantAgent = lambda **kw: AssistantAgent(llm=_PlainEchoLlm())
-        self.addCleanup(lambda: setattr(agent_mod, 'AssistantAgent', self._orig_agent_cls))
+        agent_patch = patch(
+            'ai_gateway.views.build_assistant_agent',
+            return_value=AssistantAgent(llm=_PlainEchoLlm()),
+        )
+        agent_patch.start()
+        self.addCleanup(agent_patch.stop)
         self.client_ = Client(enforce_csrf_checks=True)
         self.client_.login(username='assistant-chat-user', password='123')
 

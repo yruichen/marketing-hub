@@ -24,7 +24,7 @@ from api.models import Campaign, CommunityCreation, Membership, Organization, Pr
 from api.permissions import CanManageOrganization
 from api.scope import get_scope
 from api.serializers import CommunityCreationSerializer, MembershipSerializer
-from api.services import ensure_demo_workspace
+from api.services import get_user_workspace
 
 EMAIL_VERIFY_SALT = 'marketing-hub-email-verify'
 PASSWORD_RESET_SALT = 'marketing-hub-password-reset'
@@ -77,7 +77,7 @@ def _record_security_event(request, event_type: str, *, user: User | None = None
 
 
 def _get_or_create_profile(user: User) -> UserProfile:
-    is_seeded_account = user.is_staff or user.username == settings.MARKETING_HUB_DEMO_USERNAME
+    is_seeded_account = user.is_staff
     defaults = {
         'email_verified': is_seeded_account,
         'status': 'active' if is_seeded_account else 'pending',
@@ -334,7 +334,7 @@ def _send_verification_email(user: User) -> None:
       </div>
       <div style="padding:28px 24px 30px;">
         <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">你好，{user.username}：</p>
-        <p style="margin:0 0 22px;font-size:16px;line-height:1.7;">你的 Marketing Hub 测试账号已经创建。完成邮箱验证后，就可以进入工作区，开始搭建营销内容、模板和 AI 工作流。</p>
+        <p style="margin:0 0 22px;font-size:16px;line-height:1.7;">你的 Marketing Hub 账号已经创建。完成邮箱验证后，就可以进入工作区，开始搭建营销内容、模板和 AI 工作流。</p>
         <a href="{url}" style="display:inline-block;background:#1c1b18;color:#fffaf0;text-decoration:none;font-size:16px;font-weight:900;padding:14px 22px;border:2px solid #1c1b18;box-shadow:5px 5px 0 #ef6b4f;">完成邮箱验证</a>
         <div style="margin:28px 0 0;padding:16px;border:2px dashed #1c1b18;background:#f8f0d8;">
           <p style="margin:0 0 8px;font-size:13px;font-weight:800;">如果按钮无法打开，请复制下面链接到浏览器：</p>
@@ -382,7 +382,7 @@ def _send_password_reset_email(user: User) -> None:
     )
 
 
-def _create_default_workspace_for_user(user: User, organization_name: str):
+def _create_organization_for_user(user: User, organization_name: str) -> Organization:
     base_slug = slugify(organization_name) or f'org-{user.id}'
     slug = base_slug
     index = 2
@@ -391,18 +391,7 @@ def _create_default_workspace_for_user(user: User, organization_name: str):
         index += 1
     org = Organization.objects.create(name=organization_name, slug=slug)
     Membership.objects.create(user=user, organization=org, role='admin')
-    project = Project.objects.create(
-        organization=org,
-        name='First Campaign',
-        slug='first-campaign',
-        brief='Your first Marketing Hub workspace.',
-    )
-    campaign = Campaign.objects.create(
-        project=project,
-        name='Launch Plan',
-        objective='Prepare the first test campaign.',
-    )
-    return org, project, campaign
+    return org
 
 
 class LoginView(APIView):
@@ -429,14 +418,14 @@ class LoginView(APIView):
             profile = _get_or_create_profile(user)
             if profile.status == 'suspended':
                 return Response({'error': '账号已被冻结，请联系管理员。'}, status=status.HTTP_403_FORBIDDEN)
-            if not profile.email_verified and user.username != settings.MARKETING_HUB_DEMO_USERNAME:
+            if not profile.email_verified:
                 return Response({'error': '请先完成邮箱验证。'}, status=status.HTTP_403_FORBIDDEN)
             login(request, user)
             profile.status = 'active'
             profile.last_login_ip = _client_ip(request)
             profile.last_login_user_agent = request.META.get('HTTP_USER_AGENT', '')[:255]
             profile.save(update_fields=['status', 'last_login_ip', 'last_login_user_agent', 'updated_at'])
-            workspace = ensure_demo_workspace(user.username)
+            workspace = get_user_workspace(user)
             record_audit_log(
                 action='login',
                 actor=user,
@@ -447,8 +436,7 @@ class LoginView(APIView):
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
                 metadata={
                     'auth_type': 'session',
-                    'demo_account': user.username == settings.MARKETING_HUB_DEMO_USERNAME,
-                    'demo_bootstrap_enabled': settings.MARKETING_HUB_BOOTSTRAP_DEMO,
+                    'workspace_complete': workspace['is_complete'],
                 },
             )
             _record_security_event(request, 'login_success', user=user, email=user.email, metadata={'username': user.username})
@@ -458,10 +446,10 @@ class LoginView(APIView):
                 'auth_type': 'session',
                 'is_staff': user.is_staff,
                 'is_superuser': user.is_superuser,
-                'demo_account': user.username == settings.MARKETING_HUB_DEMO_USERNAME,
-                'organization': workspace['organization'].slug,
-                'project': workspace['project'].slug,
-                'campaign': workspace['campaign'].id,
+                'workspace_required': not workspace['is_complete'],
+                'organization': workspace['organization'].slug if workspace['organization'] else None,
+                'project': workspace['project'].slug if workspace['project'] else None,
+                'campaign': workspace['campaign'].id if workspace['campaign'] else None,
                 'policy_consents': consent_status(user),
             }, status=status.HTTP_200_OK)
             response['X-CSRFToken'] = get_token(request)
@@ -562,8 +550,8 @@ class AuthMeView(APIView):
             response['X-CSRFToken'] = get_token(request)
             return response
 
-        workspace = ensure_demo_workspace(user.username)
-        membership = Membership.objects.filter(user=user, organization=workspace['organization']).first()
+        workspace = get_user_workspace(user)
+        membership = workspace['membership']
         response = Response({
             'authenticated': True,
             'username': user.username,
@@ -573,10 +561,10 @@ class AuthMeView(APIView):
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
             'admin_mode': False,
-            'demo_account': user.username == settings.MARKETING_HUB_DEMO_USERNAME,
-            'organization': workspace['organization'].slug,
-            'project': workspace['project'].slug,
-            'campaign': workspace['campaign'].id,
+            'workspace_required': not workspace['is_complete'],
+            'organization': workspace['organization'].slug if workspace['organization'] else None,
+            'project': workspace['project'].slug if workspace['project'] else None,
+            'campaign': workspace['campaign'].id if workspace['campaign'] else None,
             'role': membership.role if membership else '',
             'policy_consents': consent_status(user),
         }, status=status.HTTP_200_OK)
@@ -732,7 +720,7 @@ class RegisterView(APIView):
         if not username:
             username = email.split('@')[0]
         if not organization_name:
-            organization_name = f"{username}'s Workspace"
+            return Response({'error': '请输入组织名称。'}, status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(email__iexact=email).exists():
             return Response({'error': '该邮箱已注册。'}, status=status.HTTP_400_BAD_REQUEST)
         if User.objects.filter(username__iexact=username).exists():
@@ -755,7 +743,7 @@ class RegisterView(APIView):
             signup_source='self_serve',
             signup_ip=_client_ip(request),
         )
-        org, project, campaign = _create_default_workspace_for_user(user, organization_name)
+        org = _create_organization_for_user(user, organization_name)
         for doc in active_docs:
             record_user_consent(request, user, doc, 'registration')
         try:
@@ -783,8 +771,8 @@ class RegisterView(APIView):
             'username': user.username,
             'email': user.email,
             'organization': org.slug,
-            'project': project.slug,
-            'campaign': campaign.id,
+            'project': None,
+            'campaign': None,
         }, status=status.HTTP_201_CREATED)
 
 

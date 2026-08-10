@@ -1,0 +1,26 @@
+import type { workflowZhCN } from './zh-CN';
+
+export const workflowEnUS = {
+  'workflow.node.context': 'Brand context', 'workflow.node.copy': 'Channel copy',
+  'workflow.node.imagePrompt': 'Image prompt', 'workflow.node.imageGeneration': 'Image generation',
+  'workflow.node.storyboard': 'Storyboard', 'workflow.node.videoGeneration': 'Video generation',
+  'workflow.node.audio': 'Voiceover', 'workflow.node.retrieval': 'Asset sources',
+  'workflow.node.review': 'Content review', 'workflow.node.customAgent': 'Custom step',
+  'workflow.status.idle': 'Not run', 'workflow.status.queued': 'Queued', 'workflow.status.running': 'Running',
+  'workflow.status.succeeded': 'Succeeded', 'workflow.status.failed': 'Failed', 'workflow.status.skipped': 'Skipped',
+  'workflow.description.context': 'Load the project brand, audience, tone, and restrictions.',
+  'workflow.description.copy': 'Generate headlines, body copy, tags, and a call to action for a channel.',
+  'workflow.description.imagePrompt': 'Turn copy into a model-ready visual description.',
+  'workflow.description.imageGeneration': 'Generate a savable visual asset with an image provider.',
+  'workflow.description.storyboard': 'Break a topic into shots, narration, and timing.',
+  'workflow.description.videoGeneration': 'Generate video from a prompt, storyboard, or references.',
+  'workflow.description.audio': 'Turn voiceover text into an audio asset.',
+  'workflow.description.retrieval': 'Bind references and retrieve from brand memory, assets, and authorized sources.',
+  'workflow.description.review': 'Check restricted terms, brand consistency, and channel rules.',
+  'workflow.description.customAgent': 'Define custom input, instructions, and structured output.',
+  'workflow.output.context': 'Brand summary, tone, audience, restricted terms', 'workflow.output.copy': 'Headline, body, tags, CTA',
+  'workflow.output.imagePrompt': 'Image prompt, negative prompt, aspect ratio', 'workflow.output.imageGeneration': 'Image asset, URL, revised prompt',
+  'workflow.output.storyboard': 'Shots, narration, total duration', 'workflow.output.videoGeneration': 'Video asset, URL, thumbnail',
+  'workflow.output.audio': 'Audio asset, URL, subtitle timeline', 'workflow.output.retrieval': 'References, insights, reusable angles',
+  'workflow.output.review': 'Risks, brand consistency score, channel guidance', 'workflow.output.customAgent': 'Custom response and structured output',
+} satisfies Record<keyof typeof workflowZhCN, string>;
