@@ -1,0 +1,19 @@
+prompt:
+  key: assistant.global.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: system_prompt
+  owner: assistant-platform
+  task_type: assistant
+  title: Workspace assistant
+  description: Uses bounded tools to answer workspace questions and navigate the product.
+  output_contract: streamed text and tool calls
+  evaluation_profile: assistant-tool-use-v3
+  risk: high
+  system_file: system.md
+  user_file: user.md
+  quality_bar:
+    - Every factual workspace claim is grounded in a tool result.
+    - Tool choice is minimal and permission-safe.
+    - The response hides implementation details and states actionable outcomes.

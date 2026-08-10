@@ -16,127 +16,128 @@ import {
   Workflow,
 } from 'lucide-react';
 import type { AppSection } from '../shared/stores/uiStore';
+import type { TranslationKey } from '../shared/i18n';
 
 export type NavItem = {
   id: AppSection;
-  label: string;
-  hint: string;
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
   icon: LucideIcon;
 };
 
 export type NavSection = {
-  title: string;
+  titleKey: TranslationKey;
   items: NavItem[];
 };
 
 /** 侧栏分组：把「写文案 / 做图」等入口放到显眼位置 */
 export const NAV_SECTIONS: NavSection[] = [
   {
-    title: '开始',
+    titleKey: 'nav.group.start',
     items: [
       {
         id: 'brainstorm',
-        label: '灵感风暴',
-        hint: '一句话，AI 自动生成工作流',
+        labelKey: 'nav.brainstorm.label',
+        hintKey: 'nav.brainstorm.hint',
         icon: Sparkles,
       },
       {
         id: 'dashboard',
-        label: '首页',
-        hint: '总览数据与快捷入口',
+        labelKey: 'nav.dashboard.label',
+        hintKey: 'nav.dashboard.hint',
         icon: LayoutDashboard,
       },
     ],
   },
   {
-    title: 'AI 内容生成',
+    titleKey: 'nav.group.generate',
     items: [
       {
         id: 'content',
-        label: '一键内容包',
-        hint: '填 brief，一次出文案+分镜',
+        labelKey: 'nav.content.label',
+        hintKey: 'nav.content.hint',
         icon: Sparkles,
       },
       {
         id: 'copy',
-        label: '写文案',
-        hint: '标题、正文、话题标签',
+        labelKey: 'nav.copy.label',
+        hintKey: 'nav.copy.hint',
         icon: PenLine,
       },
       {
         id: 'image',
-        label: '做配图',
-        hint: '根据描述生成图片',
+        labelKey: 'nav.image.label',
+        hintKey: 'nav.image.hint',
         icon: ImageIcon,
       },
       {
         id: 'storyboard',
-        label: '写分镜',
-        hint: '短视频镜头脚本',
+        labelKey: 'nav.storyboard.label',
+        hintKey: 'nav.storyboard.hint',
         icon: Film,
       },
       {
         id: 'audio',
-        label: '配旁白',
-        hint: '文字转配音稿',
+        labelKey: 'nav.audio.label',
+        hintKey: 'nav.audio.hint',
         icon: Mic,
       },
       {
         id: 'video',
-        label: '做视频',
-        hint: 'AI 生成短视频',
+        labelKey: 'nav.video.label',
+        hintKey: 'nav.video.hint',
         icon: Video,
       },
     ],
   },
   {
-    title: '项目与管理',
+    titleKey: 'nav.group.manage',
     items: [
       {
         id: 'projects',
-        label: '我的项目',
-        hint: '归类收纳资产库产出',
+        labelKey: 'nav.projects.label',
+        hintKey: 'nav.projects.hint',
         icon: Boxes,
       },
       {
         id: 'builder',
-        label: '工作流',
-        hint: '多步骤自动编排',
+        labelKey: 'nav.builder.label',
+        hintKey: 'nav.builder.hint',
         icon: Workflow,
       },
       {
         id: 'assets',
-        label: '资产库',
-        hint: '生成产出，加入项目归类',
+        labelKey: 'nav.assets.label',
+        hintKey: 'nav.assets.hint',
         icon: Boxes,
       },
       {
         id: 'review',
-        label: '审阅',
-        hint: '修改意见与版本',
+        labelKey: 'nav.review.label',
+        hintKey: 'nav.review.hint',
         icon: ClipboardCheck,
       },
     ],
   },
   {
-    title: '系统',
+    titleKey: 'nav.group.system',
     items: [
       {
         id: 'profile',
-        label: '个人主页',
-        hint: '创作者资料与作品墙',
+        labelKey: 'nav.profile.label',
+        hintKey: 'nav.profile.hint',
         icon: UserRound,
       },
       {
         id: 'billing',
-        label: '计费',
-        hint: '用量与套餐',
+        labelKey: 'nav.billing.label',
+        hintKey: 'nav.billing.hint',
         icon: CreditCard,
       },
       {
         id: 'config',
-        label: 'AI 设置',
-        hint: 'API Key 与模型',
+        labelKey: 'nav.config.label',
+        hintKey: 'nav.config.hint',
         icon: Settings,
       },
     ],
@@ -145,8 +146,8 @@ export const NAV_SECTIONS: NavSection[] = [
 
 /** 侧栏 Logo 下方独立入口：新标签页打开，不占工作台 Tab */
 export const TEMPLATE_LIBRARY_ENTRY = {
-  label: '模板库',
-  hint: '新标签页打开 · 瀑布流浏览团队模板',
+  labelKey: 'nav.templates.label' as TranslationKey,
+  hintKey: 'nav.templates.hint' as TranslationKey,
   icon: Library,
 } as const;
 
@@ -166,81 +167,57 @@ export const FULL_HEIGHT_WORKSPACE_TABS: AppSection[] = [
 
 export const TAB_META: Record<
   AppSection,
-  { title: string; subtitle: string; primaryAction?: string }
+  { titleKey: TranslationKey; subtitleKey: TranslationKey }
 > = {
   brainstorm: {
-    title: '灵感风暴',
-    subtitle: '输入创意想法，AI 自动生成完整工作流',
+    titleKey: 'tab.brainstorm.title', subtitleKey: 'tab.brainstorm.subtitle',
   },
   dashboard: {
-    title: '首页',
-    subtitle: '查看任务进度、费用，并从下面卡片进入常用功能',
+    titleKey: 'tab.dashboard.title', subtitleKey: 'tab.dashboard.subtitle',
   },
   content: {
-    title: '一键内容包',
-    subtitle: '左侧填写 brief，点「生成内容包」；右侧查看完整初稿',
-    primaryAction: '生成内容包',
+    titleKey: 'tab.content.title', subtitleKey: 'tab.content.subtitle',
   },
   copy: {
-    title: '写文案',
-    subtitle: '左侧填写品牌与卖点，点「运行文案 Agent」生成',
-    primaryAction: '运行文案 Agent',
+    titleKey: 'tab.copy.title', subtitleKey: 'tab.copy.subtitle',
   },
   image: {
-    title: '做配图',
-    subtitle: '左侧写画面描述，点「运行视觉 Agent」生成图片',
-    primaryAction: '运行视觉 Agent',
+    titleKey: 'tab.image.title', subtitleKey: 'tab.image.subtitle',
   },
   storyboard: {
-    title: '写分镜',
-    subtitle: '填写视频主题与时长，点「运行分镜 Agent」',
-    primaryAction: '运行分镜 Agent',
+    titleKey: 'tab.storyboard.title', subtitleKey: 'tab.storyboard.subtitle',
   },
   audio: {
-    title: '配旁白',
-    subtitle: '输入要朗读的文字，点「运行配音 Agent」',
-    primaryAction: '运行配音 Agent',
+    titleKey: 'tab.audio.title', subtitleKey: 'tab.audio.subtitle',
   },
   video: {
-    title: '做视频',
-    subtitle: '填写视频主题与画面描述，点「运行视频 Agent」生成短视频',
-    primaryAction: '运行视频 Agent',
+    titleKey: 'tab.video.title', subtitleKey: 'tab.video.subtitle',
   },
   projects: {
-    title: '我的项目',
-    subtitle: '归类收纳资产库中选中的产出，整理后发布到模板库',
+    titleKey: 'tab.projects.title', subtitleKey: 'tab.projects.subtitle',
   },
   builder: {
-    title: '工作流',
-    subtitle: '拖拽节点并点击运行整条流程',
+    titleKey: 'tab.builder.title', subtitleKey: 'tab.builder.subtitle',
   },
   assets: {
-    title: '资产库',
-    subtitle: '浏览工作流产出的文案、图片等；多选后「加入项目」归类整理',
+    titleKey: 'tab.assets.title', subtitleKey: 'tab.assets.subtitle',
   },
   review: {
-    title: '审阅',
-    subtitle: '对比版本并记录修改意见',
+    titleKey: 'tab.review.title', subtitleKey: 'tab.review.subtitle',
   },
   community: {
-    title: '模板库',
-    subtitle: '浏览与复用团队发布的创意模板，也可从资产库发布新模板',
+    titleKey: 'tab.community.title', subtitleKey: 'tab.community.subtitle',
   },
   profile: {
-    title: '个人主页',
-    subtitle: '展示创作者身份、擅长领域与公开作品',
+    titleKey: 'tab.profile.title', subtitleKey: 'tab.profile.subtitle',
   },
   billing: {
-    title: '计费与用量',
-    subtitle: '查看套餐与 Token 消耗',
+    titleKey: 'tab.billing.title', subtitleKey: 'tab.billing.subtitle',
   },
   admin: {
-    title: '运营后台',
-    subtitle: '管理测试用户、组织额度、生成任务与安全日志',
+    titleKey: 'tab.admin.title', subtitleKey: 'tab.admin.subtitle',
   },
   config: {
-    title: 'AI 设置',
-    subtitle: '配置 API Key；文本、图片与视频可分开选服务商',
-    primaryAction: '保存并激活',
+    titleKey: 'tab.config.title', subtitleKey: 'tab.config.subtitle',
   },
 };

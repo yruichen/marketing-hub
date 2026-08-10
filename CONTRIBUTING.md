@@ -104,4 +104,4 @@ Participation is governed by [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ## Licensing Contributions
 
-Marketing Hub is licensed under [Apache License 2.0](./LICENSE). By submitting a pull request, you agree to license your contribution under Apache-2.0 and confirm that you have the right to submit it, including any third-party code, assets, data, and notices it contains.
+Marketing Hub is source-available under the [PolyForm Noncommercial License 1.0.0](./LICENSE). By submitting a pull request, you agree to license your contribution under the repository license and confirm that you have the right to submit it, including any third-party code, assets, data, and notices it contains. Commercial use requires a separate written license from the copyright holder.

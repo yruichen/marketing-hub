@@ -50,29 +50,13 @@ interface VideoSceneInput {
   referenceImageUrl: string;
 }
 
-const defaultVideoScenes: VideoSceneInput[] = [
-  {
-    visual: '清晨光线扫过创意工作台，屏幕中出现品牌项目看板与素材缩略图，镜头停在打开的视频时间线上。',
-    narration: '一个好创意，应该从想法直接走到成片。',
-    duration: 5,
-    camera: '横移后轻微推近',
-    referenceImageUrl: '',
-  },
-  {
-    visual: '创作者拖拽分镜、图片和视频节点，画面切到生成结果快速迭代。',
-    narration: '文案、分镜、素材和视频生成，可以在同一个工作流里完成。',
-    duration: 7,
-    camera: '匹配剪辑，节奏加快',
-    referenceImageUrl: '',
-  },
-  {
-    visual: '成片预览在大屏播放，团队完成审核并准备发布。',
-    narration: '让每一次营销制作，都更快、更稳、更可控。',
-    duration: 6,
-    camera: '缓慢拉远，结尾留白',
-    referenceImageUrl: '',
-  },
-];
+const createEmptyVideoScene = (): VideoSceneInput => ({
+  visual: '',
+  narration: '',
+  duration: 5,
+  camera: '',
+  referenceImageUrl: '',
+});
 
 function splitLines(value: string) {
   return value.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -88,11 +72,10 @@ function draftScenesFromScript(script: string): VideoSceneInput[] {
     .map((chunk) => chunk.trim())
     .filter(Boolean)
     .slice(0, 5);
-  const source = chunks.length ? chunks : ['开场建立主题', '展示核心价值', '结尾形成记忆点'];
-  return source.map((chunk, index) => ({
+  return chunks.map((chunk, index) => ({
     visual: `${chunk}。画面包含明确主体、空间、动作起点和结束落点。`,
     narration: index === 0 ? '快速抓住注意力。' : '',
-    duration: index === source.length - 1 ? 6 : 5,
+    duration: index === chunks.length - 1 ? 6 : 5,
     camera: index === 0 ? '建立镜头后推近' : '稳定跟随主体动作',
     referenceImageUrl: '',
   }));
@@ -119,24 +102,24 @@ export function VideoPanel({
   void _setLoading;
 
   const [videoInput, setVideoInput] = useState({
-    topic: 'Marketing Hub 品牌宣传片',
-    prompt: '电影感品牌营销短片，清晰主体、平滑运镜、专业布光、广告级画质。',
-    script: '一个创作者打开 Marketing Hub：先把营销想法拆成分镜，再生成参考视觉和视频片段，最后团队在同一工作区审核并发布。',
+    topic: '',
+    prompt: '',
+    script: '',
     creativeMode: 'movie_studio' as CreativeMode,
-    targetAudience: '营销团队、品牌创作者、内容运营负责人',
+    targetAudience: '',
     platform: 'Douyin',
-    visualStyle: '现代编辑部工作台，真实产品感，温暖自然光，克制但高级',
-    cameraStyle: '稳定推拉、轻微环绕、节点到成片的匹配剪辑',
-    negativePrompt: '低清晰度、随机文字、水印、畸形手部、脸部漂移、品牌标识错误',
+    visualStyle: '',
+    cameraStyle: '',
+    negativePrompt: '',
     aspectRatio: '16:9',
     duration: 18,
     imageUrl: '',
-    characters: '主创作者：30 岁左右，专注、可信赖，穿简洁浅色衬衫\n审核同事：在结尾出现，表达确认和协作',
+    characters: '',
     keyframes: '',
   });
-  const [videoScenes, setVideoScenes] = useState<VideoSceneInput[]>(defaultVideoScenes);
+  const [videoScenes, setVideoScenes] = useState<VideoSceneInput[]>([createEmptyVideoScene()]);
   const [videoOutput, setVideoOutput] = useState<VideoOutput>({
-    video_topic: 'Marketing Hub 品牌宣传片',
+    video_topic: '',
     aspect_ratio: '16:9',
     video_url: '',
     thumbnail_url: '',
@@ -202,7 +185,12 @@ export function VideoPanel({
   };
 
   const handleDraftScenesFromScript = () => {
-    const draftedScenes = draftScenesFromScript(videoInput.script || videoInput.prompt);
+    const source = videoInput.script.trim() || videoInput.prompt.trim();
+    if (!source) {
+      triggerToast('请先填写视频脚本或画面描述。', 'info');
+      return;
+    }
+    const draftedScenes = draftScenesFromScript(source);
     setVideoScenes(draftedScenes);
     setVideoInput((current) => ({
       ...current,
@@ -251,7 +239,6 @@ export function VideoPanel({
       video_url: '',
       scenes,
       creative_mode: videoInput.creativeMode,
-      is_demo_fallback: false,
     }));
     void submitVideoGeneration(
       {

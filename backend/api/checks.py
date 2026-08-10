@@ -13,8 +13,6 @@ def production_security_settings_check(app_configs, **kwargs):
     errors = []
     dangerous_flags = [
         ('ALLOW_UNAUTHENTICATED_API', 'ALLOW_UNAUTHENTICATED_API cannot be true when DEBUG=False.'),
-        ('MARKETING_HUB_BOOTSTRAP_DEMO', 'MARKETING_HUB_BOOTSTRAP_DEMO cannot be true when DEBUG=False.'),
-        ('AI_ALLOW_MOCK_FALLBACK', 'AI_ALLOW_MOCK_FALLBACK cannot be true when DEBUG=False.'),
         ('CORS_ALLOW_ALL_ORIGINS', 'CORS_ALLOW_ALL_ORIGINS cannot be true when DEBUG=False.'),
     ]
     for setting_name, message in dangerous_flags:

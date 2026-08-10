@@ -97,7 +97,7 @@ export async function publishAssetToCommunity({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: username || import.meta.env.VITE_DEMO_USERNAME || 'DEMO',
+        username: username || '',
         organization: workspaceScope?.organization.slug,
         project: projectSlug ?? workspaceScope?.project.slug,
         campaign: campaignId ?? workspaceScope?.campaign?.id,

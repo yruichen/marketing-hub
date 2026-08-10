@@ -1,0 +1,1 @@
+"""Workspace assistant capability."""

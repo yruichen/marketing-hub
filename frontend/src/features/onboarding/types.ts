@@ -12,16 +12,16 @@ export interface OnboardingState {
 }
 
 export const onboardingDefaults: OnboardingState = {
-  useCase: '新品上市',
-  brandName: 'Marketing Hub',
-  industry: 'AI 营销工具',
-  audience: '品牌运营、内容团队、代理商项目经理',
-  tone: '清晰专业',
-  forbiddenWords: '绝对、第一、包治',
+  useCase: '',
+  brandName: '',
+  industry: '',
+  audience: '',
+  tone: '',
+  forbiddenWords: '',
   referenceLinks: '',
-  channels: ['小红书', '公众号'],
-  template: '图文种草',
-  brief: '为一个 AI 营销工作台生成首轮内容包，突出品牌记忆、内容生产和审阅协作。',
+  channels: [],
+  template: '',
+  brief: '',
 };
 
 export const channelChoices = ['小红书', '抖音', '公众号', '视频号', 'B 站'];

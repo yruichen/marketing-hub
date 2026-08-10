@@ -224,13 +224,6 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Marketing Hub <no-reply@ex
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 FIELD_ENCRYPTION_KEY = os.getenv('FIELD_ENCRYPTION_KEY', '').strip()
 
-MARKETING_HUB_BOOTSTRAP_DEMO = os.getenv('MARKETING_HUB_BOOTSTRAP_DEMO', 'true' if DEBUG else 'false').lower() == 'true'
-MARKETING_HUB_ADMIN_USERNAME = os.getenv('MARKETING_HUB_ADMIN_USERNAME', 'ROOT').strip() or 'ROOT'
-MARKETING_HUB_ADMIN_PASSWORD = os.getenv('MARKETING_HUB_ADMIN_PASSWORD', '123')
-MARKETING_HUB_DEMO_USERNAME = os.getenv('MARKETING_HUB_DEMO_USERNAME', 'DEMO').strip() or 'DEMO'
-MARKETING_HUB_DEMO_PASSWORD = os.getenv('MARKETING_HUB_DEMO_PASSWORD', '123')
-AI_ALLOW_MOCK_PROVIDER = os.getenv('AI_ALLOW_MOCK_PROVIDER', 'true' if DEBUG else 'false').lower() == 'true'
-AI_ALLOW_MOCK_FALLBACK = os.getenv('AI_ALLOW_MOCK_FALLBACK', 'true' if DEBUG else 'false').lower() == 'true'
 ALLOW_UNAUTHENTICATED_API = os.getenv('ALLOW_UNAUTHENTICATED_API', 'true' if DEBUG else 'false').lower() == 'true'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('DATA_UPLOAD_MAX_MEMORY_SIZE', str(2 * 1024 * 1024)))

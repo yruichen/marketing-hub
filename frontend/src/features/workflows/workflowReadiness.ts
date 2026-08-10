@@ -117,7 +117,7 @@ export function buildWorkflowReadiness(
     issues.push({
       id: `isolated-${node.id}`,
       severity: 'blocker',
-      title: `「${node.label}」未接入流程`,
+      title: `「${node.label || node.type}」未接入流程`,
       detail: '这个节点没有任何输入或输出连线，运行时无法形成清晰的生产链路。',
       action: 'select_node',
       actionLabel: '定位节点',
@@ -133,7 +133,7 @@ export function buildWorkflowReadiness(
       issues.push({
         id: `missing-config-${node.id}`,
         severity: 'blocker',
-        title: `「${node.label}」配置不完整`,
+        title: `「${node.label || node.type}」配置不完整`,
         detail: `缺少 ${missing.map((field) => field.label).join('、')}。`,
         action: 'select_node',
         actionLabel: '打开配置',

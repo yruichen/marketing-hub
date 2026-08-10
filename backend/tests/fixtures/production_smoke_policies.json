@@ -1,0 +1,28 @@
+[
+  {
+    "model": "api.policydocument",
+    "pk": 900001,
+    "fields": {
+      "policy_type": "terms",
+      "version": "ci-production-smoke",
+      "title": "CI Terms Fixture",
+      "content_url": "https://legal.invalid/terms",
+      "effective_at": "2026-01-01T00:00:00Z",
+      "is_active": true,
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  },
+  {
+    "model": "api.policydocument",
+    "pk": 900002,
+    "fields": {
+      "policy_type": "privacy",
+      "version": "ci-production-smoke",
+      "title": "CI Privacy Fixture",
+      "content_url": "https://legal.invalid/privacy",
+      "effective_at": "2026-01-01T00:00:00Z",
+      "is_active": true,
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  }
+]

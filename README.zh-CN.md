@@ -25,7 +25,7 @@
 - 在可视化画布中编排文案、图片提示词、配图、分镜、配音、视频和审核节点。
 - 用项目、文件夹、活动、收藏、资产、模板和品牌记忆沉淀营销成果。
 - 追踪生成任务、Provider、模型、Token、成本、成功率和工作区健康度。
-- 通过 AI Gateway 统一管理多 Provider、BYOK、模型策略、fallback、Prompt 版本和成本审计。
+- 通过 AI Harness 统一管理多 Provider、BYOK、模型策略、显式失败、Prompt 版本和成本审计。
 
 ## 产品预览
 
@@ -41,9 +41,9 @@
 
 - **执行可追踪**：生成任务具有 queued、running、succeeded、failed 等持久化状态。
 - **工作流可组合**：DAG 运行时校验节点输入输出、按拓扑顺序执行并支持失败重试。
-- **模型供应商解耦**：业务功能统一经过 AI Gateway，不直接绑定某一家模型服务。
+- **模型供应商解耦**：业务功能统一经过 AI Harness，不直接绑定某一家模型服务。
 - **多租户协作**：组织、成员、RBAC、项目、活动与资产共享一致的工作区模型。
-- **成本可治理**：Provider、模型、Token、fallback 和成本估算与生成记录关联。
+- **成本可治理**：Provider、模型、Token、显式失败和成本估算与生成记录关联。
 
 ## 技术架构
 
@@ -52,7 +52,7 @@ React 19 + Vite + React Flow
               │
               │ Session Auth + REST API
               ▼
-Django + DRF ── AI Gateway ── 模型 Provider
+Django + DRF ── AI Harness ── 模型 Provider
       │              │
       │              └── 策略、Prompt、Fallback、成本
       ├── PostgreSQL
@@ -61,7 +61,7 @@ Django + DRF ── AI Gateway ── 模型 Provider
 
 ```text
 marketing-hub/
-  backend/        Django API、领域应用、工作流运行时、AI Gateway
+  backend/        Django 领域应用和 Provider-neutral AI Harness
   frontend/       React SPA、业务模块、可视化工作流
   docs/           面向社区的产品、架构和贡献者文档
 ```
@@ -83,7 +83,7 @@ docker compose up
 
 Docker 开发环境会同时启动 PostgreSQL、Redis 和 Celery worker。
 
-> Demo bootstrap 仅用于本地开发。生产检查会拒绝 Demo 账号自动创建、Mock Provider 和不安全的部署配置。
+> 请显式创建账号和工作区，再在 AI 设置中配置可用 Provider。未配置时系统会给出引导，不会伪造生成结果。
 
 ### 本地开发
 
@@ -134,8 +134,8 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 
 - [文档索引](./docs/README.md)
 - [开发流程](./docs/operations/development_workflow.md)
+- [AI Harness 架构](./docs/architecture/ai_harness.md)
 - [后端模块化](./docs/architecture/backend_modularization.md)
-- [产品 Walkthrough](./docs/product/walkthrough.md)
 - [公开仓库安全指南](./docs/operations/public_repository_security.md)
 
 项目正在积极开发，当前重点是生产加固、工作流可靠性、AI 评测治理和社区协作体验。
@@ -149,8 +149,8 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 
 ## 授权模式
 
-Marketing Hub 采用 [Apache License 2.0](./LICENSE) 开源。该许可证允许商业使用、修改和分发，并包含明确的 NOTICE 与专利授权条款。
+Marketing Hub 以 [PolyForm Noncommercial License 1.0.0](./LICENSE) 公开源码。允许在许可证规定的非商业目的下使用、修改和分发；任何商业使用——包括利用本软件运营、支持或构建营利性业务——都需要事先取得版权所有者另行出具的书面商业许可。
 
-欢迎提交聚焦的问题反馈与 Pull Request。提交贡献即表示你同意以 Apache-2.0 许可该贡献，并确认自己有权提交相关内容。
+由于限制商业使用，本项目不属于 OSI 定义的开源软件，而是 source-available（源码可见）项目。欢迎提交聚焦的问题反馈与 Pull Request；提交贡献即表示你同意按仓库当前许可证授权该贡献，并确认自己有权提交相关内容。
 
 <p align="right"><a href="#readme-top">回到顶部</a></p>

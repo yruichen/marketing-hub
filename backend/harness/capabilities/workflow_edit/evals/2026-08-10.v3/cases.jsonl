@@ -1,0 +1,1 @@
+{"id":"node-edit-boundary","input":{"mode":"node","node_id":"copy-1","instruction":"Make the tone calmer"},"assertions":["valid_schema","only_selected_node_changed","runtime_fields_preserved"]}

@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.storyboard.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: system_prompt
+  owner: content-generation
+  task_type: storyboard
+  title: Short-form marketing storyboard
+  description: Produces timed, shootable scenes with synchronized narration.
+  output_contract: video_topic, total_duration_seconds, target_audience, scenes[]
+  evaluation_profile: storyboard-quality-v3
+  risk: medium
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"video_topic":"string","total_duration_seconds":30,"target_audience":"string","scenes":[{"scene_number":1,"visual_description":"string","audio_narration":"string","duration_seconds":5}]}
+  quality_bar:
+    - Every visual direction is observable and shootable.
+    - Narration fits its scene duration and advances the story.
+    - Durations sum exactly and continuity is explicit.
+    - Output is valid JSON and satisfies the response contract.

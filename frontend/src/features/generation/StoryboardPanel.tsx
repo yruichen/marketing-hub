@@ -42,34 +42,15 @@ export function StoryboardPanel({
   void _loading;
   void _setLoading;
   const [storyboardInput, setStoryboardInput] = useState({
-    topic: '创意手账设计的日常',
+    topic: '',
     duration: 30,
-    audience: '美学文字创作者',
+    audience: '',
   });
   const [storyboardOutput, setStoryboardOutput] = useState<StoryboardOutput>({
-    video_topic: '创意手账设计的日常',
+    video_topic: '',
     total_duration_seconds: 30,
-    target_audience: '美学文字创作者',
-    scenes: [
-      {
-        scene_number: 1,
-        visual_description: '特写微距：一叠剪裁粗糙的燕麦卡纸自然地叠放在木质书桌上，旁侧放置着一支经典复古钢笔。',
-        audio_narration: '（轻柔的书页翻动声）"创作者的日常，从来不是完美的网格，而是灵感的随性交错。"',
-        duration_seconds: 10
-      },
-      {
-        scene_number: 2,
-        visual_description: '中景镜头：阳光斜洒在一本点阵草稿本上，明黄色的便签上零散写着几句感悟。画面带有极淡的纸质偏角。',
-        audio_narration: '（铅笔沙沙声淡入）"摒弃所有多余的喧嚣与泛滥的色彩，我们只保留纸张的原生温度，与文字的质感。"',
-        duration_seconds: 10
-      },
-      {
-        scene_number: 3,
-        visual_description: '全景拉远：数张记录着文案与配音的排立得纸页堆叠在桌面中央，呈现一站式智能编排的成果。',
-        audio_narration: '（盖章按压声收尾）"Marketing-Hub 纸页工坊。给文字以温度，给灵感以实感。"',
-        duration_seconds: 10
-      }
-    ]
+    target_audience: '',
+    scenes: [],
   });
 
   const [isRunning, setIsRunning] = useState(false);
@@ -194,7 +175,7 @@ export function StoryboardPanel({
                   STORYBOARD SEGMENTING IN PROGRESS...
                 </span>
               </div>
-            ) : (
+            ) : storyboardOutput.scenes.length ? (
               storyboardOutput.scenes.map((scene, idx) => (
                 <div key={idx} className="border border-[var(--editorial-stroke)]/40 bg-[var(--editorial-bg)]/20 p-4 relative shadow-editorial-sm font-mono">
                   <span className="absolute top-3 right-3 bg-[var(--editorial-paper)] border border-[var(--editorial-stroke)] text-[8px] font-mono px-2 py-0.5 font-bold">
@@ -216,6 +197,10 @@ export function StoryboardPanel({
                   </p>
                 </div>
               ))
+            ) : (
+              <div className="flex h-32 items-center justify-center border border-dashed border-[var(--editorial-stroke)] p-6 text-center text-xs text-[var(--editorial-text-gray)]">
+                填写主题和受众，配置文本 Provider 后生成第一份分镜。
+              </div>
             )}
           </div>
 

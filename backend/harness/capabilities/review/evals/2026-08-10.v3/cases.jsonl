@@ -1,0 +1,1 @@
+{"id":"evidence-bounded-review","input":{"content_body":"Best product in the world","output_locale":"en-US"},"assertions":["valid_schema","findings_traceable","no_unsupplied_policy_claims"]}

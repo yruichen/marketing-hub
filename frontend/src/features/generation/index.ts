@@ -9,6 +9,7 @@ export { TaskCenter } from './TaskCenter';
 export { useGenerationTask } from './useGenerationTask';
 export type {
   ContentPackage,
+  ContentVersion,
   CopyOutput,
   ImageOutput,
   StoryboardOutput,

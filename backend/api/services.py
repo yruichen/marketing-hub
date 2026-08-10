@@ -33,7 +33,7 @@ from api.service_modules.workflow import (
     workflow_execution_order,
 )
 from api.service_modules.workspace import (
-    ensure_demo_workspace,
+    get_user_workspace,
     membership_role,
     serialize_asset,
     serialize_campaign,
@@ -54,7 +54,7 @@ __all__ = [
     'create_asset_from_payload',
     'create_asset_from_task_result',
     'create_generation_task',
-    'ensure_demo_workspace',
+    'get_user_workspace',
     'estimate_cost',
     'estimate_tokens',
     'extract_upstream_text',

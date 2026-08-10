@@ -14,7 +14,7 @@ export interface WorkspaceScope {
     name: string;
     objective: string;
     status: string;
-  };
+  } | null;
   username: string;
 }
 

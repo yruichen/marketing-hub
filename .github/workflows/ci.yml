@@ -38,9 +38,6 @@ jobs:
     env:
       DJANGO_SECRET_KEY: dummy-key-for-testing-only
       DJANGO_DEBUG: "True"
-      MARKETING_HUB_BOOTSTRAP_DEMO: "True"
-      AI_ALLOW_MOCK_PROVIDER: "True"
-      AI_ALLOW_MOCK_FALLBACK: "True"
       ALLOW_UNAUTHENTICATED_API: "True"
 
     steps:
@@ -64,14 +61,20 @@ jobs:
       - name: Apply migrations for smoke checks
         run: uv run python manage.py migrate --noinput
 
+      - name: Load legal policy fixtures for production smoke check
+        run: uv run python manage.py loaddata tests/fixtures/production_smoke_policies.json
+
       - name: Run production settings smoke check
-        run: DJANGO_DEBUG=False DJANGO_SECRET_KEY=ci-production-smoke-secret-with-more-than-fifty-unique-characters-12345 DJANGO_ALLOWED_HOSTS=example.com CORS_ALLOW_ALL_ORIGINS=False ALLOW_UNAUTHENTICATED_API=False AI_ALLOW_MOCK_PROVIDER=False AI_ALLOW_MOCK_FALLBACK=False MARKETING_HUB_BOOTSTRAP_DEMO=False SECURE_SSL_REDIRECT=True SECURE_HSTS_SECONDS=31536000 SECURE_HSTS_INCLUDE_SUBDOMAINS=True SECURE_HSTS_PRELOAD=True FIELD_ENCRYPTION_KEY=ci-field-encryption-key-for-production-smoke-check uv run python manage.py check --deploy
+        run: DJANGO_DEBUG=False DJANGO_SECRET_KEY=ci-production-smoke-secret-with-more-than-fifty-unique-characters-12345 DJANGO_ALLOWED_HOSTS=example.com CORS_ALLOW_ALL_ORIGINS=False ALLOW_UNAUTHENTICATED_API=False SECURE_SSL_REDIRECT=True SECURE_HSTS_SECONDS=31536000 SECURE_HSTS_INCLUDE_SUBDOMAINS=True SECURE_HSTS_PRELOAD=True FIELD_ENCRYPTION_KEY=ci-field-encryption-key-for-production-smoke-check uv run python manage.py check --deploy
 
       - name: Check migration drift
         run: uv run python manage.py makemigrations --check --dry-run
 
       - name: Run backend tests
         run: uv run python manage.py test
+
+      - name: Run harness architecture tests
+        run: uv run python -m unittest discover -s harness/tests -p 'test_*.py'
 
   frontend:
     name: Frontend CI

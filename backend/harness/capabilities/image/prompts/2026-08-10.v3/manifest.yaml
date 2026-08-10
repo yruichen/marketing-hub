@@ -1,0 +1,18 @@
+prompt:
+  key: marketing.image.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: generation_prompt
+  owner: content-generation
+  task_type: image
+  title: Image generation specification
+  description: Shared invariant block appended to provider-specific image prompts.
+  output_contract: provider image result
+  evaluation_profile: image-generation-v3
+  risk: medium
+  user_file: user.md
+  quality_bar:
+    - Subject hierarchy, camera, light, material, and crop are explicit.
+    - Brand constraints and reference intent are preserved.
+    - The prompt contains no conflicting visual instructions.

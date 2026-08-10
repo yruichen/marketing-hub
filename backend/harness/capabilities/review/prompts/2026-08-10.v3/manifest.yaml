@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.review.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: system_prompt
+  owner: trust-and-quality
+  task_type: review
+  title: Marketing content review
+  description: Separates confirmed violations, supplied-rule violations, and advisory risks.
+  output_contract: passed, brand_consistency_score, sensitive_word_issues[], channel_rule_issues[], summary, revised_suggestions[]
+  evaluation_profile: compliance-review-v3
+  risk: high
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"passed":true,"brand_consistency_score":85,"sensitive_word_issues":[{"word":"string","context":"string","suggestion":"string"}],"channel_rule_issues":[{"rule":"string","context":"string","suggestion":"string"}],"summary":"string","revised_suggestions":["string"]}
+  quality_bar:
+    - Every finding is traceable to an excerpt or supplied rule.
+    - Confirmed violations and advisory risks are clearly separated.
+    - Remediation is specific and preserves intended meaning.
+    - Output is valid JSON and satisfies the response contract.

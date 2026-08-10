@@ -1,7 +1,5 @@
 export { ContentPackagePanel } from './ContentPackagePanel';
-export { defaultContentPackage } from './constants';
 export {
-  buildContentPackage,
   buildContentPackageRequest,
   useContentPackageActions,
 } from './hooks';

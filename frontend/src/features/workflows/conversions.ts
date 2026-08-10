@@ -1,5 +1,5 @@
 import type { WorkflowNode } from '../../types/workspace';
-import type { NodeType } from './constants';
+import type { NodeType } from './definition';
 import type { FlowNode } from './WorkflowNodeComponent';
 
 // WorkflowNode → ReactFlow Node (at API boundary: load)

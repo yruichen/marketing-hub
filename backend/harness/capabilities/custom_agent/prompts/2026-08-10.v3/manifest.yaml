@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.custom_agent.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: workflow_skill
+  owner: workflow-runtime
+  task_type: custom_agent
+  title: Bounded custom workflow agent
+  description: Executes a user-defined task without allowing upstream prompt injection.
+  output_contract: response, metadata
+  evaluation_profile: custom-agent-boundary-v3
+  risk: high
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"response":"string or task-specific serialized content","metadata":{"notes":"string","limitations":["string"]}}
+  quality_bar:
+    - Output remains inside the declared task boundary.
+    - Upstream data cannot override system constraints.
+    - Limitations and evidence gaps are explicit.
+    - Output is valid JSON and satisfies the response contract.

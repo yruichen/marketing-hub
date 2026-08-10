@@ -2,6 +2,7 @@ import json
 import hashlib
 from decimal import Decimal
 from typing import Any
+from uuid import UUID, uuid4
 
 from django.contrib.auth.models import User
 from django.db import models, transaction
@@ -10,7 +11,7 @@ from django.utils import timezone
 
 from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
-from ai_gateway.services import AIModelGateway
+from harness.facade import HarnessFacade
 from api.audit import record_audit_log
 from api.redaction import redact_text
 from api.serializers import (
@@ -40,7 +41,7 @@ from api.models import (
     WorkspaceDraft,
 )
 
-from api.service_modules.workspace import ensure_demo_workspace, membership_role
+from api.service_modules.workspace import membership_role
 from api.service_modules.budget import assert_generation_allowed, assert_global_queue_capacity
 
 def estimate_tokens(payload: dict[str, Any], result: dict[str, Any]) -> int:
@@ -53,7 +54,7 @@ def estimate_cost(tokens: int) -> Decimal:
     return Decimal(tokens) * Decimal('0.00002')
 
 
-def persist_usage(task: GenerationTask, result: dict[str, Any], provider: str = 'mock', model_name: str = '') -> UsageEvent:
+def persist_usage(task: GenerationTask, result: dict[str, Any], provider: str = 'unreported', model_name: str = '') -> UsageEvent:
     total_tokens = estimate_tokens(task.payload, result)
     cost = estimate_cost(total_tokens)
     event = UsageEvent.objects.create(
@@ -105,7 +106,10 @@ def generation_metadata(task: GenerationTask, result: dict[str, Any], *, provide
         'provider': provider,
         'model_name': model_name,
         'prompt_key': prompt_key,
-        'prompt_version': 'v1',
+        'prompt_version': str(result.get('prompt_version') or ''),
+        'prompt_locale': str(result.get('prompt_locale') or ''),
+        'prompt_checksum': str(result.get('prompt_checksum') or ''),
+        'prompt_evaluation_profile': str(result.get('prompt_evaluation_profile') or ''),
         'harness_version': 'generation-service-v1',
         'generated_at': timezone.now().isoformat(),
         'user_id': task.requested_by_id,
@@ -117,187 +121,184 @@ def generation_metadata(task: GenerationTask, result: dict[str, Any], *, provide
     }
 
 
+GATEWAY_TASK_PROMPTS = {
+    'copy': 'marketing.copy.system',
+    'image': 'marketing.image.system',
+    'storyboard': 'marketing.storyboard.system',
+    'audio': 'marketing.audio.system',
+    'video': 'marketing.video.system',
+    'custom_agent': 'marketing.custom_agent.system',
+    'image_prompt': 'marketing.image_prompt.system',
+    'review': 'marketing.review.system',
+}
+
+
+def _claim_generation_task(task_id: int) -> UUID | None:
+    """Atomically claim a queued/failed task and return this attempt's fencing token."""
+    with transaction.atomic():
+        task = GenerationTask.objects.select_for_update().get(pk=task_id)
+        if task.status in {'running', 'succeeded'}:
+            return None
+        execution_id = uuid4()
+        task.status = 'running'
+        task.execution_id = execution_id
+        task.attempt_count += 1
+        task.started_at = timezone.now()
+        task.completed_at = None
+        task.error_message = ''
+        task.save(update_fields=[
+            'status',
+            'execution_id',
+            'attempt_count',
+            'started_at',
+            'completed_at',
+            'error_message',
+            'updated_at',
+        ])
+        return execution_id
+
+
+def _execute_generation(task: GenerationTask):
+    payload = task.payload or {}
+    if task.task_type in GATEWAY_TASK_PROMPTS:
+        gateway = HarnessFacade.execute(
+            organization=task.organization,
+            role=membership_role(task.requested_by, task.organization),
+            task_type=task.task_type,
+            payload=payload,
+            prompt_key=GATEWAY_TASK_PROMPTS[task.task_type],
+        )
+        return (
+            gateway.payload,
+            gateway.logs,
+            gateway.provider,
+            gateway.model_name,
+            gateway.prompt_tokens,
+            gateway.completion_tokens,
+            gateway.cost_usd,
+            gateway.fallback_used,
+            gateway.prompt_version,
+            gateway.prompt_locale,
+            gateway.prompt_checksum,
+            gateway.evaluation_profile,
+        )
+
+    if task.task_type == 'rag_search':
+        query = payload.get('query', '').strip()
+        results = []
+        if query:
+            creations = CommunityCreation.objects.filter(moderation_status='visible').filter(
+                Q(visibility='public') | Q(visibility='organization', organization=task.organization)
+            )
+            for item in creations:
+                haystack = f"{item.title} {item.content} {' '.join(item.tags)}".lower()
+                score = sum(1 for term in query.split() if term.lower() in haystack)
+                if score:
+                    results.append({
+                        'id': item.id,
+                        'title': item.title,
+                        'creation_type': item.creation_type,
+                        'creation_type_display': item.get_creation_type_display(),
+                        'similarity_score': round(min(0.99, 0.45 + score * 0.12), 3),
+                        'content': item.get_content_dict(),
+                    })
+            results.sort(key=lambda item: item['similarity_score'], reverse=True)
+        logs = ['Semantic retrieval used the built-in keyword index.']
+        return {'query': query, 'results': results, 'rag_logs': logs}, logs, 'internal_search', 'keyword-v1', 0, 0, Decimal('0'), False, '', '', '', ''
+
+    raise ValueError(f'Unsupported task type: {task.task_type}')
+
+
 def run_generation_task(task: GenerationTask, auto_save: bool = True) -> GenerationTask:
-    task.status = 'running'
-    task.save(update_fields=['status', 'updated_at'])
+    execution_id = _claim_generation_task(task.id)
+    task.refresh_from_db()
+    if execution_id is None:
+        return task
 
     try:
-        payload = task.payload or {}
-        provider = 'mock'
-        model_name = ''
-        prompt_tokens = 0
-        completion_tokens = 0
-        cost_usd = Decimal('0')
-        fallback_used = False
-        if task.task_type == 'copy':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='copy',
-                payload=payload,
-                prompt_key='marketing.copy.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'image':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='image',
-                payload=payload,
-                prompt_key='marketing.image.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'storyboard':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='storyboard',
-                payload=payload,
-                prompt_key='marketing.storyboard.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'audio':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='audio',
-                payload=payload,
-                prompt_key='marketing.audio.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'video':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='video',
-                payload=payload,
-                prompt_key='marketing.video.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'rag_search':
-            query = payload.get('query', '').strip()
-            results = []
-            if query:
-                creations = CommunityCreation.objects.filter(moderation_status='visible').filter(
-                    Q(visibility='public') | Q(visibility='organization', organization=task.organization)
-                )
-                for item in creations:
-                    score = 0
-                    haystack = f"{item.title} {item.content} {' '.join(item.tags)}"
-                    for term in query.split():
-                        if term.lower() in haystack.lower():
-                            score += 1
-                    if score:
-                        results.append({
-                            'id': item.id,
-                            'title': item.title,
-                            'creation_type': item.creation_type,
-                            'creation_type_display': item.get_creation_type_display(),
-                            'similarity_score': round(min(0.99, 0.45 + score * 0.12), 3),
-                            'content': item.get_content_dict(),
-                        })
-                results.sort(key=lambda item: item['similarity_score'], reverse=True)
-            result = {'query': query, 'results': results, 'rag_logs': ['Semantic retrieval used local keyword fallback because no vector backend is configured.']}
-            logs = result['rag_logs']
-        elif task.task_type == 'custom_agent':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='custom_agent',
-                payload=payload,
-                prompt_key='marketing.custom_agent.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'image_prompt':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='image_prompt',
-                payload=payload,
-                prompt_key='marketing.image_prompt.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        elif task.task_type == 'review':
-            gateway = AIModelGateway.execute(
-                organization=task.organization,
-                role=membership_role(task.requested_by, task.organization),
-                task_type='review',
-                payload=payload,
-                prompt_key='marketing.review.system',
-            )
-            result, logs = gateway.payload, gateway.logs
-            provider, model_name = gateway.provider, gateway.model_name
-            prompt_tokens, completion_tokens, cost_usd = gateway.prompt_tokens, gateway.completion_tokens, gateway.cost_usd
-            fallback_used = gateway.fallback_used
-        else:
-            raise ValueError(f'Unsupported task type: {task.task_type}')
-
-        if fallback_used:
-            logs = [*logs, 'gateway:warning=使用了演示数据，非真实 API 生成结果']
-            if isinstance(result, dict):
-                result = {**result, 'is_demo_fallback': True}
+        (
+            result,
+            logs,
+            provider,
+            model_name,
+            prompt_tokens,
+            completion_tokens,
+            cost_usd,
+            fallback_used,
+            prompt_version,
+            prompt_locale,
+            prompt_checksum,
+            prompt_evaluation_profile,
+        ) = _execute_generation(task)
         if isinstance(result, dict):
             result = {
                 **result,
                 'ai_generated': True,
                 'provider': provider,
                 'model_name': model_name,
-                'prompt_version': 'v1',
+                'prompt_version': prompt_version,
+                'prompt_locale': prompt_locale,
+                'prompt_checksum': prompt_checksum,
+                'prompt_evaluation_profile': prompt_evaluation_profile,
                 'harness_version': 'generation-service-v1',
                 'source_inputs_digest': source_inputs_digest(task.payload),
             }
-        asset = None
-        if auto_save:
-            asset = create_asset_from_task_result(task, result, provider=provider, model_name=model_name)
-        if isinstance(result, dict) and asset is not None:
-            result = {**result, 'asset_id': asset.id}
-        task.result = {'data': result, 'logs': logs}
-        task.status = 'succeeded'
-        task.completed_at = timezone.now()
-        task.error_message = ''
-        task.token_count = max(prompt_tokens + completion_tokens, estimate_tokens(task.payload, result))
-        task.cost_usd = cost_usd if cost_usd else estimate_cost(task.token_count)
-        task.save(update_fields=['result', 'status', 'completed_at', 'error_message', 'token_count', 'cost_usd', 'updated_at'])
-        usage_event = UsageEvent.objects.create(
-            organization=task.organization,
-            project=task.project,
-            campaign=task.campaign,
-            generation_task=task,
-            provider=provider,
-            model_name=model_name,
-            prompt_tokens=prompt_tokens or max(40, task.token_count // 2),
-            completion_tokens=completion_tokens or max(40, task.token_count // 2),
-            total_tokens=task.token_count,
-            cost_usd=task.cost_usd,
-        )
-        persist_credit_debit(usage_event)
+
+        with transaction.atomic():
+            persisted = GenerationTask.objects.select_for_update().select_related(
+                'organization', 'project', 'campaign', 'requested_by'
+            ).get(pk=task.id)
+            if persisted.status != 'running' or persisted.execution_id != execution_id:
+                task.refresh_from_db()
+                return task
+
+            asset = create_asset_from_task_result(
+                persisted,
+                result,
+                provider=provider,
+                model_name=model_name,
+            ) if auto_save else None
+            if isinstance(result, dict) and asset is not None:
+                result = {**result, 'asset_id': asset.id}
+
+            persisted.result = {'data': result, 'logs': logs}
+            persisted.status = 'succeeded'
+            persisted.completed_at = timezone.now()
+            persisted.error_message = ''
+            persisted.token_count = max(prompt_tokens + completion_tokens, estimate_tokens(persisted.payload, result))
+            persisted.cost_usd = cost_usd if cost_usd else estimate_cost(persisted.token_count)
+            persisted.save(update_fields=[
+                'result',
+                'status',
+                'completed_at',
+                'error_message',
+                'token_count',
+                'cost_usd',
+                'updated_at',
+            ])
+            usage_event = UsageEvent.objects.create(
+                organization=persisted.organization,
+                project=persisted.project,
+                campaign=persisted.campaign,
+                generation_task=persisted,
+                provider=provider,
+                model_name=model_name,
+                prompt_tokens=prompt_tokens or max(40, persisted.token_count // 2),
+                completion_tokens=completion_tokens or max(40, persisted.token_count // 2),
+                total_tokens=persisted.token_count,
+                cost_usd=persisted.cost_usd,
+            )
+            persist_credit_debit(usage_event)
+        task.refresh_from_db()
         return task
     except Exception as exc:
-        task.status = 'failed'
-        task.error_message = redact_text(str(exc))
-        task.completed_at = timezone.now()
-        task.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        with transaction.atomic():
+            persisted = GenerationTask.objects.select_for_update().get(pk=task.id)
+            if persisted.status == 'running' and persisted.execution_id == execution_id:
+                persisted.status = 'failed'
+                persisted.error_message = redact_text(str(exc))
+                persisted.completed_at = timezone.now()
+                persisted.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
         raise
 
 
@@ -312,13 +313,9 @@ def create_generation_task(
     run_now: bool = True,
     auto_save: bool = True,
 ) -> GenerationTask:
-    workspace = None
     if organization is None or project is None or campaign is None:
-        workspace = ensure_demo_workspace(username)
-    organization = organization or workspace['organization']
-    project = project or workspace['project']
-    campaign = campaign or workspace['campaign']
-    user = workspace['user'] if workspace else (User.objects.filter(username=username).first() if username else None)
+        raise ValueError('A complete organization, project, and campaign scope is required.')
+    user = User.objects.filter(username=username).first() if username else None
     payload = payload or {}
 
     assert_generation_allowed(
@@ -414,29 +411,12 @@ def queue_generation_task(task: GenerationTask):
     return async_result
 
 
-def _run_generation_task_by_id(task_id: int) -> None:
-    from api.models import GenerationTask
-
-    task = GenerationTask.objects.filter(pk=task_id).first()
-    if not task:
-        return
-    try:
-        run_generation_task(task)
-    except Exception:
-        # run_generation_task persists failed status before re-raising
-        return
-
-
 def schedule_generation_task(task: GenerationTask):
-    """Queue work without blocking the HTTP response when Celery runs eagerly."""
-    from django.conf import settings
+    """Submit work through Celery in every environment.
 
-    assert_global_queue_capacity(task.task_type)
-    if getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', True):
-        import threading
-
-        threading.Thread(target=_run_generation_task_by_id, args=(task.id,), daemon=True).start()
-        return None
+    Eager mode is intentionally synchronous; development must not emulate a
+    durable queue with an untracked daemon thread.
+    """
     return queue_generation_task(task)
 
 

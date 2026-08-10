@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 
 from api.errors import AppAPIException, _log_api_error, api_error_response, normalize_legacy_error_payload
 from api.exception_handler import api_exception_handler
-from api.models import Membership, Organization, PolicyDocument, UserConsent
+from api.models import Campaign, Membership, Organization, PolicyDocument, Project, UserConsent
 
 
 def grant_required_policy_consents(user):
@@ -66,6 +66,8 @@ class StructuredApiErrorTests(APITestCase):
         user = User.objects.create_user(username='budget-user', password='123', email='budget@example.com')
         org = Organization.objects.create(name='Budget Org', slug='budget-org')
         Membership.objects.create(user=user, organization=org, role='creator')
+        project = Project.objects.create(organization=org, name='Budget Project', slug='budget-project')
+        Campaign.objects.create(project=project, name='Budget Campaign')
         grant_required_policy_consents(user)
         self.client.login(username='budget-user', password='123')
         response = self.client.post(

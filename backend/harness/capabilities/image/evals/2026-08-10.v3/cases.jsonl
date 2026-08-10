@@ -1,0 +1,1 @@
+{"id":"crop-safe-image","input":{"prompt":"A reusable steel bottle on a desk","aspect_ratio":"4:5"},"assertions":["subject_explicit","crop_safe","no_conflicting_instructions"]}

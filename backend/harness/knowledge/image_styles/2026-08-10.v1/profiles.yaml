@@ -1,0 +1,26 @@
+version: 2026-08-10.v1
+styles:
+  editorial_magazine:
+    labels: {zh-CN: 杂志编辑风, en-US: Editorial magazine}
+    prompt: Premium editorial photography, natural side lighting, deliberate negative space, tactile paper detail, and a restrained earth-tone palette for brand storytelling and lifestyle content.
+  xiaohongshu_lifestyle:
+    labels: {zh-CN: 小红书种草, en-US: Xiaohongshu lifestyle}
+    prompt: Bright tabletop lifestyle scene, overhead or 45-degree framing, curated props, soft natural light, fresh color palette, and a clear product-use context.
+  product_studio:
+    labels: {zh-CN: 产品棚拍, en-US: Product studio}
+    prompt: Controlled product studio photography on a solid or gradient background, crisp subject detail, soft controlled lighting, subtle reflections and shadows, and accurate material rendering.
+  minimal_flat:
+    labels: {zh-CN: 极简扁平, en-US: Minimal flat}
+    prompt: Minimal composition with generous negative space, geometric planes, clean lines, restrained contrast, and no decorative clutter, suitable for SaaS and technology brands.
+  cinematic_film:
+    labels: {zh-CN: 电影质感, en-US: Cinematic film}
+    prompt: Cinematic widescreen composition, layered depth of field, warm-cool lighting contrast, subtle film grain, and a deliberate emotional atmosphere.
+  illustration_hand:
+    labels: {zh-CN: 手绘插画, en-US: Hand-drawn illustration}
+    prompt: Hand-drawn or watercolor illustration with soft strokes, warm color relationships, and controlled shape exaggeration for youth-oriented creative campaigns.
+  corporate_b2b:
+    labels: {zh-CN: 企业商务, en-US: Corporate B2B}
+    prompt: Credible business environment with realistic collaboration, restrained blue-gray palette, natural professional behavior, and visual emphasis on trust and operational efficiency.
+  cyber_neon:
+    labels: {zh-CN: 赛博霓虹, en-US: Cyber neon}
+    prompt: Dark environment with high-contrast violet, blue, and magenta neon accents, controlled futuristic technology cues, and a polished gaming or AI product aesthetic.

@@ -16,7 +16,9 @@ ROLE_MATRIX = {
 
 
 def role_rank(role: str | None) -> int:
-    return ROLE_ORDER.get((role or 'viewer').lower(), 0)
+    if not role:
+        return -1
+    return ROLE_ORDER.get(role.lower(), -1)
 
 
 def role_at_least(role: str | None, minimum: str) -> bool:
@@ -24,4 +26,6 @@ def role_at_least(role: str | None, minimum: str) -> bool:
 
 
 def permissions_for_role(role: str | None) -> set[str]:
-    return set(ROLE_MATRIX.get((role or 'viewer').lower(), ROLE_MATRIX['viewer']))
+    if not role:
+        return set()
+    return set(ROLE_MATRIX.get(role.lower(), set()))

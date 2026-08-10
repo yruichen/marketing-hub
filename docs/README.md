@@ -6,16 +6,13 @@ This directory contains the public product, architecture, development, and repos
 
 ### Architecture
 
+- [AI Harness Architecture](./architecture/ai_harness.md)
 - [Backend Modularization](./architecture/backend_modularization.md)
 
 ### Operations
 
 - [Development Workflow](./operations/development_workflow.md)
 - [Public Repository Security](./operations/public_repository_security.md)
-
-### Product
-
-- [Walkthrough](./product/walkthrough.md)
 
 ## Assets
 

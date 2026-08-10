@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { apiStream, formatErrorForToast, parseApiErrorResponse } from '../../hooks/useApi';
 import { clientTools } from './clientTools';
 import type { AssistantSseEvent, ChatMessage, PageContext } from './types';
+import { useI18n } from '../../shared/i18n';
+import type { Translate, TranslationKey } from '../../shared/i18n/context';
 
 export type { ChatMessage, ChatMessageRole } from './types';
 
@@ -20,15 +22,6 @@ interface UseAssistantChatResult {
   reset: () => void;
   loadHistory: (history: ChatMessage[]) => void;
 }
-
-const WAITING_HINTS = [
-  '正在连接助手',
-  '正在理解需求',
-  '任务可能需要一点时间，仍在处理',
-  '正在等待模型返回结果',
-  '还在继续处理，请稍候',
-  '正在整理最终回复',
-];
 
 function newId(): string {
   return `m_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -55,6 +48,15 @@ function parseSseEvent(raw: string): AssistantSseEvent | null {
  * via setMessages; we keep its id stable across the whole stream.
  */
 export function useAssistantChat(): UseAssistantChatResult {
+  const { locale, t } = useI18n();
+  const waitingHints = useMemo(() => [
+    t('assistant.status.connecting'),
+    t('assistant.status.understanding'),
+    t('assistant.status.processing'),
+    t('assistant.status.waiting'),
+    t('assistant.status.continuing'),
+    t('assistant.status.finalizing'),
+  ], [t]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +91,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         content: '',
         toolCalls: [],
         pending: true,
-        statusText: WAITING_HINTS[0],
+        statusText: waitingHints[0],
       };
       setMessages((prev) => [...prev, userMsg, initialAssistant]);
       setSending(true);
@@ -102,7 +104,7 @@ export function useAssistantChat(): UseAssistantChatResult {
       // React re-renders.
       const liveToolCalls: ChatMessage['toolCalls'] = [];
       let liveContent = '';
-      let liveStatusText = WAITING_HINTS[0];
+      let liveStatusText = waitingHints[0];
       const streamStartedAt = Date.now();
       const commit = () => {
         setMessages((prev) =>
@@ -116,13 +118,13 @@ export function useAssistantChat(): UseAssistantChatResult {
       const statusTimer = window.setInterval(() => {
         const elapsedSeconds = Math.floor((Date.now() - streamStartedAt) / 1000);
         const nextHint = elapsedSeconds >= 45
-          ? WAITING_HINTS[5]
+          ? waitingHints[5]
           : elapsedSeconds >= 25
-            ? WAITING_HINTS[4]
+            ? waitingHints[4]
             : elapsedSeconds >= 12
-              ? WAITING_HINTS[3]
+              ? waitingHints[3]
               : elapsedSeconds >= 5
-                ? WAITING_HINTS[2]
+                ? waitingHints[2]
                 : '';
         if (nextHint && nextHint !== liveStatusText) {
           liveStatusText = nextHint;
@@ -137,6 +139,7 @@ export function useAssistantChat(): UseAssistantChatResult {
             session_id: sessionId,
             message: text,
             page_context: pageContext,
+            output_locale: locale,
           }),
           signal: controller.signal,
         });
@@ -167,7 +170,7 @@ export function useAssistantChat(): UseAssistantChatResult {
               liveContent += event.delta;
               commit();
             } else if (event.type === 'tool_call' && event.name) {
-              liveStatusText = toolStatusText(event.name, 'running');
+              liveStatusText = toolStatusText(event.name, 'running', t);
               if (event.name === 'navigate') {
                 liveToolCalls.push({
                   name: event.name,
@@ -207,7 +210,7 @@ export function useAssistantChat(): UseAssistantChatResult {
                 if (event.name === 'navigate') {
                   last.result = event.result;
                 }
-                liveStatusText = toolStatusText(event.name, last.status);
+                liveStatusText = toolStatusText(event.name, last.status, t);
                 commit();
               }
             } else if (event.type === 'done') {
@@ -244,7 +247,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         abortRef.current = null;
       }
     },
-    [sending],
+    [locale, sending, t, waitingHints],
   );
 
   return { messages, sending, error, send, reset, loadHistory };
@@ -254,16 +257,16 @@ function hasToolError(result: unknown): boolean {
   return Boolean(result && typeof result === 'object' && 'error' in result);
 }
 
-function toolStatusText(name: string, status: 'running' | 'done' | 'error'): string {
-  const labels: Record<string, string> = {
-    list_projects: '查询项目列表',
-    get_project: '读取项目详情',
-    get_dashboard: '汇总工作台数据',
-    create_copy: '生成营销文案',
-    navigate: '准备页面跳转',
+function toolStatusText(name: string, status: 'running' | 'done' | 'error', t: Translate): string {
+  const labels: Record<string, TranslationKey> = {
+    list_projects: 'assistant.tool.listProjects',
+    get_project: 'assistant.tool.getProject',
+    get_dashboard: 'assistant.tool.getDashboard',
+    create_copy: 'assistant.tool.createCopy',
+    navigate: 'assistant.tool.navigate',
   };
-  const label = labels[name] || '调用工作区工具';
-  if (status === 'running') return `正在${label}`;
-  if (status === 'error') return `${label}遇到问题，正在调整回答`;
-  return `已完成${label}`;
+  const label = t(labels[name] || 'assistant.tool.workspace');
+  if (status === 'running') return `${t('assistant.tool.running')} ${label}`;
+  if (status === 'error') return `${label} ${t('assistant.tool.error')}`;
+  return `${t('assistant.tool.done')} ${label}`;
 }

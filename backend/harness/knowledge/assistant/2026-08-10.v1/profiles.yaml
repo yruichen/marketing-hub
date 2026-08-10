@@ -1,0 +1,7 @@
+version: 2026-08-10.v1
+tool_hints:
+  list_projects: [projects, project list, 项目]
+  get_project: [project detail, details, 详情, 那个项目]
+  get_dashboard: [dashboard, metrics, status, 仪表盘, 统计, 状态]
+  create_copy: [write copy, generate copy, copy, 文案, 写, 小红书, 抖音]
+  navigate: [navigate, open, go to, 跳转, 打开, 跳到]

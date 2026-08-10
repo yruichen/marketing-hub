@@ -199,7 +199,7 @@ export function DashboardPage({
                 <Activity className="h-3.5 w-3.5" />
                 实时首页
               </span>
-              <span>{snapshot?.scope.organization.name ?? 'Marketing Hub'}</span>
+              <span>{snapshot?.scope.organization.name ?? '未选择组织'}</span>
               <span>/</span>
               <span className="truncate">{snapshot?.scope.project.name ?? '未选择项目'}</span>
             </div>
@@ -207,7 +207,7 @@ export function DashboardPage({
               运营态势与生产数据
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--editorial-text-muted)]">
-              {snapshot?.scope.campaign.objective || snapshot?.scope.project.brief || '集中查看任务、成本、资产和工作区健康度，并从异常状态直接进入处理。'}
+              {snapshot?.scope.campaign?.objective || snapshot?.scope.project.brief || '集中查看任务、成本、资产和工作区健康度，并从异常状态直接进入处理。'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

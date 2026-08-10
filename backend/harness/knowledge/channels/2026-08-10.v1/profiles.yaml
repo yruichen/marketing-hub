@@ -1,0 +1,19 @@
+version: 2026-08-10.v1
+aliases:
+  xiaohongshu: xiaohongshu
+  小红书: xiaohongshu
+  wechat: wechat
+  微信: wechat
+  公众号: wechat
+  douyin: douyin
+  抖音: douyin
+channels:
+  xiaohongshu:
+    label: Xiaohongshu
+    prompt: Open with a concrete lived situation or contrast. Use short conversational sections and restrained emoji. Prioritize experience, use context, and save-worthy information; avoid hard-sell language and exaggerated claims.
+  wechat:
+    label: WeChat Official Accounts
+    prompt: Use a thesis- or benefit-led headline, structured high-density body copy, and a restrained credible tone. Limit emoji and exclamation marks; align the call to action with follow, inquiry, or read-more behavior.
+  douyin:
+    label: Douyin
+    prompt: Make the first three seconds speakable and attention-grabbing. Use short subtitle-friendly sentences and strong rhythm. Advance through action or tension and finish with a specific interaction or conversion action.

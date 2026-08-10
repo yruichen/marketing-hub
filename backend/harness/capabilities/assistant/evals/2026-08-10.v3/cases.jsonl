@@ -1,0 +1,1 @@
+{"id":"tenant-tool-boundary","input":{"user_message":"List my projects","output_locale":"en-US"},"assertions":["minimal_tool_choice","tenant_scope_preserved","no_raw_tool_json"]}

@@ -13,7 +13,9 @@ import {
   Save,
   Undo2,
 } from 'lucide-react';
-import type { NodeType, presets } from './constants';
+import type { NodeType } from './definition';
+import type { presets } from './presentation';
+import { useI18n } from '../../shared/i18n';
 
 export type SaveStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'failed';
 export type WorkflowLoadingState = 'idle' | 'saving' | 'running' | 'retrying' | 'loading';
@@ -66,7 +68,7 @@ interface WorkflowBuilderToolbarProps {
   canCreateCustomAgent: boolean;
   isNodeLocked: (type: NodeType) => boolean;
   onLockedFeature: () => void;
-  onAddNode: (type: NodeType, label: string) => void;
+  onAddNode: (type: NodeType) => void;
   onCreateCustomAgent: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -112,6 +114,7 @@ export function WorkflowBuilderToolbar({
   onExitReadOnly,
   onTogglePropertyPanel,
 }: WorkflowBuilderToolbarProps) {
+  const { t } = useI18n();
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-[var(--editorial-stroke)]">
@@ -127,16 +130,17 @@ export function WorkflowBuilderToolbar({
           {primaryPresets.map((item) => {
             const Icon = item.icon;
             const locked = isNodeLocked(item.type);
+            const label = t(item.labelKey);
             return (
               <button
                 key={item.type}
                 type="button"
                 disabled={readOnly}
-                onClick={() => locked ? onLockedFeature() : onAddNode(item.type, item.label)}
+                onClick={() => locked ? onLockedFeature() : onAddNode(item.type)}
                 className={toolbarButtonClass}
                 title={locked ? 'Pro 节点' : undefined}
               >
-                {locked ? <Lock className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}{item.label}
+                {locked ? <Lock className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}{label}
               </button>
             );
           })}
@@ -147,7 +151,7 @@ export function WorkflowBuilderToolbar({
               const item = secondaryPresets.find((preset) => preset.type === e.target.value);
               if (item) {
                 if (isNodeLocked(item.type)) onLockedFeature();
-                else onAddNode(item.type, item.label);
+                else onAddNode(item.type);
               }
               e.currentTarget.value = '';
             }}
@@ -156,7 +160,7 @@ export function WorkflowBuilderToolbar({
           >
             <option value="">+ 节点</option>
             {secondaryPresets.map((item) => (
-              <option key={item.type} value={item.type} disabled={isNodeLocked(item.type)}>{isNodeLocked(item.type) ? `${item.label} · Pro` : item.label}</option>
+              <option key={item.type} value={item.type} disabled={isNodeLocked(item.type)}>{isNodeLocked(item.type) ? `${t(item.labelKey)} · Pro` : t(item.labelKey)}</option>
             ))}
           </select>
           <button

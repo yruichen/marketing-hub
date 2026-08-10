@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { AppSection } from '../shared/stores/uiStore';
 import { NAV_SECTIONS, TEMPLATE_LIBRARY_ENTRY } from '../app/navigation';
-import { ArrowUpRight, LogOut, Moon, UserCircle } from 'lucide-react';
-
-const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+import { useI18n } from '../shared/i18n';
+import { ArrowUpRight, Languages, LogOut, Moon, UserCircle } from 'lucide-react';
 
 type AppSidebarProps = {
   activeTab: AppSection;
@@ -34,6 +33,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const TemplateLibraryIcon = TEMPLATE_LIBRARY_ENTRY.icon;
   const navRef = useRef<HTMLElement>(null);
+  const { locale, setLocale, t } = useI18n();
 
   useEffect(() => {
     if (!navRef.current) return;
@@ -68,7 +68,7 @@ export function AppSidebar({
           <button
             type="button"
             onClick={onOpenTemplateLibrary}
-            title={collapsed ? TEMPLATE_LIBRARY_ENTRY.label : TEMPLATE_LIBRARY_ENTRY.hint}
+            title={collapsed ? t(TEMPLATE_LIBRARY_ENTRY.labelKey) : t(TEMPLATE_LIBRARY_ENTRY.hintKey)}
             className={`app-sidebar-template-entry group relative w-full text-left text-[11px] transition-all cursor-pointer flex items-center border rounded-lg border-[var(--border-subtle)] bg-[var(--surface-panel)]/88 text-[var(--editorial-text)] shadow-[var(--shadow-panel)] hover:border-[#ff2442]/45 hover:bg-[var(--surface-hover)] ${
               collapsed ? 'h-10 justify-center px-0 py-0' : 'gap-2 px-2.5 py-2.5'
             }`}
@@ -76,7 +76,7 @@ export function AppSidebar({
             <TemplateLibraryIcon className="h-3.5 w-3.5 shrink-0 text-[#ff2442]" aria-hidden="true" />
             {!collapsed && (
               <span className="flex min-w-0 flex-1 items-center justify-between gap-2 font-black">
-                <span className="truncate">{TEMPLATE_LIBRARY_ENTRY.label}</span>
+                <span className="truncate">{t(TEMPLATE_LIBRARY_ENTRY.labelKey)}</span>
                 <ArrowUpRight className="h-3 w-3 shrink-0 text-[var(--editorial-text-gray)] group-hover:text-[#ff2442]" aria-hidden="true" />
               </span>
             )}
@@ -85,10 +85,10 @@ export function AppSidebar({
 
         <nav ref={navRef} className={`app-sidebar-nav flex flex-col font-mono flex-1 min-h-0 overflow-y-auto ${collapsed ? 'gap-2 pr-0' : 'gap-4 pr-1'}`}>
           {NAV_SECTIONS.map((section) => (
-            <div key={section.title}>
+            <div key={section.titleKey}>
               {!collapsed && (
                 <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--editorial-text-gray)] mb-2 px-2">
-                  {section.title}
+                  {t(section.titleKey)}
                 </p>
               )}
               <div className="flex flex-col gap-0.5">
@@ -100,7 +100,7 @@ export function AppSidebar({
                       key={item.id}
                       type="button"
                       onClick={() => onNavigate(item.id)}
-                      title={collapsed ? `${item.label} - ${item.hint}` : item.hint}
+                      title={collapsed ? `${t(item.labelKey)} - ${t(item.hintKey)}` : t(item.hintKey)}
                       data-active={isActive}
                       className={`group relative w-full text-left text-[11px] transition-all cursor-pointer flex items-center border rounded-lg ${
                         collapsed ? 'h-10 justify-center px-0 py-0' : 'gap-2 px-2.5 py-2.5'
@@ -114,9 +114,9 @@ export function AppSidebar({
                       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       {!collapsed && (
                         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                          <span className="font-black truncate">{item.label}</span>
+                          <span className="font-black truncate">{t(item.labelKey)}</span>
                           <span className="hidden 2xl:inline text-[8px] font-normal text-[var(--editorial-text-gray)] leading-tight truncate max-w-[92px]">
-                            {item.hint}
+                            {t(item.hintKey)}
                           </span>
                         </span>
                       )}
@@ -131,11 +131,11 @@ export function AppSidebar({
 
       <div className={`pt-3 border-t border-dashed border-[var(--border-subtle)] font-mono ${collapsed ? 'space-y-2' : 'space-y-3'}`}>
         <div className={`flex items-center text-[10px] ${collapsed ? 'justify-center' : 'justify-between'}`}>
-          {!collapsed && <span className="font-bold text-[var(--editorial-text-gray)]">深色模式</span>}
+          {!collapsed && <span className="font-bold text-[var(--editorial-text-gray)]">{t('shell.darkMode')}</span>}
           <button
             type="button"
             onClick={onToggleDarkMode}
-            aria-label="切换深色模式"
+            aria-label={t('shell.toggleDarkMode')}
             className={`${collapsed ? 'h-10 w-10 inline-flex items-center justify-center rounded-lg' : 'h-6 w-11 rounded-full'} border border-[var(--border-default)] bg-[var(--surface-panel)] relative transition-all active:scale-95 cursor-pointer`}
           >
             {collapsed ? (
@@ -149,19 +149,36 @@ export function AppSidebar({
             )}
           </button>
         </div>
+        <label className={`flex items-center text-[10px] text-[var(--editorial-text-gray)] ${collapsed ? 'justify-center' : 'justify-between gap-2'}`}>
+          <span className="inline-flex items-center gap-1 font-bold">
+            <Languages className="h-3.5 w-3.5" aria-hidden="true" />
+            {!collapsed && t('shell.language')}
+          </span>
+          {!collapsed && (
+            <select
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as 'zh-CN' | 'en-US')}
+              className="rounded border border-[var(--border-subtle)] bg-[var(--surface-panel)] px-1.5 py-1 text-[9px] text-[var(--editorial-text)]"
+              aria-label={t('shell.language')}
+            >
+              <option value="zh-CN">中文</option>
+              <option value="en-US">English</option>
+            </select>
+          )}
+        </label>
         <button
           type="button"
           onClick={onOpenProfile}
-          title={username || DEMO_USERNAME}
+          title={username || '未登录'}
           className={`w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-panel)]/72 text-xs font-bold transition hover:bg-[var(--surface-hover)] ${collapsed ? 'h-10 p-0 inline-flex items-center justify-center' : 'p-2.5 text-left flex flex-col gap-1'}`}
         >
           {collapsed ? (
             <UserCircle className="h-4 w-4" />
           ) : (
             <>
-              <span className="text-[var(--editorial-text)]">{username || DEMO_USERNAME}</span>
+              <span className="text-[var(--editorial-text)]">{username || '未登录'}</span>
               <span className="text-[8px] rounded-full bg-[var(--surface-muted)] text-[var(--editorial-text-gray)] px-2 py-0.5 inline-block w-fit">
-                {isSuperuser ? '超级管理员' : '测试用户'}
+                {isSuperuser ? t('shell.superAdmin') : t('shell.member')}
               </span>
             </>
           )}
@@ -169,10 +186,10 @@ export function AppSidebar({
         <button
           type="button"
           onClick={onLogout}
-          title="退出登录"
+          title={t('shell.logout')}
           className={`w-full rounded-lg border border-transparent text-[10px] text-[var(--danger-accent)] font-bold transition-all hover:border-[var(--border-subtle)] hover:bg-[var(--surface-hover)] cursor-pointer ${collapsed ? 'h-10 p-0 inline-flex items-center justify-center' : 'px-2 py-1.5 text-left'}`}
         >
-          {collapsed ? <LogOut className="h-3.5 w-3.5" /> : '退出登录'}
+          {collapsed ? <LogOut className="h-3.5 w-3.5" /> : t('shell.logout')}
         </button>
       </div>
     </aside>
