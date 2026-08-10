@@ -1,4 +1,4 @@
-import { ArrowRight, Mic, Video, Wand2 } from 'lucide-react';
+import { ArrowRight, Image as ImageIcon, Mic, Video, Wand2 } from 'lucide-react';
 import type { CommunityItem } from './types';
 
 export function TemplateVisual({
@@ -13,11 +13,13 @@ export function TemplateVisual({
   if (item.creation_type === 'image') {
     return (
       <div className={`template-xhs-card__visual template-xhs-card__visual--image ${toneClass}`}>
-        <img
-          src={item.image_url || 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80'}
-          alt={item.title}
-          loading="lazy"
-        />
+        {item.image_url ? (
+          <img src={item.image_url} alt={item.title} loading="lazy" />
+        ) : (
+          <div className="flex h-full min-h-32 items-center justify-center" aria-label="该模板没有预览图">
+            <ImageIcon className="h-8 w-8" />
+          </div>
+        )}
       </div>
     );
   }

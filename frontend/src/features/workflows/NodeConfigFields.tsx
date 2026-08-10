@@ -73,10 +73,10 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
             <input type="number" min="0" max="2" step="0.1" value={cfg.temperature ?? 0.7} onChange={(e) => onUpdateConfig('temperature', Number(e.target.value))} className={inputCls} />
           </Field>
           <Field label="失败策略" variant={v}>
-            <select value={cfg.failure_strategy || '重试一次后跳过'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
-              <option value="重试一次后跳过">重试一次后跳过</option>
-              <option value="直接跳过">直接跳过并标记</option>
-              <option value="中断工作流">中断整个工作流</option>
+            <select value={cfg.failure_strategy || 'retry_once_then_skip'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
+              <option value="retry_once_then_skip">重试一次后跳过</option>
+              <option value="skip">直接跳过并标记</option>
+              <option value="abort">中断整个工作流</option>
             </select>
           </Field>
         </Section>
@@ -108,7 +108,8 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
       <div className="space-y-3">
         <Section title="文案参数" variant={v}>
           <Field label="平台" variant={v}>
-            <select value={cfg.platform || 'Xiaohongshu'} onChange={(e) => onUpdateConfig('platform', e.target.value)} className={inputCls}>
+            <select value={cfg.platform || ''} onChange={(e) => onUpdateConfig('platform', e.target.value)} className={inputCls}>
+              <option value="" disabled>选择平台</option>
               <option value="Xiaohongshu">小红书</option>
               <option value="Douyin">抖音</option>
               <option value="WeChat">微信公众号</option>
@@ -174,10 +175,10 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
             </select>
           </Field>
           <Field label="失败策略" variant={v}>
-            <select value={cfg.failure_strategy || '失败后保留提示词并重试一次'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
-              <option value="失败后保留提示词并重试一次">重试一次</option>
-              <option value="直接跳过">跳过并标记</option>
-              <option value="中断工作流">中断工作流</option>
+            <select value={cfg.failure_strategy || 'retry_once'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
+              <option value="retry_once">重试一次</option>
+              <option value="skip">跳过并标记</option>
+              <option value="abort">中断工作流</option>
             </select>
           </Field>
         </Section>
@@ -203,15 +204,16 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
             <input type="number" min="5" max="180" value={cfg.duration_cap || 30} onChange={(e) => onUpdateConfig('duration_cap', Number(e.target.value))} className={inputCls} />
           </Field>
           <Field label="视频模型" variant={v}>
-            <select value={cfg.model || 'agnes-video-v2.0'} onChange={(e) => onUpdateConfig('model', e.target.value)} className={inputCls}>
+            <select value={cfg.model || ''} onChange={(e) => onUpdateConfig('model', e.target.value)} className={inputCls}>
+              <option value="">跟随 AI 设置</option>
               <option value="agnes-video-v2.0">Agnes Video v2.0</option>
             </select>
           </Field>
           <Field label="失败策略" variant={v}>
-            <select value={cfg.failure_strategy || '失败后重试一次'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
-              <option value="失败后重试一次">重试一次</option>
-              <option value="直接跳过">跳过并标记</option>
-              <option value="中断工作流">中断工作流</option>
+            <select value={cfg.failure_strategy || 'retry_once'} onChange={(e) => onUpdateConfig('failure_strategy', e.target.value)} className={inputCls}>
+              <option value="retry_once">重试一次</option>
+              <option value="skip">跳过并标记</option>
+              <option value="abort">中断工作流</option>
             </select>
           </Field>
         </Section>
@@ -243,10 +245,10 @@ export function NodeConfigFields({ node, onUpdateConfig, variant = 'panel' }: No
       <div className="space-y-3">
         <Section title="检索" variant={v}>
           <Field label="检索范围" variant={v}>
-            <select value={cfg.retrieval_scope || '品牌记忆和资产库'} onChange={(e) => onUpdateConfig('retrieval_scope', e.target.value)} className={inputCls}>
-              <option value="品牌记忆和资产库">品牌记忆和资产库</option>
-              <option value="社区作品库">社区作品库</option>
-              <option value="全部">全部数据源</option>
+            <select value={cfg.retrieval_scope || 'brand_memory_and_assets'} onChange={(e) => onUpdateConfig('retrieval_scope', e.target.value)} className={inputCls}>
+              <option value="brand_memory_and_assets">品牌记忆和资产库</option>
+              <option value="community">社区作品库</option>
+              <option value="all">全部数据源</option>
             </select>
           </Field>
           <Field label="检索关键词" variant={v}>

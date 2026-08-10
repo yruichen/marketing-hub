@@ -1,14 +1,14 @@
 import { Sparkles } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import type { ContentPackage } from '../generation/types';
-import { defaultContentPackage } from './constants';
-import { buildContentPackage, buildContentPackageRequest, useContentPackageActions } from './hooks';
+import type { ContentPackage, ContentVersion } from '../generation/types';
+import { buildContentPackageRequest, useContentPackageActions } from './hooks';
 import { BrandMemorySummary } from '../brand-memory';
 import { channelChoices, useCaseChoices, templateChoices } from '../onboarding/types';
 import type { OnboardingState } from '../onboarding/types';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { AppSection } from '../../shared/stores/uiStore';
 import type { TriggerToastFn } from '../../shared/types/toast';
+import { useI18n } from '../../shared/i18n';
 
 interface ContentPackagePanelProps {
   onboarding: OnboardingState;
@@ -43,14 +43,15 @@ export function ContentPackagePanel({
 }: ContentPackagePanelProps) {
   void _loading;
   void _setLoading;
+  const { locale, t } = useI18n();
   const [contentBrief, setContentBrief] = useState(onboarding.brief);
-  const [contentPackage, setContentPackage] = useState<ContentPackage>(defaultContentPackage);
-  const [contentVersion, setContentVersion] = useState<'AI 初稿' | '用户修改稿' | '最终稿'>(defaultContentPackage.version);
+  const [contentPackage, setContentPackage] = useState<ContentPackage | null>(null);
+  const [contentVersion, setContentVersion] = useState<ContentVersion>('ai_draft');
   const [isRunning, setIsRunning] = useState(false);
 
   const handleApplied = useCallback((pkg: ContentPackage) => {
     setContentPackage(pkg);
-    setContentVersion(pkg.version || 'AI 初稿');
+    setContentVersion(pkg.version || 'ai_draft');
     onApplyContentPackage(pkg);
   }, [onApplyContentPackage]);
 
@@ -68,17 +69,31 @@ export function ContentPackagePanel({
     workspaceScope,
     username,
     storyboardDuration,
-  }), [onboarding, contentBrief, copyInput, workspaceScope, username, storyboardDuration]);
+    outputLocale: locale,
+  }), [onboarding, contentBrief, copyInput, workspaceScope, username, storyboardDuration, locale]);
+  const canGenerate = Boolean(
+    requestPayload.brand_name.trim()
+    && requestPayload.brief.trim()
+    && requestPayload.audience.trim()
+    && requestPayload.tone.trim()
+    && (requestPayload.channels.length > 0 || requestPayload.platform.trim()),
+  );
 
   const generateContentPackage = () => {
+    if (!canGenerate) {
+      triggerToast('请填写品牌名称、brief、目标人群和语调，并选择至少一个渠道。', 'info');
+      return Promise.resolve();
+    }
     return generate(requestPayload);
   };
 
   const rewriteContentPackage = (mode: string) => {
+    if (!contentPackage) return Promise.resolve();
     return rewrite(requestPayload, mode);
   };
 
   const exportContentPackage = (format: string) => {
+    if (!contentPackage) return;
     const text = [
       `# ${contentPackage.title}`,
       '',
@@ -102,10 +117,6 @@ export function ContentPackagePanel({
     triggerToast(`${format} 导出内容已准备好`, 'info');
   };
 
-  // Expose local builders for parent onboarding completion via ref-like pattern (kept here so
-  // the parent can compute the very first draft using the same logic)
-  void buildContentPackage;
-
   return (
     <div className="generation-workspace generation-workspace--with-result">
       <section className="generation-workspace__form bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm relative">
@@ -115,7 +126,7 @@ export function ContentPackagePanel({
             <h3 className="text-sm font-black uppercase">内容包输入</h3>
             <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">一个 brief 生成标题、正文、标签、图片建议和分镜建议。</p>
           </div>
-          <button type="button" onClick={generateContentPackage} disabled={isRunning} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5">
+          <button type="button" onClick={generateContentPackage} disabled={isRunning || !canGenerate} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50">
             <Sparkles className="h-3.5 w-3.5" />
             生成内容包
           </button>
@@ -129,6 +140,7 @@ export function ContentPackagePanel({
         <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
           使用场景
           <select value={onboarding.useCase} onChange={(event) => setOnboarding((prev) => ({ ...prev, useCase: event.target.value }))} className="border border-[var(--editorial-stroke)] bg-transparent px-3 py-2 text-xs font-normal">
+            <option value="" disabled>请选择使用场景</option>
             {useCaseChoices.map((choice) => <option key={choice}>{choice}</option>)}
           </select>
         </label>
@@ -158,6 +170,7 @@ export function ContentPackagePanel({
           <label className="flex flex-col gap-1.5 text-[10px] font-black uppercase text-[var(--editorial-text-gray)]">
             起始模板
             <select value={onboarding.template} onChange={(event) => setOnboarding((prev) => ({ ...prev, template: event.target.value }))} className="border border-[var(--editorial-stroke)] bg-transparent px-3 py-2 text-xs font-normal">
+              <option value="" disabled>请选择起始模板</option>
               {templateChoices.map((choice) => <option key={choice}>{choice}</option>)}
             </select>
           </label>
@@ -171,7 +184,7 @@ export function ContentPackagePanel({
             ['更年轻化', 'young'],
             ['减少夸张表达', 'calm'],
           ].map(([label, mode]) => (
-            <button key={mode} type="button" onClick={() => rewriteContentPackage(mode)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)]">
+            <button key={mode} type="button" disabled={!contentPackage || isRunning} onClick={() => rewriteContentPackage(mode)} className="border border-[var(--editorial-stroke)] px-3 py-2 text-[10px] font-black hover:bg-[var(--editorial-unselected)] disabled:cursor-not-allowed disabled:opacity-40">
               {label}
             </button>
           ))}
@@ -188,10 +201,22 @@ export function ContentPackagePanel({
 
       <section className="generation-workspace__results">
         <div className="generation-workspace__preview bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] p-4 shadow-editorial-sm space-y-3 overflow-y-auto">
+        {!contentPackage ? (
+          <div className="flex min-h-[360px] flex-col items-center justify-center gap-3 px-6 text-center">
+            <Sparkles className="h-8 w-8 text-[var(--editorial-text-gray)]" />
+            <h3 className="text-sm font-black uppercase">{t('content.empty.title')}</h3>
+            <p className="max-w-sm text-xs leading-6 text-[var(--editorial-text-gray)]">
+              {t('content.empty.description')}
+            </p>
+          </div>
+        ) : (
+        <>
         <div className="flex items-center justify-between border-b border-[var(--editorial-stroke)] pb-3">
           <div>
             <h3 className="text-sm font-black uppercase">{contentPackage.title}</h3>
-            <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">版本：{contentVersion}</p>
+            <p className="text-[10px] text-[var(--editorial-text-gray)] mt-1">
+              版本：{contentVersion === 'ai_draft' ? t('content.version.aiDraft') : contentVersion === 'user_revision' ? t('content.version.userRevision') : t('content.version.final')}
+            </p>
           </div>
           <div className="flex gap-2">
             {contentPackage.exportFormats.map((format) => (
@@ -228,11 +253,13 @@ export function ContentPackagePanel({
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => onCopy(contentPackage.body)} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">复制正文</button>
-              <button type="button" onClick={() => setActiveTab('review')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">进入审阅（自动通过）</button>
+              <button type="button" onClick={() => setActiveTab('review')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">进入审阅</button>
               <button type="button" onClick={() => setActiveTab('projects')} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">保存到项目</button>
             </div>
           </div>
         </div>
+        </>
+        )}
         </div>
       </section>
     </div>

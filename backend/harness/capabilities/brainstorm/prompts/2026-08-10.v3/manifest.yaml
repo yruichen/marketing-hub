@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.brainstorm.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: workflow_skill
+  owner: workflow-runtime
+  task_type: brainstorm
+  title: Executable workflow planning
+  description: Converts a campaign idea into a validated, minimal DAG.
+  output_contract: workflow_name, brand_context, nodes[], edges[], summary
+  evaluation_profile: workflow-dag-v3
+  risk: high
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"workflow_name":"string","brand_context":{"brand_name":"string","audience":"string","tone":"string","selling_points":"string","visual_style":"string","campaign_goal":"string"},"nodes":[{"id":"string","type":"supported type","label":"string","x":80,"y":120,"width":260,"height":166,"config":{}}],"edges":[{"id":"string","source":"node id","target":"node id"}],"summary":"string"}
+  quality_bar:
+    - Graph is acyclic, connected, minimal, and executable from its supplied configuration.
+    - Every required input has a traceable source.
+    - Review gates match publication and claim risk.
+    - Output is valid JSON and satisfies the response contract.

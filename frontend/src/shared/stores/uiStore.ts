@@ -20,19 +20,15 @@ export type AppSection =
   | 'video';
 
 interface UiState {
-  activeSection: AppSection;
   rightPanelOpen: boolean;
   darkMode: boolean;
-  setActiveSection: (section: AppSection) => void;
   setRightPanelOpen: (open: boolean) => void;
   setDarkMode: (enabled: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  activeSection: 'dashboard',
   rightPanelOpen: false,
   darkMode: localStorage.getItem('mh_darkMode') === 'true',
-  setActiveSection: (activeSection) => set({ activeSection }),
   setRightPanelOpen: (rightPanelOpen) => set({ rightPanelOpen }),
   setDarkMode: (darkMode) => set({ darkMode }),
 }));

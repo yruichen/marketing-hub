@@ -144,6 +144,7 @@ export function Inspector({
                 <button
                   type="button"
                   onClick={onCreateCampaign}
+                  disabled={!newCampaignName.trim()}
                   className="desktop-toolbar__btn"
                   title="新建活动"
                   aria-label="新建活动"

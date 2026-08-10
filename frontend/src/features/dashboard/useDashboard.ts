@@ -1,9 +1,7 @@
 import { useCallback, useState } from 'react';
 import { apiFetch } from '../../hooks/useApi';
 import type { DashboardSnapshot, WorkspaceScope } from './types';
-import type { CampaignRecord, ProjectRecord, OrganizationRecord } from '../../types/workspace';
-
-const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
+import type { CampaignRecord, ProjectRecord } from '../../types/workspace';
 
 export function useWorkspaceScope(username: string | null) {
   const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope | null>(null);
@@ -11,7 +9,7 @@ export function useWorkspaceScope(username: string | null) {
   const fetchWorkspaceBootstrap = useCallback(async (): Promise<WorkspaceScope | null> => {
     try {
       const params = new URLSearchParams({
-        username: username || DEMO_USERNAME,
+        username: username || '',
       });
       const storedProject = localStorage.getItem('mh_project_slug');
       const storedCampaign = localStorage.getItem('mh_campaign_id');
@@ -34,35 +32,36 @@ export function useWorkspaceScope(username: string | null) {
     campaign?: CampaignRecord | WorkspaceScope['campaign'],
     currentUsername: string | null = null,
   ) => {
-    localStorage.setItem('mh_project_slug', project.slug);
-    if (campaign) {
-      localStorage.setItem('mh_campaign_id', String(campaign.id));
-    } else {
-      localStorage.removeItem('mh_campaign_id');
-    }
-    setWorkspaceScope((prev) => ({
-      organization: prev?.organization || ({
-        id: project.organization_id,
-        name: 'Marketing Hub',
-        slug: 'marketing-hub',
-      } as OrganizationRecord),
-      project: {
-        id: project.id,
-        name: project.name,
-        slug: project.slug,
-        brief: project.brief,
-        brand_context: project.brand_context,
-      },
-      campaign: campaign
-        ? {
-            id: campaign.id,
-            name: campaign.name,
-            objective: campaign.objective,
-            status: campaign.status,
-          }
-        : prev?.campaign || { id: 0, name: 'Default Campaign', objective: '', status: 'active' },
-      username: currentUsername || DEMO_USERNAME,
-    }));
+    setWorkspaceScope((prev) => {
+      if (!prev || prev.organization.id !== project.organization_id) {
+        return prev;
+      }
+      localStorage.setItem('mh_project_slug', project.slug);
+      if (campaign) {
+        localStorage.setItem('mh_campaign_id', String(campaign.id));
+      } else {
+        localStorage.removeItem('mh_campaign_id');
+      }
+      return {
+        organization: prev.organization,
+        project: {
+          id: project.id,
+          name: project.name,
+          slug: project.slug,
+          brief: project.brief,
+          brand_context: project.brand_context,
+        },
+        campaign: campaign
+          ? {
+              id: campaign.id,
+              name: campaign.name,
+              objective: campaign.objective,
+              status: campaign.status,
+            }
+          : null,
+        username: currentUsername || '',
+      };
+    });
   }, []);
 
   return { workspaceScope, setWorkspaceScope, fetchWorkspaceBootstrap, selectProjectScope };
@@ -74,7 +73,7 @@ export function useDashboardSnapshot(username: string | null) {
   const fetchDashboard = useCallback(async (): Promise<DashboardSnapshot | null> => {
     try {
       const params = new URLSearchParams({
-        username: username || DEMO_USERNAME,
+        username: username || '',
       });
       const storedProject = localStorage.getItem('mh_project_slug');
       const storedCampaign = localStorage.getItem('mh_campaign_id');

@@ -93,7 +93,7 @@ export function CreateProjectForm({ form, folders, loading, onChange, onCreate }
       <button
         type="button"
         onClick={onCreate}
-        disabled={loading}
+        disabled={loading || !form.name.trim() || !form.brief.trim()}
         className="desktop-toolbar__btn desktop-toolbar__btn--primary w-full justify-center"
       >
         <FolderPlus className="h-3.5 w-3.5" />

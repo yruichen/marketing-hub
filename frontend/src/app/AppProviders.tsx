@@ -4,6 +4,7 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AssistantProvider } from '../features/assistant';
+import { I18nProvider } from '../shared/i18n';
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,13 +25,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <ReactFlowProvider>
-          <Tooltip.Provider delayDuration={250}>
-            <AssistantProvider>{children}</AssistantProvider>
-          </Tooltip.Provider>
-        </ReactFlowProvider>
-      </QueryClientProvider>
+      <I18nProvider>
+        <QueryClientProvider client={queryClient}>
+          <ReactFlowProvider>
+            <Tooltip.Provider delayDuration={250}>
+              <AssistantProvider>{children}</AssistantProvider>
+            </Tooltip.Provider>
+          </ReactFlowProvider>
+        </QueryClientProvider>
+      </I18nProvider>
     </BrowserRouter>
   );
 }

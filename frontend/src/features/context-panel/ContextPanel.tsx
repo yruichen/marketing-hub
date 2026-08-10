@@ -6,12 +6,13 @@ import type { GenerationTaskRecord } from '../../types/workspace';
 import type { DashboardSnapshot } from '../dashboard/types';
 import type { AppSection } from '../../shared/stores/uiStore';
 import type { ErrorActionId } from '../../shared/api/errorActions';
+import { useI18n } from '../../shared/i18n';
 
 interface ContextPanelProps {
   workspaceScope: WorkspaceScope | null;
   latestTask: GenerationTaskRecord | null;
   dashboardSnapshot: DashboardSnapshot | null;
-  contentPackage: ContentPackage;
+  contentPackage: ContentPackage | null;
   setActiveTab: (tab: AppSection) => void;
   onClose: () => void;
   onRetryTask: (task: GenerationTaskRecord) => void | Promise<void>;
@@ -30,6 +31,7 @@ export function ContextPanel({
   onErrorAction,
   retryingTaskId = null,
 }: ContextPanelProps) {
+  const { t } = useI18n();
   const taskList = [
     ...(latestTask ? [latestTask] : []),
     ...(dashboardSnapshot?.recent_tasks ?? []),
@@ -112,8 +114,12 @@ export function ContextPanel({
           <PackageCheck className="h-3.5 w-3.5" />
           <span>当前内容包</span>
         </div>
-        <p className="context-panel__package-title">{contentPackage.title}</p>
-        <p className="context-panel__body">{contentPackage.platform} / {contentPackage.version}</p>
+        <p className="context-panel__package-title">{contentPackage?.title || t('content.context.empty')}</p>
+        <p className="context-panel__body">
+          {contentPackage
+            ? `${contentPackage.platform} / ${contentPackage.version === 'ai_draft' ? t('content.version.aiDraft') : contentPackage.version === 'user_revision' ? t('content.version.userRevision') : t('content.version.final')}`
+            : t('content.context.guide')}
+        </p>
         <button
           type="button"
           onClick={() => setActiveTab('content')}

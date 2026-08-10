@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { Bot, Copy, ExternalLink, RotateCcw, Trash2, X } from 'lucide-react';
 import type { WorkflowNode } from '../../types/workspace';
 import { buildWorkflowPreviewItems, resolveNodeOutputDisplay, schemaText } from './utils';
-import { nodeTypeLabels, statusLabels } from './constants';
+import { nodeTypeLabelKeys, statusLabelKeys } from './presentation';
 import { NodeConfigFields } from './NodeConfigFields';
+import { useI18n } from '../../shared/i18n';
 
 type DetailMode = 'edit' | 'ai';
 
@@ -86,6 +87,7 @@ export function WorkflowNodeDetailDialog({
   onApplyAiEdit,
   onRemoveNode,
 }: WorkflowNodeDetailDialogProps) {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<DetailMode>(mode);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [aiInstruction, setAiInstruction] = useState(() => String(node?.config?.ai_edit_instruction || ''));
@@ -123,10 +125,10 @@ export function WorkflowNodeDetailDialog({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-hover)] px-2 py-1 text-[9px] font-black text-[var(--editorial-text-gray)]">
-                {nodeTypeLabels[node.type] || node.type}
+                {nodeTypeLabelKeys[node.type] ? t(nodeTypeLabelKeys[node.type]) : node.type}
               </span>
               <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-hover)] px-2 py-1 text-[9px] font-black text-[var(--editorial-text-gray)]">
-                {statusLabels[node.status || 'idle'] || node.status || '未运行'}
+                {statusLabelKeys[node.status || 'idle'] ? t(statusLabelKeys[node.status || 'idle']) : node.status || t('workflow.status.idle')}
               </span>
             </div>
             <input

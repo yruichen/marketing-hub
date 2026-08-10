@@ -10,12 +10,13 @@ The project previously concentrated too much behavior in `api/views.py` and `api
 
 | App | Responsibility |
 | --- | --- |
-| `api` | Models, migrations, admin, shared contracts, serializers, compatibility imports |
+| `harness` | Provider-neutral AI contracts, capabilities, prompts, policy, runtime, ports, and adapters |
+| `api` | Models, migrations, admin, shared domain contracts, serializers, compatibility imports |
 | `accounts` | Login and account endpoints |
 | `workspaces` | Organizations, projects, folders, campaigns, drafts, templates, dashboard |
 | `generation` | Generation endpoints, task queue, workflow execution, node retry |
 | `community` | Community feed, likes, brand inspiration search |
-| `ai_gateway` | Provider config, BYOK, model/base URL settings |
+| `ai_gateway` | Provider configuration and compatibility entry points while integrations migrate to harness adapters |
 | `billing` | Subscription plans and quota policy |
 
 ## Routing
@@ -51,8 +52,8 @@ When adding a feature:
 1. Choose the owning app first.
 2. Add or update views in that app.
 3. Add URL routes in that app's `urls.py`.
-4. Put reusable serialization in `api/serializers.py`.
-5. Put shared constants or protocols in `api/contracts.py`.
+4. Put reusable domain serialization in `api/serializers.py`.
+5. Put AI execution contracts, prompts, and provider/tool ports in `harness/`.
 6. Put request scope helpers in `api/scope.py`.
 7. Add tests for the public API behavior.
 
@@ -63,15 +64,16 @@ When adding a feature:
 - Hiding cross-domain rules inside one view.
 - Changing API paths without a compatibility plan.
 - Changing model ownership and table names during feature work.
+- Calling provider SDKs from views or business services.
+- Embedding model-facing prompt prose in Python or TypeScript.
+- Returning mock output when a provider is missing or fails.
 
-## Future Split Plan
+## Service Layout
 
-The next clean split should move business services out of `api/services.py`:
+Business services are split under `api/service_modules/` while `api/services.py` preserves compatibility imports. New work belongs in the owning module:
 
-- `generation/services.py`
-- `workspaces/services.py`
-- `community/services.py`
-- `billing/services.py`
+- `service_modules/generation.py`
+- `service_modules/workspace.py`
+- `service_modules/workflow_parts/`
 
-This should be done incrementally with tests after each extraction.
-
+See [AI Harness Architecture](./ai_harness.md) for AI-specific dependency and extension rules.

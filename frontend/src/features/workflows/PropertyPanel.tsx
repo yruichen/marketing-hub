@@ -1,7 +1,8 @@
 import type { ErrorActionId } from '../../shared/api/errorActions';
 import { ErrorRecoveryActions } from '../../shared/ui/ErrorRecoveryActions';
 import type { GenerationTaskRecord, WorkflowNode, WorkflowEdge, WorkflowRunRecord } from '../../types/workspace';
-import { statusLabels } from './constants';
+import { nodeTypeLabelKeys, statusLabelKeys } from './presentation';
+import { useI18n } from '../../shared/i18n';
 import { nodeStatusDotClass } from './utils';
 import { classifyWorkflowFailure, workflowFailureAppActions } from './workflowRecovery';
 import { workflowRunProgressLabel } from './workflowRunState';
@@ -94,6 +95,11 @@ export function PropertyPanel({
   onRecoverFromNode,
   onErrorAction,
 }: PropertyPanelProps) {
+  const { t } = useI18n();
+  const displayNodeLabel = (node: WorkflowNode) => {
+    const key = nodeTypeLabelKeys[node.type];
+    return node.label || (key ? t(key) : node.type);
+  };
   const orderedNodes = executionOrder(nodes, edges);
   const succeededCount = nodes.filter((n) => n.status === 'succeeded').length;
   const failedCount = nodes.filter((n) => n.status === 'failed').length;
@@ -105,7 +111,7 @@ export function PropertyPanel({
 
   const nodeErrors = nodes
     .filter((n) => n.status === 'failed' && n.error_message)
-    .map((n) => ({ id: n.id, nodeId: n.id, label: n.label, message: n.error_message! }));
+    .map((n) => ({ id: n.id, nodeId: n.id, label: displayNodeLabel(n), message: n.error_message! }));
 
   const taskErrors = lastTasks
     .filter((t) => t.status === 'failed' && t.error_message)
@@ -163,9 +169,9 @@ export function PropertyPanel({
           <div className="border border-[var(--editorial-stroke)]/40 p-2"><span className="block text-[var(--editorial-text-gray)]">预计成本</span><b>{runPreview.estimatedCost}</b></div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {Object.entries(statusLabels).map(([key, label]) => (
+          {Object.entries(statusLabelKeys).map(([key, labelKey]) => (
             <span key={key} className="flex items-center gap-1 text-[9px] text-[var(--editorial-text-gray)]">
-              <span className={`h-1.5 w-1.5 rounded-full ${nodeStatusDotClass(key)}`} />{label}
+              <span className={`h-1.5 w-1.5 rounded-full ${nodeStatusDotClass(key)}`} />{t(labelKey)}
             </span>
           ))}
         </div>
@@ -209,7 +215,7 @@ export function PropertyPanel({
                 onClick={() => onSelectNode(runningNode.id)}
                 className="mt-2 w-full border border-blue-300 bg-blue-50/70 px-2.5 py-2 text-left text-[10px] text-blue-700 hover:bg-blue-50"
               >
-                正在生成：<span className="font-black">{runningNode.label}</span>
+                正在生成：<span className="font-black">{displayNodeLabel(runningNode)}</span>
               </button>
             )}
           </div>
@@ -292,7 +298,7 @@ export function PropertyPanel({
           ) : (
             orderedNodes.map((node, index) => {
               const status = node.status || 'idle';
-              const statusLabel = statusLabels[status] || status;
+              const statusLabel = statusLabelKeys[status] ? t(statusLabelKeys[status]) : status;
               const isSelected = node.id === selectedNodeId;
               const isActive = node.id === runningNode?.id;
               const tone = pipelineTone(status, isActive);
@@ -309,7 +315,7 @@ export function PropertyPanel({
                       <div className="flex items-center gap-2 text-[10px]">
                         <span className="text-[8px] text-[var(--editorial-text-gray)] w-4 shrink-0">{index + 1}</span>
                         <span className={`h-2 w-2 rounded-full shrink-0 ${nodeStatusDotClass(status)} ${status === 'running' ? 'animate-pulse' : ''}`} />
-                        <span className="font-black truncate flex-1">{node.label}</span>
+                        <span className="font-black truncate flex-1">{displayNodeLabel(node)}</span>
                         <span className={`text-[8px] shrink-0 ${tone.text}`}>{isActive ? '正在处理' : statusLabel}</span>
                       </div>
                       {status === 'queued' && isRunning && (

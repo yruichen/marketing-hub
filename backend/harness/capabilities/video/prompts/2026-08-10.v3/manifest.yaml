@@ -1,0 +1,18 @@
+prompt:
+  key: marketing.video.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: generation_prompt
+  owner: content-generation
+  task_type: video
+  title: Video generation specification
+  description: Shared continuity and production invariant block for video providers.
+  output_contract: provider video result
+  evaluation_profile: video-generation-v3
+  risk: medium
+  user_file: user.md
+  quality_bar:
+    - Motion, camera behavior, timing, and transitions are executable.
+    - Cross-shot identity and art-direction continuity are explicit.
+    - Provider constraints and requested aspect ratio are preserved.

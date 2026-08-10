@@ -126,7 +126,7 @@ class WorkspaceDraftCollectionView(APIView):
         draft, _ = WorkspaceDraft.objects.update_or_create(
             project=project,
             campaign=campaign,
-            name=request.data.get('name', 'Default Workflow'),
+            name=request.data.get('name', 'Untitled Workflow'),
             defaults={
                 'organization': project.organization,
                 'brand_context': request.data.get('brand_context', {}) if isinstance(request.data.get('brand_context', {}), dict) else {},

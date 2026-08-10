@@ -2,14 +2,12 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
 from api.contracts import NODE_IO_SCHEMAS, NODE_TYPE_ALIASES, PLAN_LIMITS, normalize_schema, validate_workflow_graph
 from api.image_style_skills import DEFAULT_IMAGE_STYLE_SKILL_ID, resolve_style_skill
-from ai_gateway.services import AIModelGateway
 from api.audit import record_audit_log
 from api.serializers import (
     AssetSerializer,
@@ -45,41 +43,19 @@ def membership_role(user: User | None, organization: Organization | None) -> str
     membership = Membership.objects.filter(user=user, organization=organization).only('role').first()
     return membership.role if membership else None
 
-def ensure_demo_workspace(username: str | None = None) -> dict[str, Any]:
-    org, _ = Organization.objects.get_or_create(
-        slug='marketing-hub',
-        defaults={'name': 'Marketing Hub'},
-    )
-    project, _ = Project.objects.get_or_create(
-        organization=org,
-        slug='core-launch',
-        defaults={
-            'name': 'Core Launch',
-            'brief': 'Default workspace for the local upgrade scaffold.',
-        },
-    )
-    campaign, _ = Campaign.objects.get_or_create(
-        project=project,
-        name='Product Launch',
-        defaults={'objective': 'Keep the default demo workflow live'},
-    )
-
-    user_obj = None
-    if username is None:
-        username = settings.MARKETING_HUB_DEMO_USERNAME
-    if username:
-        user_obj = User.objects.filter(username=username).first()
-        if user_obj:
-            if user_obj.is_superuser:
-                user_obj = None
-            else:
-                Membership.objects.get_or_create(user=user_obj, organization=org, defaults={'role': 'admin'})
-
+def get_user_workspace(user: User) -> dict[str, Any]:
+    """Return the user's current workspace without creating hidden sample data."""
+    membership = Membership.objects.filter(user=user).select_related('organization').order_by('created_at').first()
+    org = membership.organization if membership else None
+    project = Project.objects.filter(organization=org).order_by('-created_at').first() if org else None
+    campaign = Campaign.objects.filter(project=project).order_by('-created_at').first() if project else None
     return {
         'organization': org,
         'project': project,
         'campaign': campaign,
-        'user': user_obj,
+        'user': user,
+        'membership': membership,
+        'is_complete': bool(org and project and campaign),
     }
 
 

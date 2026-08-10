@@ -5,13 +5,13 @@ import {
   type Connection, type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { apiFetch, apiGet, apiPatch, apiPost, buildErrorToast, parseApiErrorResponse, useCopyClipboard } from '../hooks/useApi';
+import { buildErrorToast, useCopyClipboard } from '../hooks/useApi';
 import type {
   BrandContext, GenerationTaskRecord,
   WorkflowEdge, WorkflowNode, WorkflowRunRecord, WorkspaceDraftRecord,
-  WorkflowAiEditResponse,
 } from '../types/workspace';
-import { presets, ioSchema, defaultNodeConfig, defaultNodes, defaultEdges, type NodeType } from '../features/workflows/constants';
+import { ioSchema, defaultNodeConfig, type NodeType } from '../features/workflows/definition';
+import { presets } from '../features/workflows/presentation';
 import { normalizeWorkflowNode, type ProjectDetail, type WorkflowBuilderProps, type WorkflowSnapshot } from '../features/workflows/types';
 import { schemasCompatible, workflowExecutionOrder } from '../features/workflows/utils';
 import { PropertyPanel } from '../features/workflows/PropertyPanel';
@@ -33,6 +33,8 @@ import {
 import { buildWorkflowReadiness } from '../features/workflows/workflowReadiness';
 import { classifyWorkflowFailure, formatNodeDiagnosticSnapshot } from '../features/workflows/workflowRecovery';
 import { mergeWorkflowRunIntoNodes, workflowRunIsActive } from '../features/workflows/workflowRunState';
+import { useWorkflowHistory } from '../features/workflows/useWorkflowHistory';
+import { workflowApi, type SaveWorkflowDraftInput } from '../features/workflows/api';
 import { WorkflowNodeDetailDialog } from '../features/workflows/WorkflowNodeDetailDialog';
 import {
   WorkflowAssetPanel,
@@ -125,10 +127,6 @@ export function WorkflowBuilder({
   useEffect(() => { brandCtxRef.current = brandContext; }, [brandContext]);
   useEffect(() => { selIdRef.current = selectedNodeId; }, [selectedNodeId]);
 
-  // History
-  const [history, setHistory] = useState<WorkflowSnapshot[]>([]);
-  const [future, setFuture] = useState<WorkflowSnapshot[]>([]);
-  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idCounterRef = useRef(0);
   const dragSnapshotRef = useRef<WorkflowSnapshot | null>(null);
   const clipboardRef = useRef<{ nodes: WorkflowNode[]; edges: WorkflowEdge[] } | null>(null);
@@ -151,44 +149,21 @@ export function WorkflowBuilder({
     setSelectedNodeIds(snap.selectedNodeId ? [snap.selectedNodeId] : []);
   }, [setRfNodes, setRfEdges]);
 
-  const pushSnapshot = useCallback((snap: WorkflowSnapshot) => {
-    setHistory((prev) => [...prev.slice(-24), snap]); setFuture([]);
-  }, []);
-
-  const markHistory = useCallback((label: string) => pushSnapshot(makeSnapshot(label)), [makeSnapshot, pushSnapshot]);
-
-  const debouncedMarkHistory = useCallback((label: string) => {
-    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
-    historyTimerRef.current = setTimeout(() => pushSnapshot(makeSnapshot(label)), 800);
-  }, [makeSnapshot, pushSnapshot]);
-
   const markDirty = useCallback(() => {
     if (!readOnly) setSaveStatus('dirty');
   }, [readOnly]);
 
-  const undo = useCallback(() => {
-    const cur = makeSnapshot('重做点');
-    setHistory((prev) => {
-      const snap = prev[prev.length - 1];
-      if (!snap) return prev;
-      setFuture((items) => [cur, ...items].slice(0, 25));
-      restoreSnapshot(snap);
-      setSaveStatus('dirty');
-      return prev.slice(0, -1);
-    });
-  }, [makeSnapshot, restoreSnapshot]);
-
-  const redo = useCallback(() => {
-    const cur = makeSnapshot('撤销点');
-    setFuture((prev) => {
-      const snap = prev[0];
-      if (!snap) return prev;
-      setHistory((items) => [...items.slice(-24), cur]);
-      restoreSnapshot(snap);
-      setSaveStatus('dirty');
-      return prev.slice(1);
-    });
-  }, [makeSnapshot, restoreSnapshot]);
+  const handleHistoryRestore = useCallback(() => setSaveStatus('dirty'), []);
+  const {
+    history,
+    future,
+    pushSnapshot,
+    resetHistory,
+    markHistory,
+    debouncedMarkHistory,
+    undo,
+    redo,
+  } = useWorkflowHistory({ makeSnapshot, restoreSnapshot, onRestore: handleHistoryRestore });
 
   // --- Data Loading ---
 
@@ -201,10 +176,10 @@ export function WorkflowBuilder({
       const urlDraftId = params.get('draft');
       const fromBrainstorm = params.get('from') === 'brainstorm';
       if (urlDraftId) {
-        const d = await apiGet<WorkspaceDraftRecord>(`/drafts/${urlDraftId}/`);
+        const d = await workflowApi.getDraft(urlDraftId);
         const bc = d.brand_context || {};
-        const loadedNodes = d.nodes?.length ? d.nodes.map((n) => normalizeWorkflowNode(n, bc)) : defaultNodes(project.name);
-        const wfEdges = d.edges?.length ? d.edges : defaultEdges;
+        const loadedNodes = d.nodes?.map((n) => normalizeWorkflowNode(n, bc)) ?? [];
+        const wfEdges = d.edges ?? [];
         const wfNodes = fromBrainstorm && hasLayoutProblems(loadedNodes, wfEdges)
           ? autoLayoutWorkflow(loadedNodes, wfEdges)
           : loadedNodes;
@@ -215,10 +190,10 @@ export function WorkflowBuilder({
         setSelectedNodeId('');
         setSelectedNodeIds([]);
         const snap: WorkflowSnapshot = { id: `draft-${d.id}`, label: d.name || '灵感风暴工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: '' };
-        setHistory([snap]); setFuture([]);
+        resetHistory(snap);
         const workflowRunId = d.last_run_summary?.workflow_run_id as number | undefined;
         if (workflowRunId) {
-          apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`)
+          workflowApi.getRun(workflowRunId)
             .then(setCurrentWorkflowRun)
             .catch(() => setCurrentWorkflowRun(null));
         } else {
@@ -226,8 +201,7 @@ export function WorkflowBuilder({
         }
         const taskIds = d.last_run_summary?.task_ids as number[] | undefined;
         if (taskIds?.length) {
-          const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
-          setLastTasks(restored.filter(Boolean) as GenerationTaskRecord[]);
+          setLastTasks(await workflowApi.getTasks(taskIds));
         }
         setSaveStatus(fromBrainstorm && hasLayoutProblems(loadedNodes, wfEdges) ? 'dirty' : 'clean');
         if (fromBrainstorm) {
@@ -241,12 +215,12 @@ export function WorkflowBuilder({
         return;
       }
 
-      const detail = await apiGet<ProjectDetail>(`/projects/${project.id}/`);
+      const detail = await workflowApi.getProject(project.id);
       setProjectDetail(detail);
       const d = detail.drafts.find((item) => item.campaign_id === campaign?.id) || detail.drafts[0] || null;
       const bc = d?.brand_context || detail.brand_context || {};
-      const wfNodes = d?.nodes?.length ? d.nodes.map((n) => normalizeWorkflowNode(n, bc)) : defaultNodes(detail.name);
-      const wfEdges = d?.edges?.length ? d.edges : defaultEdges;
+      const wfNodes = d?.nodes?.map((n) => normalizeWorkflowNode(n, bc)) ?? [];
+      const wfEdges = d?.edges ?? [];
       setDraft(d);
       setRfNodes(wfNodes.map(wfToRF));
       setRfEdges(wfEdges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
@@ -254,12 +228,12 @@ export function WorkflowBuilder({
       setSelectedNodeId('');
       setSelectedNodeIds([]);
       const snap: WorkflowSnapshot = { id: `${detail.id}-${d?.id || 'init'}`, label: d ? '加载草稿' : '默认工作流', createdAt: new Date().toISOString(), nodes: wfNodes, edges: wfEdges, brandContext: bc, selectedNodeId: '' };
-      setHistory([snap]); setFuture([]);
+      resetHistory(snap);
       setSaveStatus('clean');
       // Restore run history from persisted last_run_summary
       const workflowRunId = d?.last_run_summary?.workflow_run_id as number | undefined;
       if (workflowRunId) {
-        apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`)
+        workflowApi.getRun(workflowRunId)
           .then(setCurrentWorkflowRun)
           .catch(() => setCurrentWorkflowRun(null));
       } else {
@@ -267,12 +241,11 @@ export function WorkflowBuilder({
       }
       const taskIds = d?.last_run_summary?.task_ids as number[] | undefined;
       if (taskIds?.length) {
-        const restored = await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)));
-        setLastTasks(restored.filter(Boolean) as GenerationTaskRecord[]);
+        setLastTasks(await workflowApi.getTasks(taskIds));
       }
     } catch (err) { triggerToast(buildErrorToast(err, '工作流草稿加载失败')); }
     finally { setLoadingState('idle'); }
-  }, [campaign?.id, fitView, project, triggerToast, setRfNodes, setRfEdges]);
+  }, [campaign?.id, fitView, project, resetHistory, triggerToast, setRfNodes, setRfEdges]);
 
   useEffect(() => {
     const t = window.setTimeout(() => { loadProjectWorkflow(); }, 0);
@@ -281,7 +254,6 @@ export function WorkflowBuilder({
 
   useEffect(() => () => {
     if (handoffBannerTimerRef.current) clearTimeout(handoffBannerTimerRef.current);
-    if (historyTimerRef.current) clearTimeout(historyTimerRef.current);
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
   }, []);
 
@@ -291,16 +263,15 @@ export function WorkflowBuilder({
     if (!project) throw new Error('Project is required');
     setSaveStatus('saving');
     try {
-      const body = { project_id: project.id, campaign_id: campaign?.id, name: draft?.name || 'Default Workflow', brand_context: brandContext, nodes: nextNodes, edges: nextEdges, selected_node_id: selectedNodeId, status: 'draft' };
-      const saved = draft ? await apiPatch<WorkspaceDraftRecord>(`/drafts/${draft.id}/`, body) : await apiPost<WorkspaceDraftRecord>('/drafts/', body);
+      const body: SaveWorkflowDraftInput = { project_id: project.id, campaign_id: campaign?.id, name: draft?.name || 'Default Workflow', brand_context: brandContext, nodes: nextNodes, edges: nextEdges, selected_node_id: selectedNodeId, status: 'draft' };
+      const saved = await workflowApi.saveDraft(draft?.id || null, body);
       setDraft(saved);
       const sn = saved.nodes.map((n) => normalizeWorkflowNode(n, saved.brand_context || brandContext));
       setRfNodes(sn.map(wfToRF));
       setRfEdges(saved.edges.map((e) => ({ id: e.id || `edge-${e.source}-${e.target}`, source: e.source, target: e.target })));
       setBrandContext(saved.brand_context);
       const snap: WorkflowSnapshot = { id: `${saved.id}-${Date.now()}`, label: silent ? '自动保存' : '手动保存', createdAt: new Date().toISOString(), nodes: sn, edges: saved.edges, brandContext: saved.brand_context, selectedNodeId };
-      setHistory((prev) => [...prev.slice(-24), snap]);
-      setFuture([]);
+      pushSnapshot(snap);
       setSaveStatus('saved');
       if (!silent) triggerToast('画布草稿已保存', 'success');
       return saved;
@@ -308,7 +279,7 @@ export function WorkflowBuilder({
       setSaveStatus('failed');
       throw err;
     }
-  }, [brandContext, campaign, draft, edges, nodes, project, selectedNodeId, setBrandContext, setDraft, setFuture, setHistory, setRfEdges, setRfNodes, setSaveStatus, triggerToast]);
+  }, [brandContext, campaign, draft, edges, nodes, project, pushSnapshot, selectedNodeId, setBrandContext, setDraft, setRfEdges, setRfNodes, setSaveStatus, triggerToast]);
 
   // Auto-save (must be after persistDraft declaration)
   useEffect(() => {
@@ -349,17 +320,14 @@ export function WorkflowBuilder({
       setDraft({ ...saved, status: 'running', nodes: optimisticNodes });
       setRfNodes(optimisticNodes.map(wfToRF));
       setLastTasks([]);
-      const startResponse = await apiPost<{ workflow_run: WorkflowRunRecord; draft: WorkspaceDraftRecord; tasks: GenerationTaskRecord[] }>(
-        `/drafts/${saved.id}/run/`,
-        { username, async: true },
-      );
+      const startResponse = await workflowApi.startRun(saved.id, username);
       workflowRunId = startResponse.workflow_run.id;
       setCurrentWorkflowRun(startResponse.workflow_run);
 
       const pollWorkflowRun = async () => {
         if (!workflowRunId) return null;
         try {
-          const liveRun = await apiGet<WorkflowRunRecord>(`/workflow-runs/${workflowRunId}/`);
+          const liveRun = await workflowApi.getRun(workflowRunId);
           setCurrentWorkflowRun(liveRun);
           setRfNodes(mergeWorkflowRunIntoNodes(nodesRef.current, liveRun).map(wfToRF));
           if (!workflowRunIsActive(liveRun) && pollTimer) {
@@ -387,10 +355,10 @@ export function WorkflowBuilder({
         triggerToast('工作流已提交，长任务会继续在任务中心运行', 'info');
         return;
       }
-      const liveDraft = await apiGet<WorkspaceDraftRecord>(`/drafts/${saved.id}/`);
+      const liveDraft = await workflowApi.getDraft(saved.id);
       const taskIds = (finalRun.summary?.task_ids || liveDraft.last_run_summary?.task_ids || []) as number[];
       const tasks = taskIds.length
-        ? (await Promise.all(taskIds.map((id) => apiGet<GenerationTaskRecord>(`/tasks/${id}/`).catch(() => null)))).filter(Boolean) as GenerationTaskRecord[]
+        ? await workflowApi.getTasks(taskIds)
         : [];
       const data = { draft: liveDraft, tasks };
       setDraft(data.draft);
@@ -415,7 +383,7 @@ export function WorkflowBuilder({
       }));
     } catch (err) {
       if (runningDraftId) {
-        await apiGet<WorkspaceDraftRecord>(`/drafts/${runningDraftId}/`).then((liveDraft) => {
+        await workflowApi.getDraft(runningDraftId).then((liveDraft) => {
           const liveNodes = liveDraft.nodes.map((n) => normalizeWorkflowNode(n, liveDraft.brand_context || brandContext));
           setDraft(liveDraft);
           setRfNodes(liveNodes.map(wfToRF));
@@ -466,19 +434,12 @@ export function WorkflowBuilder({
       markHistory(`节点恢复 ${node.id}`);
       const saved = await persistDraft(nodes, edges, true);
       const idempotencyKey = `workflow-retry-${saved.id}-${node.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const response = await apiFetch(`/drafts/${saved.id}/nodes/${node.id}/retry/`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({ username, feedback: feedbackText }),
-      });
-      if (!response.ok) {
-        throw await parseApiErrorResponse(response, `/drafts/${saved.id}/nodes/${node.id}/retry/`);
-      }
-      const data = await response.json() as {
-        draft: WorkspaceDraftRecord;
-        task: GenerationTaskRecord | null;
-        workflow_run?: WorkflowRunRecord;
-      };
+      const data = await workflowApi.retryNode(
+        saved.id,
+        node.id,
+        { username, feedback: feedbackText },
+        idempotencyKey,
+      );
       setDraft(data.draft);
       const sn = data.draft.nodes.map((n) => normalizeWorkflowNode(n, data.draft.brand_context || brandContext));
       setRfNodes(sn.map(wfToRF));
@@ -507,7 +468,7 @@ export function WorkflowBuilder({
     if (runAfter) setLoadingState('retrying');
     try {
       const baseDraft = draft || await persistDraft(nodes, edges, true);
-      const result = await apiPost<WorkflowAiEditResponse>(`/drafts/${baseDraft.id}/ai-edit/`, {
+      const result = await workflowApi.editWithAi(baseDraft.id, {
         mode,
         instruction: trimmed,
         node_id: nodeId,
@@ -526,19 +487,12 @@ export function WorkflowBuilder({
       if (!runAfter || !nodeId) return;
 
       const saved = await persistDraft(nextNodes, nextEdges, true);
-      const retryResponse = await apiFetch(`/drafts/${saved.id}/nodes/${nodeId}/retry/`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': `workflow-ai-edit-retry-${saved.id}-${nodeId}-${Date.now()}` },
-        body: JSON.stringify({ username, feedback: trimmed }),
-      });
-      if (!retryResponse.ok) {
-        throw await parseApiErrorResponse(retryResponse, `/drafts/${saved.id}/nodes/${nodeId}/retry/`);
-      }
-      const data = await retryResponse.json() as {
-        draft: WorkspaceDraftRecord;
-        task: GenerationTaskRecord | null;
-        workflow_run?: WorkflowRunRecord;
-      };
+      const data = await workflowApi.retryNode(
+        saved.id,
+        nodeId,
+        { username, feedback: trimmed },
+        `workflow-ai-edit-retry-${saved.id}-${nodeId}-${Date.now()}`,
+      );
       setDraft(data.draft);
       const sn = data.draft.nodes.map((node) => normalizeWorkflowNode(node, data.draft.brand_context || brandContext));
       setRfNodes(sn.map(wfToRF));
@@ -667,7 +621,7 @@ export function WorkflowBuilder({
         query: node.config.query || payload.title,
       },
     });
-    triggerToast(`已把「${payload.title}」添加到 ${node.label}`, 'success');
+    triggerToast(`已把「${payload.title}」添加到节点`, 'success');
   }, [nodes, readOnly, triggerToast, updateNode]);
 
   const selectNode = useCallback((id: string) => {
@@ -763,7 +717,7 @@ export function WorkflowBuilder({
       idCounterRef.current += 1;
       const id = `${n.type}-copy-${idCounterRef.current}`;
       idMap.set(n.id, id);
-      return { ...n, id, label: `${n.label} 副本`, x: n.x + 48 / vp.zoom, y: n.y + 48 / vp.zoom, status: 'idle' as const };
+      return { ...n, id, label: n.label ? `${n.label} 副本` : '', x: n.x + 48 / vp.zoom, y: n.y + 48 / vp.zoom, status: 'idle' as const };
     });
     const newEdges = clipboardRef.current.edges.map((e) => {
       const s = idMap.get(e.source), t = idMap.get(e.target);
@@ -942,7 +896,7 @@ export function WorkflowBuilder({
       <section className="bg-[var(--editorial-paper)] border-1.5 border-[var(--editorial-stroke)] shadow-editorial min-w-0 flex flex-col">
         <WorkflowBuilderToolbar
           projectName={projectDetail?.name || project.name}
-          campaignName={campaign?.name || 'Default Campaign'}
+          campaignName={campaign?.name || '—'}
           draftStatus={draft?.status || 'draft'}
           selectedCount={selectedNodeIds.length}
           readOnly={readOnly}
@@ -957,7 +911,7 @@ export function WorkflowBuilder({
           canCreateCustomAgent={canCreateCustomAgent}
           isNodeLocked={isNodeLocked}
           onLockedFeature={openWorkflowProGate}
-          onAddNode={addNode}
+          onAddNode={(type) => addNode(type, '')}
           onCreateCustomAgent={() => setShowCustomAgent(true)}
           onUndo={undo}
           onRedo={redo}
@@ -994,8 +948,8 @@ export function WorkflowBuilder({
             {loadingState === 'loading' && <WorkflowLoadingOverlay />}
             {loadingState !== 'loading' && nodes.length === 0 && (
               <WorkflowEmptyState
-                onAddCopy={() => addNode('copy', '写渠道文案')}
-                onAddImagePrompt={() => addNode('image_prompt', '生成图片说明')}
+                onAddCopy={() => addNode('copy', '')}
+                onAddImagePrompt={() => addNode('image_prompt', '')}
               />
             )}
             <WorkflowBuilderCanvas
@@ -1048,7 +1002,7 @@ export function WorkflowBuilder({
             const newId = `${src.type}-copy-${idCounterRef.current}`;
             markHistory('复制节点');
             markDirty();
-            const nn: WorkflowNode = { ...src, id: newId, label: `${src.label} (副本)`, x: src.x + 40, y: src.y + 40, config: { ...src.config }, output: {}, status: 'idle' };
+            const nn: WorkflowNode = { ...src, id: newId, label: src.label ? `${src.label} (副本)` : '', x: src.x + 40, y: src.y + 40, config: { ...src.config }, output: {}, status: 'idle' };
             setRfNodes((prev) => [...prev, wfToRF(nn)]);
             setSelectedNodeId(newId);
             setDetailNodeId(newId);

@@ -17,6 +17,6 @@ describe('app routes', () => {
     expect(sectionFromPath('/generation/video')).toBe('video');
     expect(pathForSection('video')).toBe('/generation/video');
     expect(sectionFromPath('/templates/public')).toBe('community');
-    expect(sectionFromPath('/profile/DEMO')).toBe('profile');
+    expect(sectionFromPath('/profile/example-user')).toBe('profile');
   });
 });

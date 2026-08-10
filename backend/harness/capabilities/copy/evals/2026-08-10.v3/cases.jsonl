@@ -1,0 +1,1 @@
+{"id":"grounded-copy","input":{"brand_name":"Acme","product_description":"Reusable steel bottle","platform":"Xiaohongshu","output_locale":"en-US"},"assertions":["valid_schema","no_unsupported_claims","channel_fit"]}

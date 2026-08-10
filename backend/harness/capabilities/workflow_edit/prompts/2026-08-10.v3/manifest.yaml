@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.workflow_edit.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: workflow_skill
+  owner: workflow-runtime
+  task_type: workflow_edit
+  title: Constrained workflow editing
+  description: Applies a bounded edit while preserving workflow graph invariants.
+  output_contract: nodes, edges, summary, changed_node_ids
+  evaluation_profile: workflow-edit-boundary-v1
+  risk: high
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"nodes":["complete node objects"],"edges":["complete edge objects"],"summary":"string","changed_node_ids":["node id"]}
+  quality_bar:
+    - Node mode changes only the selected node label or configuration.
+    - Workflow mode preserves IDs, types, runtime fields, and user-created nodes.
+    - The returned graph is acyclic and satisfies the supplied runtime contracts.
+    - Output is valid JSON and satisfies the response contract.

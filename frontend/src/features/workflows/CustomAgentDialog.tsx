@@ -12,8 +12,8 @@ export interface CustomAgentForm {
 }
 
 const defaultForm: CustomAgentForm = {
-  name: '自定义智能体', icon: 'Sparkles', prompt: '', input_fields: 'brief, brand_context',
-  output_schema_text: '{ "response": "string" }', model: '', temperature: 0.7, failure_strategy: '重试一次后跳过',
+  name: '', icon: 'Sparkles', prompt: '', input_fields: '',
+  output_schema_text: '{ "response": "string" }', model: '', temperature: 0.7, failure_strategy: 'retry_once_then_skip',
 };
 
 interface CustomAgentDialogProps {
@@ -58,9 +58,9 @@ export function CustomAgentDialog({ onSave, onClose }: CustomAgentDialogProps) {
             <div>
               <label className="block text-[9px] font-black uppercase text-[var(--editorial-text-gray)] mb-1">失败策略</label>
               <select value={form.failure_strategy} onChange={(e) => update('failure_strategy', e.target.value)} className="w-full bg-transparent border-b border-[var(--editorial-stroke)] text-xs py-2 focus:outline-none">
-                <option value="重试一次后跳过">重试一次后跳过</option>
-                <option value="直接跳过">直接跳过</option>
-                <option value="中断工作流">中断工作流</option>
+                <option value="retry_once_then_skip">重试一次后跳过</option>
+                <option value="skip">直接跳过</option>
+                <option value="abort">中断工作流</option>
               </select>
             </div>
           </div>
@@ -68,7 +68,7 @@ export function CustomAgentDialog({ onSave, onClose }: CustomAgentDialogProps) {
           <textarea value={form.output_schema_text} onChange={(e) => update('output_schema_text', e.target.value)} rows={2} className="w-full bg-[var(--editorial-bg)] border border-[var(--editorial-stroke)] p-3 text-[10px] font-mono resize-none focus:outline-none" />
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn-editorial-secondary px-3 py-2 text-[10px] font-black uppercase">取消</button>
-            <button type="button" onClick={() => { if (form.name.trim()) onSave(form); }} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase">创建</button>
+            <button type="button" disabled={!form.name.trim() || !form.prompt.trim()} onClick={() => onSave(form)} className="btn-editorial-primary px-3 py-2 text-[10px] font-black uppercase disabled:opacity-40">创建</button>
           </div>
         </div>
       </div>

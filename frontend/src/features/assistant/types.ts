@@ -40,9 +40,11 @@ export interface PageContext {
 }
 
 export interface AssistantSseEvent {
-  type: 'status' | 'text' | 'tool_call' | 'tool_result' | 'done' | 'error';
+  type: 'status' | 'text' | 'tool_call' | 'tool_result' | 'approval_required' | 'done' | 'error';
   delta?: string;
   status_text?: string;
+  status_code?: string;
+  finish_reason?: string;
   name?: string;
   args?: Record<string, unknown>;
   result?: unknown;

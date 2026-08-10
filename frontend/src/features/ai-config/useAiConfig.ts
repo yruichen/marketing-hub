@@ -5,8 +5,6 @@ import type { BillingPlanResponse } from '../../types/workspace';
 import type { WorkspaceScope } from '../dashboard/types';
 import type { AiConfig, ProviderModelListResponse, ProviderModelOption } from './types';
 
-const DEMO_USERNAME = import.meta.env.VITE_DEMO_USERNAME || 'DEMO';
-
 interface UseAiConfigOptions {
   workspaceScope: WorkspaceScope | null;
   username: string | null;
@@ -44,13 +42,12 @@ export function useAiConfig({
       const res = await apiFetch('/ai/config/');
       if (res.ok) {
         const data: AiConfig[] = await res.json();
-        const productionConfigs = data.filter((config) => config.provider !== 'mock');
-        setAiConfigs(productionConfigs);
-        const orgScopedActive = productionConfigs.find(
+        setAiConfigs(data);
+        const orgScopedActive = data.find(
           (c) => c.is_active && c.billing_mode === 'byok',
         );
         const active = orgScopedActive
-          ?? productionConfigs.find((c) => c.is_active);
+          ?? data.find((c) => c.is_active);
         if (active) {
           const billingMode = canManagePlatformConfig
             ? (active.billing_mode || 'platform')
@@ -75,7 +72,7 @@ export function useAiConfig({
 
   const fetchBillingPlans = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ username: username || DEMO_USERNAME });
+      const params = new URLSearchParams({ username: username || '' });
       const res = await apiFetch(`/billing/plans/?${params.toString()}`);
       if (res.ok) {
         const data: BillingPlanResponse = await res.json();
@@ -100,7 +97,7 @@ export function useAiConfig({
           ...activeConfigForm,
           billing_mode: effectiveBillingMode,
           ...(activeConfigForm.api_key.trim() ? { api_key: activeConfigForm.api_key.trim() } : {}),
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: organizationSlug,
         }),
       });
@@ -127,7 +124,7 @@ export function useAiConfig({
           ...activeConfigForm,
           billing_mode: effectiveBillingMode,
           ...(activeConfigForm.api_key.trim() ? { api_key: activeConfigForm.api_key.trim() } : {}),
-          username: username || DEMO_USERNAME,
+          username: username || '',
           organization: organizationSlug,
         }),
       });

@@ -1,0 +1,22 @@
+prompt:
+  key: marketing.image_prompt.system
+  version: 2026-08-10.v3
+  locale: en-US
+  default: true
+  kind: system_prompt
+  owner: content-generation
+  task_type: image_prompt
+  title: Marketing image prompt engineering
+  description: Produces an English model prompt plus localized production notes.
+  output_contract: prompt, prompt_localized, negative_prompt, composition_notes
+  evaluation_profile: image-prompt-quality-v3
+  risk: medium
+  system_file: system.md
+  user_file: user.md
+  schema_hint: |
+    {"prompt":"English model-ready prompt","prompt_localized":"localized intent summary","negative_prompt":"English comma-separated exclusions","composition_notes":"localized crop and framing notes"}
+  quality_bar:
+    - The English prompt is ordered, concrete, and free of contradictory directions.
+    - Composition and crop behavior match the requested aspect ratio and channel.
+    - Negative constraints include user exclusions without redundant token stuffing.
+    - Output is valid JSON and satisfies the response contract.

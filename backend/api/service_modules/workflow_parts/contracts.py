@@ -38,71 +38,15 @@ def validate_workflow_contract(nodes: list[dict[str, Any]], edges: list[dict[str
     return warnings
 
 def get_or_create_default_draft(project: Project, campaign: Campaign | None = None) -> WorkspaceDraft:
-    default_nodes = [
-        {
-            'id': 'brand-brief',
-            'type': 'context',
-            'label': '品牌卖点提炼',
-            'x': 80,
-            'y': 120,
-            'width': 240,
-            'height': 132,
-            'status': 'idle',
-            'config': {
-                'summary': project.brief or '整理品牌定位、卖点和受众特征。',
-            },
-            'input_schema': NODE_IO_SCHEMAS['context']['input'],
-            'output_schema': NODE_IO_SCHEMAS['context']['output'],
-            'output': {},
-        },
-        {
-            'id': 'copy-agent',
-            'type': 'copy',
-            'label': '小红书文案专家',
-            'x': 360,
-            'y': 90,
-            'width': 240,
-            'height': 132,
-            'status': 'idle',
-            'config': {
-                'tone': '爆款活泼',
-                'platform': 'Xiaohongshu',
-            },
-            'input_schema': NODE_IO_SCHEMAS['copy']['input'],
-            'output_schema': NODE_IO_SCHEMAS['copy']['output'],
-            'output': {},
-        },
-        {
-            'id': 'image-agent',
-            'type': 'image',
-            'label': '配图生成器',
-            'x': 650,
-            'y': 190,
-            'width': 240,
-            'height': 132,
-            'status': 'idle',
-            'config': {
-                'style': 'minimalist',
-                'aspect_ratio': '1:1',
-            },
-            'input_schema': NODE_IO_SCHEMAS['image']['input'],
-            'output_schema': NODE_IO_SCHEMAS['image']['output'],
-            'output': {},
-        },
-    ]
-    default_edges = [
-        {'id': 'edge-brand-copy', 'source': 'brand-brief', 'target': 'copy-agent'},
-        {'id': 'edge-copy-image', 'source': 'copy-agent', 'target': 'image-agent'},
-    ]
     draft, created = WorkspaceDraft.objects.get_or_create(
         project=project,
         campaign=campaign,
-        name='Default Workflow',
+        name='Untitled Workflow',
         defaults={
             'organization': project.organization,
             'brand_context': project.brand_context,
-            'nodes': default_nodes,
-            'edges': default_edges,
+            'nodes': [],
+            'edges': [],
             'viewport': {'x': 0, 'y': 0, 'zoom': 1},
         },
     )

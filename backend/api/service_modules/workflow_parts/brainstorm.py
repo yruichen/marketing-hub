@@ -5,7 +5,8 @@ from typing import Any
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from ai_gateway.services import AIModelGateway
+from harness.facade import HarnessFacade
+from harness.contracts import NonRetryableHarnessError
 from api.audit import record_audit_log
 from api.contracts import NODE_IO_SCHEMAS, validate_workflow_graph
 from api.models import Campaign, Organization, Project, WorkspaceDraft
@@ -23,11 +24,15 @@ def brainstorm_workflow(
         User.objects.filter(username=username).first() if username else None,
         organization,
     )
-    gateway = AIModelGateway.execute(
+    gateway = HarnessFacade.execute(
         organization=organization,
         role=role,
         task_type='brainstorm',
-        payload={'idea': idea, 'brand_context_hint': project.brand_context or {}},
+        payload={
+            'idea': idea,
+            'brand_context_hint': project.brand_context or {},
+            'node_io_schemas': NODE_IO_SCHEMAS,
+        },
         prompt_key='marketing.brainstorm.system',
     )
     brainstorm_result = gateway.payload
@@ -36,11 +41,9 @@ def brainstorm_workflow(
     edges = brainstorm_result.get('edges', [])
     errors = validate_workflow_graph(nodes, edges)
     if errors:
-        brainstorm_result = _fallback_brainstorm(idea)
-        nodes = brainstorm_result['nodes']
-        edges = brainstorm_result['edges']
-        from ai_gateway.prompts import _layout_brainstorm_nodes
-        _layout_brainstorm_nodes(nodes, edges)
+        raise NonRetryableHarnessError(
+            'Brainstorm output failed workflow validation: ' + '; '.join(errors[:8])
+        )
 
     for node in nodes:
         node.setdefault('status', 'idle')
@@ -77,31 +80,3 @@ def brainstorm_workflow(
         metadata={'idea': idea[:200], 'node_count': len(nodes)},
     )
     return draft, brainstorm_result
-
-
-def _fallback_brainstorm(idea: str) -> dict[str, Any]:
-    return {
-        'workflow_name': f'Campaign: {idea[:40]}',
-        'brand_context': {
-            'brand_name': idea.split()[0] if idea.split() else 'Brand',
-            'audience': 'General audience',
-            'tone': 'Professional',
-            'selling_points': idea[:100],
-            'visual_style': 'modern',
-            'campaign_goal': idea[:80],
-        },
-        'nodes': [
-            {
-                'id': 'context-1', 'type': 'context', 'label': 'Brand Context',
-                'x': 0, 'y': 0, 'width': 260, 'height': 166,
-                'config': {'summary': idea[:200]},
-            },
-            {
-                'id': 'copy-1', 'type': 'copy', 'label': 'Marketing Copy',
-                'x': 0, 'y': 0, 'width': 260, 'height': 166,
-                'config': {'tone': 'Professional', 'platform': 'Xiaohongshu'},
-            },
-        ],
-        'edges': [{'id': 'edge-ctx-copy', 'source': 'context-1', 'target': 'copy-1'}],
-        'summary': f'Fallback workflow for: {idea[:80]}',
-    }

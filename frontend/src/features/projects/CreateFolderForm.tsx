@@ -11,7 +11,7 @@ interface CreateFolderFormProps {
  * 简化的文件夹创建表单：单输入 + 按钮。
  * 不持有错误状态——错误由 toast 通道统一提示（避免表单内部状态机）。
  */
-export function CreateFolderForm({ onCreate, loading, defaultName = '默认文件夹' }: CreateFolderFormProps) {
+export function CreateFolderForm({ onCreate, loading, defaultName = '' }: CreateFolderFormProps) {
   const [name, setName] = useState(defaultName);
 
   return (

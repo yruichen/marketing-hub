@@ -39,7 +39,7 @@ Marketing Hub expands a simple brief into a traceable production system:
 - Orchestrate copy, image prompts, images, storyboards, audio, video, and review nodes on a visual canvas.
 - Organize projects, folders, campaigns, favorites, reusable assets, templates, and brand memory.
 - Track generation tasks, provider usage, tokens, cost, success rate, and workspace health.
-- Govern multiple AI providers through lane-based model selection, BYOK, fallback policy, prompt versions, and cost auditing.
+- Govern multiple AI providers through lane-based model selection, BYOK, explicit failure policy, prompt versions, and cost auditing.
 
 ## Product Tour
 
@@ -68,9 +68,9 @@ React 19 + Vite + React Flow
               │
               │ session auth + REST API
               ▼
-Django + DRF ── AI Gateway ── model providers
+Django + DRF ── AI Harness ── model providers
       │              │
-      │              └── policy, prompts, fallback, cost
+      │              └── contracts, policy, prompts, tools, cost
       ├── PostgreSQL
       └── Celery + Redis
 ```
@@ -79,12 +79,12 @@ The monorepo is split by runtime:
 
 ```text
 marketing-hub/
-  backend/        Django API, domain apps, workflow runtime, AI Gateway
+  backend/        Django domain apps and provider-neutral AI harness
   frontend/       React SPA, feature modules, visual workflow builder
   docs/           Public product, architecture, and contributor docs
 ```
 
-Backend domains include `accounts`, `workspaces`, `generation`, `community`, `billing`, and `ai_gateway`. Shared models, contracts, RBAC, and compatibility services live in `api`.
+Backend domains include `accounts`, `workspaces`, `generation`, `community`, and `billing`. The `harness` package owns AI capability contracts, prompt versions, policies, runtime, provider/tool ports, and adapters. Shared models, RBAC, serializers, and compatibility services live in `api`.
 
 ## Quick Start
 
@@ -105,7 +105,7 @@ Then open:
 
 The Docker development configuration also starts PostgreSQL, Redis, and a Celery worker.
 
-> Demo bootstrap is for local development only. Production checks reject demo bootstrap, mock providers, and insecure deployment settings.
+> Create an account and workspace explicitly, then configure an active AI provider in AI Settings. Missing provider configuration is surfaced as a setup-required state; the application never fabricates generation results.
 
 ### Local Development
 
@@ -156,8 +156,8 @@ GitHub Actions additionally checks migration drift and builds both production Do
 
 - [Documentation index](./docs/README.md)
 - [Development workflow](./docs/operations/development_workflow.md)
+- [AI harness architecture](./docs/architecture/ai_harness.md)
 - [Backend modularization](./docs/architecture/backend_modularization.md)
-- [Product walkthrough](./docs/product/walkthrough.md)
 - [Public repository security](./docs/operations/public_repository_security.md)
 
 ## Project Status

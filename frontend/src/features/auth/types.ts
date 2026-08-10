@@ -13,5 +13,4 @@ export interface LoginPortalProps {
   loginForm: UseFormReturn<LoginFormValues>;
   handleLogin: (values: LoginFormValues) => Promise<void> | void;
   triggerToast: (text: string, type: ToastKind) => void;
-  enableDemoLogin: boolean;
 }

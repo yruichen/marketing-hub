@@ -38,7 +38,6 @@ export function LoginPortal(props: LoginPortalProps) {
             loginForm={props.loginForm}
             onSubmit={props.handleLogin}
             triggerToast={props.triggerToast}
-            enableDemoLogin={props.enableDemoLogin}
           />
         </section>
       </div>

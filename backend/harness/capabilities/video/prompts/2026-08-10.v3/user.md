@@ -1,0 +1,2 @@
+{{production_brief}}
+Preserve subject identity, wardrobe, product geometry, location logic, lighting direction, color pipeline, and art direction across shots. Describe observable motion, camera movement, timing, and transitions. Respect duration, frame, aspect-ratio, reference-image, and audio constraints. Maintain crop-safe composition. Exclude accidental typography, watermarks, signatures, flicker, morphing, duplicated subjects, unstable anatomy, and uncontrolled brand marks.
