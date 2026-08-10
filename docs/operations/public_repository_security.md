@@ -4,7 +4,7 @@ Status: maintainer guidance
 
 Last reviewed: 2026-08-10
 
-Marketing Hub is a public open-source repository. Assume that every pushed commit, branch, tag, workflow log, artifact, and pull-request attachment can be copied permanently.
+Marketing Hub is a public source-available repository. Assume that every pushed commit, branch, tag, workflow log, artifact, and pull-request attachment can be copied permanently.
 
 ## Repository Baseline
 
