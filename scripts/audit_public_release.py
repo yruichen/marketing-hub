@@ -230,10 +230,15 @@ def audit(root: Path, *, tracked_only: bool = False) -> tuple[list[tuple[str, st
             if pattern.search(text):
                 findings.append((relative, label))
 
-        for match in EMAIL_PATTERN.finditer(text):
-            if match.group(1).lower() not in ALLOWED_EMAIL_DOMAINS:
-                findings.append((relative, "non-example email address"))
-                break
+        # Dependency lockfiles contain upstream Git/SSH URLs such as
+        # ``git@github.com`` and package-author metadata. They are generated,
+        # integrity-pinned third-party provenance rather than repository contact
+        # details; secret patterns above are still scanned normally.
+        if path.name not in {"package-lock.json", "uv.lock"}:
+            for match in EMAIL_PATTERN.finditer(text):
+                if match.group(1).lower() not in ALLOWED_EMAIL_DOMAINS:
+                    findings.append((relative, "non-example email address"))
+                    break
 
         if path.name not in {"package-lock.json", "uv.lock"}:
             for value in IPV4_PATTERN.findall(text):
