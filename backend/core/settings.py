@@ -168,6 +168,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Configurations
 CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'true' if DEBUG else 'false').lower() == 'true'
+CORS_ALLOWED_ORIGINS = [
+    origin
+    for origin in os.getenv(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173,app://bundle',
+    ).split(',')
+    if origin
+]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = (*default_headers, 'x-mh-debug-errors')
 CORS_EXPOSE_HEADERS = ['X-CSRFToken', 'X-Request-ID']
@@ -175,13 +183,14 @@ CSRF_TRUSTED_ORIGINS = [
     origin
     for origin in os.getenv(
         'CSRF_TRUSTED_ORIGINS',
-        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175',
+        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175,app://bundle',
     ).split(',')
     if origin
 ]
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_SAMESITE = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
+CSRF_COOKIE_SAMESITE = os.getenv('CSRF_COOKIE_SAMESITE', 'Lax')
 SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'false' if DEBUG else 'true').lower() == 'true'
 CSRF_COOKIE_SECURE = os.getenv('CSRF_COOKIE_SECURE', 'false' if DEBUG else 'true').lower() == 'true'
 SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'false').lower() == 'true'

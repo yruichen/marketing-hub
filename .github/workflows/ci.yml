@@ -107,6 +107,37 @@ jobs:
       - name: Build Frontend
         run: npm run build
 
+  desktop:
+    name: Desktop Host CI
+    runs-on: ubuntu-latest
+    needs: secrets-guard
+    defaults:
+      run:
+        working-directory: ./desktop
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "./desktop/package-lock.json"
+
+      - name: Install desktop dependencies
+        run: npm ci
+
+      - name: Check desktop types
+        run: npm run typecheck
+
+      - name: Run desktop boundary tests
+        run: npm run test
+
+      - name: Build desktop host
+        run: npm run build:host
+
   docker:
     name: Docker Build
     runs-on: ubuntu-latest

@@ -61,6 +61,14 @@ cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
+Desktop host (with the API running and frontend dependencies installed):
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
 ## Verification Before Merge
 
 Run these checks before opening or merging a PR:
@@ -77,10 +85,19 @@ npm run lint
 npm run build
 ```
 
+```bash
+cd desktop
+npm run typecheck
+npm run test
+npm run build:host
+```
+
 ## Code Ownership
 
 - Backend endpoint ownership is split by Django app.
 - Frontend should continue moving large screens into focused components.
+- Desktop owns operating-system integration and distribution, never product
+  domain logic.
 - Shared contracts must be explicit and versionable.
 - Data model changes require migrations and tests.
 
@@ -92,4 +109,3 @@ npm run build
 - Are error states handled?
 - Are user-facing labels understandable to non-engineers?
 - Did the author run backend and frontend verification commands?
-

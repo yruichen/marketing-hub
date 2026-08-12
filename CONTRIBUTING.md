@@ -38,6 +38,17 @@ npm ci
 npm run dev
 ```
 
+### Desktop
+
+Requires the frontend dependencies to be installed and the Django API to be
+running. In another terminal:
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
 ## Branches and Commits
 
 Create a branch from `main` using one of these prefixes:
@@ -81,6 +92,15 @@ npm run test
 npm run build
 ```
 
+Desktop host:
+
+```bash
+cd desktop
+npm run typecheck
+npm run test
+npm run build:host
+```
+
 Run the Playwright suite for affected end-to-end flows:
 
 ```bash
@@ -95,6 +115,10 @@ npm run test:e2e
 - Enforce organization and project scope for multi-tenant data.
 - Put new frontend product work under `features/<domain>/` instead of expanding `App.tsx`.
 - Use the shared API client and existing design system.
+- Keep product logic in `frontend/`; `desktop/` owns only lifecycle, native
+  capabilities, security boundaries, and distribution.
+- Treat every new IPC channel as a versioned API and include validation and
+  boundary tests.
 
 See [Development Workflow](./docs/operations/development_workflow.md) and [Backend Modularization](./docs/architecture/backend_modularization.md) for the public engineering conventions.
 
