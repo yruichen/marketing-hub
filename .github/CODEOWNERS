@@ -1,2 +1,10 @@
 # All current contributors share repository-wide review ownership.
 * @yruichen @xiersg @w7885
+
+# Delivery-unit boundaries. Keep these explicit as teams grow; replace the
+# current shared reviewers with dedicated teams without moving source files.
+/backend/ @yruichen @xiersg @w7885
+/frontend/ @yruichen @xiersg @w7885
+/desktop/ @yruichen @xiersg @w7885
+/docs/architecture/desktop.md @yruichen @xiersg @w7885
+/docs/operations/desktop-release.md @yruichen @xiersg @w7885

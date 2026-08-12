@@ -75,12 +75,17 @@ Django + DRF ── AI Harness ── model providers
       └── Celery + Redis
 ```
 
+The desktop client reuses the same React product code through a separate,
+sandboxed Electron delivery layer. Django remains the only server and data
+source of truth.
+
 The monorepo is split by runtime:
 
 ```text
 marketing-hub/
   backend/        Django domain apps and provider-neutral AI harness
   frontend/       React SPA, feature modules, visual workflow builder
+  desktop/        Electron lifecycle, preload bridge, packaging, release boundary
   docs/           Public product, architecture, and contributor docs
 ```
 
@@ -133,6 +138,14 @@ cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
+Desktop — after installing frontend dependencies and starting the API:
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
 See [frontend/.env.example](./frontend/.env.example) and [backend/.env.example](./backend/.env.example) for configuration.
 
 ## Verification
@@ -158,6 +171,8 @@ GitHub Actions additionally checks migration drift and builds both production Do
 - [Development workflow](./docs/operations/development_workflow.md)
 - [AI harness architecture](./docs/architecture/ai_harness.md)
 - [Backend modularization](./docs/architecture/backend_modularization.md)
+- [Desktop architecture](./docs/architecture/desktop.md)
+- [Desktop release operations](./docs/operations/desktop-release.md)
 - [Public repository security](./docs/operations/public_repository_security.md)
 
 ## Project Status

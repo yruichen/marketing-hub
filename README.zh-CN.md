@@ -59,10 +59,14 @@ Django + DRF ── AI Harness ── 模型 Provider
       └── Celery + Redis
 ```
 
+桌面端复用同一套 React 产品代码，并通过独立、沙箱化的 Electron
+交付层提供桌面生命周期与原生能力；Django 仍是唯一服务端与数据真相源。
+
 ```text
 marketing-hub/
   backend/        Django 领域应用和 Provider-neutral AI Harness
   frontend/       React SPA、业务模块、可视化工作流
+  desktop/        Electron 主进程、预加载桥、打包与桌面发布边界
   docs/           面向社区的产品、架构和贡献者文档
 ```
 
@@ -111,6 +115,14 @@ cd backend
 uv run celery -A core worker --loglevel=info
 ```
 
+桌面端（先启动后端，且已安装前端依赖）：
+
+```bash
+cd desktop
+npm ci
+npm run dev
+```
+
 环境变量参考 [frontend/.env.example](./frontend/.env.example) 和 [backend/.env.example](./backend/.env.example)。
 
 ## 验证
@@ -136,6 +148,8 @@ GitHub Actions 还会检查 migration drift，并构建后端与前端生产镜�
 - [开发流程](./docs/operations/development_workflow.md)
 - [AI Harness 架构](./docs/architecture/ai_harness.md)
 - [后端模块化](./docs/architecture/backend_modularization.md)
+- [桌面端架构](./docs/architecture/desktop.md)
+- [桌面端发布流程](./docs/operations/desktop-release.md)
 - [公开仓库安全指南](./docs/operations/public_repository_security.md)
 
 项目正在积极开发，当前重点是生产加固、工作流可靠性、AI 评测治理和社区协作体验。

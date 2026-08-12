@@ -8,10 +8,12 @@ This directory contains the public product, architecture, development, and repos
 
 - [AI Harness Architecture](./architecture/ai_harness.md)
 - [Backend Modularization](./architecture/backend_modularization.md)
+- [Desktop Architecture](./architecture/desktop.md)
 
 ### Operations
 
 - [Development Workflow](./operations/development_workflow.md)
+- [Desktop Release Operations](./operations/desktop-release.md)
 - [Public Repository Security](./operations/public_repository_security.md)
 
 ## Assets

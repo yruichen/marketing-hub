@@ -41,6 +41,13 @@ class PublicRepositoryAuditTests(unittest.TestCase):
         self.assertIn(("notes.txt", "local absolute path"), findings)
         self.assertIn(("notes.txt", "non-example email address"), findings)
 
+    def test_allows_upstream_git_identity_in_dependency_lockfile(self) -> None:
+        upstream = "git+ssh://git" + "@github.com/example/repo.git"
+        findings, _ = self.audit_files(
+            {"package-lock.json": f'{{"resolved":"{upstream}"}}'}
+        )
+        self.assertEqual(findings, [])
+
     def test_marks_binary_document_for_manual_review(self) -> None:
         findings, manual_review = self.audit_files({"docs/guide.pdf": "review me"})
         self.assertEqual(findings, [])
